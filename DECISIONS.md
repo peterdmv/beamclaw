@@ -287,3 +287,43 @@ registrations.
   `bc_mcp_registry` routing.
 - `bc_mcp_registry` is updated on each server restart; stale entries for dead
   servers are cleaned up via monitor.
+
+---
+
+## ADR-009 — Drop Prometheus; use OTP logger for local observability
+
+**Date**: 2026-02-20
+**Status**: Accepted
+
+### Context
+
+The original spec included a `prometheus.erl` backend for metrics scraping in
+production. For the current local-development phase, adding and maintaining a
+Prometheus dependency (and its scrape endpoint) provides no benefit and
+introduces unnecessary complexity.
+
+### Decision
+
+Remove `prometheus` from `rebar.config` deps and delete `bc_obs_prometheus.erl`.
+The `beamclaw_obs_sup` now supervises only three children: the `pg` scope,
+`bc_obs_manager`, and `bc_obs_log`. `bc_obs_log` emits one structured log line
+per event via OTP's `logger`. Log level filtering is controlled by the operator
+via the `kernel` app's logger configuration in `sys.config`.
+
+The `bc_obs` fan-out design is unchanged: adding a metrics backend later only
+requires writing a new gen_server that joins the `bc_obs_backends` pg group and
+adding it as a supervisor child — no changes to `bc_obs_manager` or callers.
+
+### Rationale
+
+- Removes a compile-time and runtime dependency with no current use.
+- OTP logger provides structured output with zero additional deps.
+- The existing pg fan-out architecture makes it trivial to add a metrics
+  backend when production deployment warrants it.
+
+### Consequences
+
+- No Prometheus metrics in this phase; `/metrics` HTTP handler (M6) will be
+  a stub until a backend is added.
+- A future ADR should document the chosen metrics approach when production
+  needs arise (prometheus.erl, telemetry, or otherwise).

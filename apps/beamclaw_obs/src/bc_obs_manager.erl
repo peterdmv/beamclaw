@@ -14,7 +14,7 @@ start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 init([]) ->
-    pg:start_link(?PG_SCOPE),
+    %% pg scope is started as a supervised sibling; nothing to do here.
     {ok, #{}}.
 
 handle_cast({emit, Event}, State) ->

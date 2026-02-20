@@ -1,7 +1,7 @@
 {application, beamclaw_obs,
  [{description,  "BeamClaw observability backends"},
   {vsn,          "0.1.0"},
-  {registered,   [bc_obs_manager, bc_obs_log, bc_obs_prometheus]},
+  {registered,   [bc_obs_manager, bc_obs_log]},
   {mod,          {beamclaw_obs_app, []}},
   {applications, [kernel, stdlib]},
   {env,          []},

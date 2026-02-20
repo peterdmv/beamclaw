@@ -24,15 +24,14 @@ Active work is building out the core modules from stub to full implementation.
 All six OTP apps created, supervision trees defined, behaviours declared,
 `rebar.config` with all deps. Compiles clean on OTP 28.
 
-### M1 — Observability Layer ⬜
-`beamclaw_obs` must land first; every other app depends on it.
+### M1 — Observability Layer ✅
+`beamclaw_obs` is complete. Prometheus dropped (see ADR-009); OTP logger used instead.
 
 | Module | Status | Notes |
 |--------|--------|-------|
-| `bc_obs` | ⬜ | behaviour + `emit/2` API |
-| `bc_obs_manager` | ⬜ | fan-out via `pg` process groups |
-| `bc_obs_log` | ⬜ | log backend |
-| `bc_obs_prometheus` | ⬜ | prometheus backend |
+| `bc_obs` | ✅ | behaviour + `emit/2` API |
+| `bc_obs_manager` | ✅ | fan-out via `pg` process groups |
+| `bc_obs_log` | ✅ | OTP logger backend |
 
 ### M2 — Memory Layer ⬜
 
