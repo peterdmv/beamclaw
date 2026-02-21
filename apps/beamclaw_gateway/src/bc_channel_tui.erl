@@ -61,6 +61,7 @@ terminate(_Reason, _State) ->
 
 handle_cast({send_response, SessionId, Msg}, State) ->
     {ok, NewState} = send(SessionId, Msg, State),
+    self() ! read_line,
     {noreply, NewState};
 handle_cast(_Msg, State) ->
     {noreply, State}.
@@ -82,7 +83,9 @@ handle_info({line_result, {error, Reason}}, State) ->
 handle_info({line_result, Line}, #{session_id := SessionId} = State) ->
     Text = string:trim(unicode:characters_to_binary(Line)),
     case Text of
-        <<>> -> ok;
+        <<>> ->
+            %% Empty line — no LLM call, start next read immediately.
+            self() ! read_line;
         _ ->
             ChannelMsg = #bc_channel_message{
                 session_id = SessionId,
@@ -94,8 +97,8 @@ handle_info({line_result, Line}, #{session_id := SessionId} = State) ->
                 %% reply_pid unset — responses routed via send_response/2
             },
             ensure_session_and_dispatch(SessionId, ChannelMsg)
+            %% Do NOT send read_line here — wait for send_response to do it.
     end,
-    self() ! read_line,
     {noreply, State};
 handle_info(_Info, State) ->
     {noreply, State}.
