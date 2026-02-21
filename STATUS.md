@@ -117,10 +117,10 @@ All six OTP apps created, supervision trees defined, behaviours declared,
 | `.dockerignore` | ✅ | Excludes `_build/`, beams, secrets, `.git/` |
 | `.gitignore` security fix | ✅ | Added `.env`, `*.env`, `*.secret`, `priv/secrets/` |
 | `README.md` rewrite | ✅ | Pitch, Docker quick-start, source quick-start, docs links |
-| `docs/building.md` | ✅ | Prerequisites, compile, test, dialyzer, release, Docker |
-| `docs/running.md` | ✅ | rebar3 shell, OTP release, Docker run, channels, MCP |
+| `docs/building.md` | ✅ | Prerequisites, compile, test, dialyzer, release, Docker, CLI escript |
+| `docs/running.md` | ✅ | beamclaw CLI (all 9 commands), rebar3 shell, OTP release, Docker, channels, MCP |
 | `docs/configuration.md` | ✅ | All env vars, sys.config keys, MCP server setup |
-| `docs/architecture.md` | ✅ | Six-app graph, supervision trees, loop state machine, behaviours |
+| `docs/architecture.md` | ✅ | Seven-app graph, supervision trees, loop state machine, behaviours |
 
 ### Post-M8 — Contributor Docs
 
@@ -157,4 +157,4 @@ _None at this time._
 
 ## Last Updated
 
-2026-02-21 (M9: beamclaw CLI escript implemented)
+2026-02-21 (Post-M9: documentation synced with all milestones; CLAUDE.md, docs/architecture.md, docs/building.md, docs/running.md updated)
