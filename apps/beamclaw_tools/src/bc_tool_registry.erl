@@ -35,7 +35,8 @@ list() ->
 init([]) ->
     Tab = ets:new(?TAB, [set, named_table, public, {read_concurrency, true}]),
     %% Register built-in tools
-    BuiltIns = [bc_tool_terminal, bc_tool_bash, bc_tool_curl, bc_tool_jq],
+    BuiltIns = [bc_tool_terminal, bc_tool_bash, bc_tool_curl, bc_tool_jq,
+                bc_tool_read_file, bc_tool_write_file],
     lists:foreach(fun(Mod) ->
         Def = Mod:definition(),
         ets:insert(Tab, {maps:get(name, Def), Mod, Def})

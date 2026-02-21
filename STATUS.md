@@ -41,16 +41,18 @@ All six OTP apps created, supervision trees defined, behaviours declared,
 | `bc_memory_ets` | ✅ | in-process ETS backend (default) |
 | `bc_memory_mnesia` | ✅ | Mnesia backend (disc_copies / ram_copies fallback); replaces SQLite stub (ADR-010) |
 
-### M3 — Tool Registry ⬜
+### M3 — Tool Registry ✅
 
 | Module | Status | Notes |
 |--------|--------|-------|
-| `bc_tool` | ⬜ | behaviour |
-| `bc_tool_registry` | ⬜ | named ETS gen_server |
-| `bc_tool_terminal` | ⬜ | built-in tool |
-| `bc_tool_bash` | ⬜ | built-in tool |
-| `bc_tool_curl` | ⬜ | built-in tool |
-| `bc_tool_jq` | ⬜ | built-in tool |
+| `bc_tool` | ✅ | behaviour |
+| `bc_tool_registry` | ✅ | named ETS gen_server |
+| `bc_tool_terminal` | ✅ | built-in tool |
+| `bc_tool_bash` | ✅ | built-in tool |
+| `bc_tool_curl` | ✅ | built-in tool (inets dep added, ADR-011) |
+| `bc_tool_jq` | ✅ | built-in tool |
+| `bc_tool_read_file` | ✅ | new: read-only file read, no approval |
+| `bc_tool_write_file` | ✅ | new: file write, requires approval |
 
 ### M4 — MCP Client ⬜
 
@@ -123,4 +125,4 @@ _None at this time._
 
 ## Last Updated
 
-2026-02-21
+2026-02-21 (M3 refresh: mark existing items ✅, add read_file/write_file tools)

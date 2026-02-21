@@ -380,3 +380,57 @@ requiring persistence across restarts.
   single-user agent memory workloads.
 - If a distributed (multi-node) deployment is later required, Mnesia's built-in
   replication can be configured without changing the `bc_memory` behaviour API.
+
+---
+
+## ADR-011 — Add read_file / write_file built-in tools; fix curl inets dep
+
+**Date**: 2026-02-21
+**Status**: Accepted
+
+### Context
+
+M3 (Tool Registry) is complete with four built-in tools: `terminal`, `bash`,
+`curl`, and `jq`. However, reading and writing files — a core capability for
+any digital assistant agent — requires going through `bash`, which has
+`requires_approval = true` and `min_autonomy = supervised`. This means the
+agent cannot read a local file (e.g., documentation or a config) without
+triggering an approval prompt, even in `read_only` autonomy contexts.
+
+Additionally, `bc_tool_curl` uses `httpc:request/4` from OTP's `inets`
+application, but `inets` was missing from the `beamclaw_tools` application
+dependency list, causing runtime crashes when curl is first invoked.
+
+### Decision
+
+1. Add `bc_tool_read_file`: reads a file via `file:read_file/1`. Sets
+   `requires_approval = false` and `min_autonomy = read_only`. Zero new deps.
+
+2. Add `bc_tool_write_file`: writes content to a file via `file:write_file/2`.
+   Sets `requires_approval = true` and `min_autonomy = supervised` (destructive
+   operation — overwrites without confirmation). Zero new deps.
+
+3. Add `inets` to the `{applications, [...]}` list in `beamclaw_tools.app.src`
+   so OTP ensures `inets` is started before `beamclaw_tools`.
+
+4. Register both new tools in `bc_tool_registry`'s `BuiltIns` list.
+
+Web search and memory-as-tool are deferred: web search belongs as an MCP
+server (external API dependency); memory tools would require `beamclaw_tools`
+to depend on `beamclaw_memory`, creating a cycle with `beamclaw_core`.
+
+### Rationale
+
+- Dedicated file tools let the agent read configs and source at `read_only`
+  autonomy without an approval prompt — the highest-value gap vs. Claude Code
+  and GPT tool sets.
+- OTP `file` module requires no additional dependencies.
+- The `inets` fix is a correctness bug: `httpc` is part of `inets` and must be
+  started explicitly.
+
+### Consequences
+
+- The agent can now read files without human approval at `read_only` autonomy.
+- File writes still require approval (consistent with `bash` and `terminal`).
+- `beamclaw_tools` now lists six built-in tools.
+- `inets` is started as part of the `beamclaw_tools` application boot sequence.

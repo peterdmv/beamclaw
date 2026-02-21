@@ -150,7 +150,7 @@ Implementations: `bc_provider_openrouter`, `bc_provider_openai`.
 -callback min_autonomy() -> autonomy_level().
 ```
 
-Implementations: `bc_tool_terminal`, `bc_tool_bash`, `bc_tool_curl`, `bc_tool_jq`.
+Implementations: `bc_tool_terminal`, `bc_tool_bash`, `bc_tool_curl`, `bc_tool_jq`, `bc_tool_read_file`, `bc_tool_write_file`.
 
 ### `bc_channel` — Messaging channel abstraction (`beamclaw_core`)
 
@@ -487,6 +487,8 @@ beamclaw/
       bc_tool_bash.erl
       bc_tool_curl.erl
       bc_tool_jq.erl
+      bc_tool_read_file.erl
+      bc_tool_write_file.erl
     beamclaw_mcp/src/
       beamclaw_mcp.app.src
       beamclaw_mcp_app.erl
