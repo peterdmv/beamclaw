@@ -34,8 +34,35 @@ Or install via a package manager that provides rebar3 ≥ 3.23.
 rebar3 compile
 ```
 
-All six OTP apps (`beamclaw_obs`, `beamclaw_memory`, `beamclaw_tools`, `beamclaw_mcp`,
-`beamclaw_core`, `beamclaw_gateway`) must compile with zero warnings.
+All seven OTP apps (`beamclaw_obs`, `beamclaw_memory`, `beamclaw_tools`, `beamclaw_mcp`,
+`beamclaw_core`, `beamclaw_gateway`, `beamclaw_cli`) must compile with zero warnings.
+
+---
+
+## Build the CLI Escript
+
+```bash
+rebar3 escriptize
+```
+
+Produces a self-contained binary at:
+
+```
+_build/default/bin/beamclaw
+```
+
+The binary embeds all seven app `.beam` files plus deps in a single zip-based escript.
+It requires a compatible OTP installation on the target machine (same major version).
+
+```bash
+# Run directly
+export OPENROUTER_API_KEY=sk-or-...
+_build/default/bin/beamclaw tui
+
+# Or copy to your PATH
+cp _build/default/bin/beamclaw ~/bin/
+beamclaw doctor
+```
 
 ---
 

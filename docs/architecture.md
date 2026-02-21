@@ -1,11 +1,11 @@
 # BeamClaw Architecture
 
-BeamClaw is an Erlang/OTP 28 umbrella project composed of six OTP applications. Each app
+BeamClaw is an Erlang/OTP 28 umbrella project composed of seven OTP applications. Each app
 has a clearly defined responsibility and a strictly acyclic dependency relationship.
 
 ---
 
-## Six-App Umbrella
+## Seven-App Umbrella
 
 ```
 beamclaw_obs         — fire-and-forget telemetry (zero sibling deps)
@@ -19,9 +19,12 @@ beamclaw_mcp         — MCP client (stdio / HTTP), tool discovery
 beamclaw_core        — sessions, agentic loop, LLM providers, approval, compaction
      ↑
 beamclaw_gateway     — channels (Telegram, TUI), HTTP gateway, rate limiter
+
+beamclaw_cli         — CLI escript (not a daemon app; bundles all six above)
 ```
 
 The rule: no dependency cycle. `beamclaw_obs` never imports from any sibling.
+`beamclaw_cli` is a standalone escript, not part of the runtime supervision tree.
 
 | App | OTP role | Key modules |
 |---|---|---|
@@ -31,6 +34,7 @@ The rule: no dependency cycle. `beamclaw_obs` never imports from any sibling.
 | `beamclaw_mcp` | MCP protocol | `bc_mcp_server`, `bc_mcp_registry` |
 | `beamclaw_core` | Brain | `bc_session`, `bc_loop`, `bc_provider_*`, `bc_approval`, `bc_scrubber` |
 | `beamclaw_gateway` | Interfaces | `bc_channel_telegram`, `bc_channel_tui`, Cowboy handlers |
+| `beamclaw_cli` | CLI escript | `beamclaw_cli` (escript `main/1`); not started as a daemon |
 
 ---
 
@@ -77,6 +81,10 @@ beamclaw_obs_sup  (one_for_one)
   ├── bc_obs_manager     (gen_server — fan-out via pg process groups)
   └── bc_obs_log         (gen_server — OTP logger backend)
 ```
+
+`beamclaw_cli` has no supervision tree — it is an escript that starts and stops
+as a single OS process. Daemon lifecycle (start/stop/restart) is managed via
+Erlang distribution IPC to a separately running `beamclaw_gateway` node.
 
 ---
 

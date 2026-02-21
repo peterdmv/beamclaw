@@ -89,7 +89,7 @@ Before merging any PR, verify:
 
 - **Language/Runtime**: Erlang/OTP 28
 - **Build Tool**: rebar3
-- **Project Structure**: Umbrella project — six OTP apps under `apps/`
+- **Project Structure**: Umbrella project — seven OTP apps under `apps/`
 - **HTTP server**: Cowboy 2.x
 - **HTTP client**: Hackney
 - **JSON**: jsx
@@ -104,6 +104,7 @@ rebar3 eunit --module=<mod>
 rebar3 shell            # start REPL with all apps
 rebar3 clean
 rebar3 release
+rebar3 escriptize       # build beamclaw CLI → _build/default/bin/beamclaw
 rebar3 dialyzer
 rebar3 lint
 ```
@@ -112,7 +113,7 @@ rebar3 lint
 
 ## Application Dependency Graph
 
-Six OTP apps under `apps/`. Dependency direction (arrow = "depends on"):
+Seven OTP apps under `apps/`. Dependency direction (arrow = "depends on"):
 
 ```
 beamclaw_gateway → beamclaw_core → beamclaw_mcp   → beamclaw_tools → beamclaw_obs
@@ -130,6 +131,7 @@ beamclaw_gateway → beamclaw_core → beamclaw_mcp   → beamclaw_tools → bea
 | `beamclaw_mcp` | MCP server connections (stdio/HTTP), tool discovery | obs, tools |
 | `beamclaw_core` | Sessions, agentic loop, LLM providers, approval, compaction | obs, memory, tools, mcp |
 | `beamclaw_gateway` | Channels (Telegram, TUI), HTTP gateway, rate limiter | core, obs |
+| `beamclaw_cli` | CLI escript (`beamclaw` binary); not a daemon OTP app | all (bundled via `rebar3 escriptize`) |
 
 **Rule**: never introduce a dependency cycle. `beamclaw_obs` must have zero sibling deps.
 
@@ -182,8 +184,7 @@ beamclaw_gateway_sup  (one_for_one)
 ```
 beamclaw_obs_sup  (one_for_one)
   ├── bc_obs_manager     (gen_server — fan-out via pg process groups)
-  ├── bc_obs_log         (gen_server backend)
-  └── bc_obs_prometheus  (gen_server backend)
+  └── bc_obs_log         (gen_server backend)
 ```
 
 `bc_obs:emit/2` is a non-blocking cast. Observability **never** creates backpressure on the agentic loop.
@@ -253,7 +254,7 @@ Implementations: `bc_channel_telegram`, `bc_channel_tui`.
 -callback forget(Key, State) -> {ok, State} | {error, term()}.
 ```
 
-Implementations: `bc_memory_ets`, `bc_memory_sqlite`.
+Implementations: `bc_memory_ets`, `bc_memory_mnesia`.
 
 ### `bc_observer` — Observability backend abstraction (`beamclaw_obs`)
 
@@ -263,7 +264,7 @@ Implementations: `bc_memory_ets`, `bc_memory_sqlite`.
 -callback terminate(Reason, State) -> ok.
 ```
 
-Implementations: `bc_obs_log`, `bc_obs_prometheus`.
+Implementations: `bc_obs_log`.
 
 ---
 
@@ -494,10 +495,9 @@ Channel message idempotency: `bc_channel_telegram` and `bc_ws_h` de-duplicate by
 
 ```erlang
 {deps, [
-    {cowboy,     "2.12.0"},   %% HTTP server + WebSocket
-    {hackney,    "1.20.1"},   %% HTTP client (LLM APIs, MCP HTTP)
-    {jsx,        "3.1.0"},    %% JSON encode/decode
-    {prometheus, "4.11.0"}    %% Prometheus metrics
+    {cowboy,  "2.12.0"},   %% HTTP server + WebSocket
+    {hackney, "1.20.1"},   %% HTTP client (LLM APIs, MCP HTTP)
+    {jsx,     "3.1.0"}     %% JSON encode/decode
 ]}.
 ```
 
@@ -541,14 +541,13 @@ beamclaw/
       bc_obs.erl              %% behaviour + emit/2 API
       bc_obs_manager.erl      %% fan-out gen_server
       bc_obs_log.erl          %% log backend
-      bc_obs_prometheus.erl   %% prometheus backend
     beamclaw_memory/src/
       beamclaw_memory.app.src
       beamclaw_memory_app.erl
       beamclaw_memory_sup.erl
       bc_memory.erl           %% behaviour
       bc_memory_ets.erl
-      bc_memory_sqlite.erl
+      bc_memory_mnesia.erl
     beamclaw_tools/src/
       beamclaw_tools.app.src
       beamclaw_tools_app.erl
@@ -604,4 +603,7 @@ beamclaw/
       bc_http_completions_h.erl
       bc_ws_h.erl
       bc_webhook_telegram_h.erl
+    beamclaw_cli/src/
+      beamclaw_cli.app.src
+      beamclaw_cli.erl        %% escript main; 9 commands (tui/start/stop/restart/remote_console/doctor/status/version/help)
 ```

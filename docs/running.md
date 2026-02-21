@@ -1,5 +1,70 @@
 # Running BeamClaw
 
+## The `beamclaw` CLI
+
+The recommended way to run BeamClaw is via the `beamclaw` escript CLI, built with
+`rebar3 escriptize` (see `docs/building.md`). It bundles all six OTP apps into a
+single self-contained binary at `_build/default/bin/beamclaw`.
+
+```
+Usage: beamclaw <command>
+
+Commands:
+  tui              Start interactive TUI chat (default when no command given)
+  start            Start gateway as background daemon
+  stop             Stop running daemon
+  restart          Stop then start daemon
+  remote_console   Print erl -remsh command to attach a live Erlang shell
+  doctor           Check environment and connectivity (OTP version, API keys, epmd)
+  status           Ping running gateway HTTP health endpoint
+  version          Print version
+  help             Show this help
+```
+
+### Quick start — TUI
+
+```bash
+export OPENROUTER_API_KEY=sk-or-...
+_build/default/bin/beamclaw tui
+# or simply:
+_build/default/bin/beamclaw
+```
+
+Type a message and press Enter. Use Ctrl+D (EOF) to quit.
+
+### Daemon mode
+
+```bash
+export OPENROUTER_API_KEY=sk-or-...
+_build/default/bin/beamclaw start          # start background daemon
+_build/default/bin/beamclaw status         # check HTTP health
+_build/default/bin/beamclaw remote_console # print remsh command
+_build/default/bin/beamclaw stop           # graceful shutdown
+```
+
+Daemon IPC uses Erlang distribution; `epmd` must be available (`epmd -daemon`
+if not already running). The daemon node registers as `beamclaw@localhost`.
+
+### Environment variables
+
+| Variable | Required | Description |
+|---|---|---|
+| `OPENROUTER_API_KEY` | Yes | LLM completions via OpenRouter |
+| `OPENAI_API_KEY` | No | Alternative OpenAI provider |
+| `TELEGRAM_BOT_TOKEN` | No | Enable Telegram channel |
+| `BEAMCLAW_PORT` | No | Override gateway HTTP port (default: 8080) |
+
+### Pre-flight check
+
+```bash
+_build/default/bin/beamclaw doctor
+```
+
+Checks OTP version, required env vars, `epmd` availability, and (if
+`OPENROUTER_API_KEY` is set) OpenRouter API reachability.
+
+---
+
 ## Mode 1 — Development Shell (rebar3 shell)
 
 Best for: local development, debugging, the TUI channel.
