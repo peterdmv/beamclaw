@@ -18,7 +18,7 @@
 -include_lib("beamclaw_core/include/bc_types.hrl").
 
 -export([start_link/1]).
--export([callback_mode/0, init/1, terminate/3, code_change/4]).
+-export([callback_mode/0, init/1, terminate/3, code_change/4, format_status/1]).
 -export([idle/3, compacting/3, streaming/3,
          awaiting_approval/3, executing_tools/3, finalizing/3]).
 
@@ -75,7 +75,17 @@ init(Config) ->
 
 idle(cast, {run, Message}, Data) ->
     %% Extract per-run reply_pid (set by HTTP/WS handlers; undefined for channels).
-    ReplyPid  = Message#bc_channel_message.reply_pid,
+    ReplyPid = Message#bc_channel_message.reply_pid,
+    %% Append the user message to history before the LLM call.
+    %% append_message is a cast; get_history is a call to the same bc_session
+    %% process, so FIFO ordering guarantees the cast is processed first.
+    UserMsg = #bc_message{
+        id      = generate_id(),
+        role    = user,
+        content = Message#bc_channel_message.content,
+        ts      = Message#bc_channel_message.ts
+    },
+    bc_session:append_message(Data#loop_data.session_pid, UserMsg),
     History   = bc_session:get_history(Data#loop_data.session_pid),
     LoopCfg   = bc_config:get(beamclaw_core, agentic_loop, #{}),
     Threshold = maps:get(compaction_threshold, LoopCfg, 50),
@@ -162,6 +172,15 @@ terminate(_Reason, _State, _Data) ->
 code_change(_OldVsn, State, Data, _Extra) ->
     {ok, State, Data}.
 
+%% Redact provider_state (contains raw API keys) from OTP crash/introspection reports.
+format_status(Status) ->
+    maps:map(fun
+        (data, Data) when is_record(Data, loop_data) ->
+            Data#loop_data{provider_state = redacted};
+        (_Key, Value) ->
+            Value
+    end, Status).
+
 %% ---- Internal ----
 
 handle_common(_State, cast, {run, Message}, Data) ->
@@ -204,9 +223,16 @@ receive_stream(Data, T0) ->
             end;
         {stream_error, _Pid, Reason} ->
             logger:error("[loop] stream error: ~p", [Reason]),
+            ErrContent = iolist_to_binary(io_lib:format("[Error: ~p]", [Reason])),
+            route_response(Data, #bc_message{role    = assistant,
+                                             content = ErrContent,
+                                             ts      = erlang:system_time(millisecond)}),
             {next_state, finalizing, Data}
     after 60000 ->
         logger:error("[loop] stream timeout"),
+        route_response(Data, #bc_message{role    = assistant,
+                                         content = <<"[Error: LLM response timed out]">>,
+                                         ts      = erlang:system_time(millisecond)}),
         {next_state, finalizing, Data}
     end.
 

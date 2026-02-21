@@ -29,7 +29,7 @@ complete(Messages, Options, State) ->
     end.
 
 stream(Messages, Options, CallerPid, State) ->
-    Body = build_request_body(Messages, Options, State, true),
+    Body = build_request_body(Messages, Options, State, false),
     %% TODO: implement SSE streaming via hackney async
     %% For now: fall back to complete and send as single chunk
     case post(State, "/chat/completions", Body) of
