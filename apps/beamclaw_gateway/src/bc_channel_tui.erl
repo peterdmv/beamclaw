@@ -72,7 +72,10 @@ handle_info(start_io, State) ->
 handle_info(read_line, #{session_id := SessionId} = State) ->
     case io:get_line("") of
         eof -> {stop, normal, State};
-        {error, _} -> {stop, io_error, State};
+        {error, Reason} ->
+            logger:warning("[bc_channel_tui] io:get_line failed (~p); "
+                           "stdin unavailable, entering dormant mode", [Reason]),
+            {noreply, State};
         Line ->
             Text = string:trim(unicode:characters_to_binary(Line)),
             case Text of

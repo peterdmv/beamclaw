@@ -84,7 +84,7 @@ code_change(_OldVsn, State, _) -> {ok, State}.
 %% Internal
 
 get_updates(Offset, #{token := Token}) ->
-    Url = "https://api.telegram.org/bot" ++ binary_to_list(Token) ++
+    Url = "https://api.telegram.org/bot" ++ Token ++
           "/getUpdates?offset=" ++ integer_to_list(Offset) ++ "&timeout=30",
     case httpc:request(get, {Url, []}, [{timeout, 35000}], []) of
         {ok, {{_, 200, _}, _, Body}} ->
@@ -141,17 +141,17 @@ dispatch_telegram_message(Update) ->
     end.
 
 send_message(ChatId, Text, #{token := Token}) ->
-    Url  = "https://api.telegram.org/bot" ++ binary_to_list(Token) ++ "/sendMessage",
+    Url  = "https://api.telegram.org/bot" ++ Token ++ "/sendMessage",
     Body = jsx:encode(#{chat_id => ChatId, text => Text}),
     httpc:request(post, {Url, [], "application/json", Body}, [], []).
 
 send_action(ChatId, Action, #{token := Token}) ->
-    Url  = "https://api.telegram.org/bot" ++ binary_to_list(Token) ++ "/sendChatAction",
+    Url  = "https://api.telegram.org/bot" ++ Token ++ "/sendChatAction",
     Body = jsx:encode(#{chat_id => ChatId, action => Action}),
     httpc:request(post, {Url, [], "application/json", Body}, [], []).
 
 edit_message(ChatId, MessageId, Text, #{token := Token}) ->
-    Url  = "https://api.telegram.org/bot" ++ binary_to_list(Token) ++ "/editMessageText",
+    Url  = "https://api.telegram.org/bot" ++ Token ++ "/editMessageText",
     Body = jsx:encode(#{chat_id => ChatId, message_id => MessageId, text => Text}),
     httpc:request(post, {Url, [], "application/json", Body}, [], []).
 
