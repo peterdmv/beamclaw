@@ -1,12 +1,15 @@
 %% @doc Telegram channel — long-poll or webhook mode.
 %% Implements bc_channel behaviour.
+%%
+%% bc_loop calls send_response/2 after each completed turn. The gen_server
+%% handles {send_response, ...} casts and sends the reply via Telegram API.
 -module(bc_channel_telegram).
 -behaviour(gen_server).
 %% Implements bc_channel callbacks.
 
 -include_lib("beamclaw_core/include/bc_types.hrl").
 
--export([start_link/1, handle_webhook/1]).
+-export([start_link/1, handle_webhook/1, send_response/2]).
 -export([listen/1, send/3, send_typing/2, update_draft/4, finalize_draft/3]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -14,7 +17,17 @@
 start_link(Config) ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, Config, []).
 
+%% @doc Called by bc_loop to deliver a completed response to the Telegram user.
+-spec send_response(SessionId :: binary(), Msg :: #bc_message{}) -> ok.
+send_response(SessionId, Msg) ->
+    gen_server:cast(?MODULE, {send_response, SessionId, Msg}).
+
+%% @doc Entry point for bc_webhook_telegram_h.
+handle_webhook(Update) ->
+    dispatch_telegram_message(Update).
+
 %% bc_channel callbacks
+
 init(Config) ->
     Token = bc_config:resolve(maps:get(token, Config, {env, "TELEGRAM_BOT_TOKEN"})),
     Mode  = maps:get(mode, Config, long_poll),
@@ -46,10 +59,14 @@ update_draft(SessionId, DraftId, Content, State) ->
 finalize_draft(_SessionId, _DraftId, State) ->
     {ok, State}.
 
-handle_webhook(Update) ->
-    dispatch_telegram_message(Update).
-
 %% gen_server callbacks
+
+handle_cast({send_response, SessionId, Msg}, State) ->
+    {ok, NewState} = send(SessionId, Msg, State),
+    {noreply, NewState};
+handle_cast(_Msg, State) ->
+    {noreply, State}.
+
 handle_info(poll, State) ->
     Offset  = maps:get(offset, State, 0),
     Updates = get_updates(Offset, State),
@@ -60,7 +77,6 @@ handle_info(_Info, State) ->
     {noreply, State}.
 
 handle_call(_Req, _From, State) -> {reply, {error, unknown}, State}.
-handle_cast(_Msg, State)        -> {noreply, State}.
 
 terminate(_Reason, _State) -> ok.
 code_change(_OldVsn, State, _) -> {ok, State}.
@@ -108,21 +124,20 @@ dispatch_telegram_message(Update) ->
         content    = Text,
         raw        = Msg,
         ts         = erlang:system_time(millisecond)
+        %% reply_pid unset — responses routed via send_response/2
     },
     case bc_session_registry:lookup(ChatId) of
-        {ok, Pid} -> bc_session:dispatch_run(Pid, ChannelMsg);
+        {ok, Pid} ->
+            bc_session:dispatch_run(Pid, ChannelMsg);
         {error, not_found} ->
-            %% Create new session
             Config = #{session_id  => ChatId,
                        user_id     => UserId,
                        channel_id  => ChatId,
                        channel_mod => bc_channel_telegram},
             {ok, _} = bc_sessions_sup:start_session(Config),
-            timer:sleep(100), %% Wait for session to register
-            case bc_session_registry:lookup(ChatId) of
-                {ok, Pid} -> bc_session:dispatch_run(Pid, ChannelMsg);
-                _          -> ok
-            end
+            %% bc_session_registry:register/2 is synchronous — no sleep needed.
+            {ok, Pid} = bc_session_registry:lookup(ChatId),
+            bc_session:dispatch_run(Pid, ChannelMsg)
     end.
 
 send_message(ChatId, Text, #{token := Token}) ->

@@ -57,13 +57,17 @@
 }).
 
 %% A message arriving from a channel (Telegram, WebSocket, etc.).
+%% reply_pid: when set, bc_loop sends {bc_chunk, SessionId, Chunk} and
+%% {bc_done, SessionId, Msg} directly to this pid instead of routing via
+%% the named channel gen_server. Used by HTTP and WebSocket handlers.
 -record(bc_channel_message, {
     session_id :: binary(),
     user_id    :: binary(),
     channel    :: atom(),
     content    :: binary(),
     raw        :: term(),
-    ts         :: non_neg_integer()
+    ts         :: non_neg_integer(),
+    reply_pid  = undefined :: pid() | undefined
 }).
 
 %% A stored memory entry.

@@ -16,6 +16,7 @@
          dispatch_run/2,
          get_history/1,
          set_history/2,
+         get_channel_mod/1,
          append_message/2,
          set_loop_pid/2,
          turn_complete/2]).
@@ -30,6 +31,7 @@
     autonomy      :: autonomy_level(),
     loop_pid      :: pid() | undefined,
     loop_busy     :: boolean(),          %% true while a run is in progress
+    channel_mod   :: module() | undefined,
     provider_mod  :: module(),
     memory_mod    :: module(),
     history       :: [#bc_message{}],
@@ -54,6 +56,11 @@ get_history(Pid) ->
 -spec set_history(Pid :: pid(), History :: [#bc_message{}]) -> ok.
 set_history(Pid, History) ->
     gen_server:cast(Pid, {set_history, History}).
+
+%% @doc Return the channel module for this session (called by bc_loop on init).
+-spec get_channel_mod(Pid :: pid()) -> module() | undefined.
+get_channel_mod(Pid) ->
+    gen_server:call(Pid, get_channel_mod).
 
 %% @doc Append a single message to history (called by bc_loop).
 -spec append_message(Pid :: pid(), Message :: #bc_message{}) -> ok.
@@ -83,6 +90,7 @@ init(Config) ->
                            bc_config:get(beamclaw_core, autonomy_level, supervised)),
         loop_pid     = undefined,
         loop_busy    = false,
+        channel_mod  = maps:get(channel_mod,  Config, undefined),
         provider_mod = maps:get(provider_mod, Config, bc_provider_openrouter),
         memory_mod   = maps:get(memory_mod,   Config, bc_memory_ets),
         history      = [],
@@ -139,6 +147,8 @@ handle_cast(_Msg, State) ->
 
 handle_call(get_history, _From, State) ->
     {reply, State#state.history, State};
+handle_call(get_channel_mod, _From, State) ->
+    {reply, State#state.channel_mod, State};
 handle_call(_Req, _From, State) ->
     {reply, {error, unknown}, State}.
 

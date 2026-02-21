@@ -79,19 +79,19 @@ All six OTP apps created, supervision trees defined, behaviours declared,
 | `bc_provider_openai` | ✅ | OpenAI provider (delegates to openrouter) |
 | `bc_channel` | ✅ | behaviour |
 
-### M6 — Gateway ⬜
+### M6 — Gateway ✅
 
 | Module | Status | Notes |
 |--------|--------|-------|
-| `bc_rate_limiter` | ⬜ | sliding-window ETS, 60 s prune |
-| `bc_gateway_cowboy` | ⬜ | Cowboy listener wrapper |
-| `bc_http_health_h` | ⬜ | `GET /health` |
-| `bc_http_metrics_h` | ⬜ | `GET /metrics` |
-| `bc_http_completions_h` | ⬜ | `POST /v1/chat/completions` (SSE) |
-| `bc_ws_h` | ⬜ | `GET /ws` WebSocket handler |
-| `bc_webhook_telegram_h` | ⬜ | `POST /webhook/telegram` |
-| `bc_channel_telegram` | ⬜ | Telegram long-poll / webhook channel |
-| `bc_channel_tui` | ⬜ | Terminal UI channel |
+| `bc_rate_limiter` | ✅ | sliding-window ETS, 60 s prune |
+| `bc_gateway_cowboy` | ✅ | Cowboy listener wrapper |
+| `bc_http_health_h` | ✅ | `GET /health` |
+| `bc_http_metrics_h` | ✅ | `GET /metrics` (stub; Prometheus deferred, ADR-009) |
+| `bc_http_completions_h` | ✅ | SSE streaming + sync; `reply_pid` routing |
+| `bc_ws_h` | ✅ | session dispatch; `reply_pid` routing |
+| `bc_webhook_telegram_h` | ✅ | `POST /webhook/telegram` |
+| `bc_channel_telegram` | ✅ | long-poll / webhook; `send_response/2`; race fix |
+| `bc_channel_tui` | ✅ | stdin/stdout; `send_response/2`; race fix |
 
 ### M7 — Testing & Hardening ⬜
 
@@ -125,4 +125,4 @@ _None at this time._
 
 ## Last Updated
 
-2026-02-21 (M5 complete: core agentic loop, fixed 5 bugs in scaffolding)
+2026-02-21 (M6 complete: gateway, response routing wired end-to-end)
