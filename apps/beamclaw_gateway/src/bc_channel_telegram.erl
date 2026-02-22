@@ -31,6 +31,9 @@ handle_webhook(Update) ->
 init(Config) ->
     Token = bc_config:resolve(maps:get(token, Config, {env, "TELEGRAM_BOT_TOKEN"})),
     Mode  = maps:get(mode, Config, long_poll),
+    %% ETS table mapping SessionId → ChatId (needed since session IDs are now
+    %% derived hashes, not raw ChatId values)
+    _ = ets:new(bc_telegram_chat_map, [set, named_table, public]),
     State = #{token => Token, mode => Mode, offset => 0, seen_ids => sets:new()},
     case Mode of
         long_poll ->
@@ -136,31 +139,37 @@ dispatch_telegram_message(Update) ->
     Text   = maps:get(<<"text">>,    Msg,    <<>>),
     From   = maps:get(<<"from">>,    Msg,    #{}),
     Chat   = maps:get(<<"chat">>,    Msg,    #{}),
-    UserId = integer_to_binary(maps:get(<<"id">>, From, 0)),
-    ChatId = integer_to_binary(maps:get(<<"id">>, Chat, 0)),
-    logger:debug("[telegram] dispatch message: chat_id=~s text=~s", [ChatId, Text]),
+    TgUserId = integer_to_binary(maps:get(<<"id">>, From, 0)),
+    ChatId   = integer_to_binary(maps:get(<<"id">>, Chat, 0)),
+    UserId   = <<"tg:", TgUserId/binary>>,
+    AgentId  = bc_config:get(beamclaw_core, default_agent, <<"default">>),
+    SessionId = bc_session_registry:derive_session_id(UserId, AgentId, telegram),
+    %% Map the derived SessionId to the Telegram ChatId for response routing.
+    ets:insert(bc_telegram_chat_map, {SessionId, ChatId}),
+    logger:debug("[telegram] dispatch message: chat_id=~s session_id=~s text=~s",
+                 [ChatId, SessionId, Text]),
     ChannelMsg = #bc_channel_message{
-        session_id = ChatId,
+        session_id = SessionId,
         user_id    = UserId,
+        agent_id   = AgentId,
         channel    = telegram,
         content    = Text,
         raw        = Msg,
         ts         = erlang:system_time(millisecond)
         %% reply_pid unset — responses routed via send_response/2
     },
-    AgentId = bc_config:get(beamclaw_core, default_agent, <<"default">>),
-    case bc_session_registry:lookup(ChatId) of
+    case bc_session_registry:lookup(SessionId) of
         {ok, Pid} ->
             bc_session:dispatch_run(Pid, ChannelMsg);
         {error, not_found} ->
-            Config = #{session_id  => ChatId,
+            Config = #{session_id  => SessionId,
                        user_id     => UserId,
                        channel_id  => ChatId,
                        channel_mod => bc_channel_telegram,
                        agent_id    => AgentId},
             {ok, _} = bc_sessions_sup:start_session(Config),
             %% bc_session_registry:register/2 is synchronous — no sleep needed.
-            {ok, Pid} = bc_session_registry:lookup(ChatId),
+            {ok, Pid} = bc_session_registry:lookup(SessionId),
             bc_session:dispatch_run(Pid, ChannelMsg)
     end.
 
@@ -198,4 +207,11 @@ edit_message(ChatId, MessageId, Text, #{token := Token}) ->
     end.
 
 resolve_chat_id(SessionId, _State) ->
-    binary_to_integer(SessionId).
+    case ets:lookup(bc_telegram_chat_map, SessionId) of
+        [{_, ChatId}] -> binary_to_integer(ChatId);
+        []            ->
+            %% Fallback: try interpreting SessionId as a raw chat ID (legacy)
+            try binary_to_integer(SessionId)
+            catch error:badarg -> 0
+            end
+    end.

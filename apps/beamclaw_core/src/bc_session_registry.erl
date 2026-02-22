@@ -8,6 +8,7 @@
 -behaviour(gen_server).
 
 -export([start_link/0, register/2, lookup/1, unregister/1, all/0]).
+-export([derive_session_id/2, derive_session_id/3]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
@@ -34,6 +35,35 @@ unregister(SessionId) ->
 -spec all() -> [{binary(), pid()}].
 all() ->
     ets:tab2list(?TAB).
+
+%% @doc Derive a deterministic session ID from user_id and agent_id.
+%% Same user + same agent = same session_id regardless of channel.
+%% Dialyzer infers a narrower return type (<<_:64,_:_*8>>); binary() is correct
+%% for the public API spec. Same pattern as bc_skill_parser, bc_system_prompt etc.
+-dialyzer({nowarn_function, [derive_session_id/2, derive_session_id/3]}).
+-spec derive_session_id(UserId :: binary(), AgentId :: binary()) -> binary().
+derive_session_id(UserId, AgentId) ->
+    Input = <<UserId/binary, ":", AgentId/binary>>,
+    Hash = crypto:hash(sha256, Input),
+    Hex = binary:encode_hex(binary:part(Hash, 0, 16), lowercase),
+    <<"session-", Hex/binary>>.
+
+%% @doc Derive session ID with optional channel isolation.
+%% When session_sharing is `per_channel`, the channel atom is included in the
+%% hash input, producing different session IDs per channel.
+-spec derive_session_id(UserId :: binary(), AgentId :: binary(),
+                        Channel :: atom()) -> binary().
+derive_session_id(UserId, AgentId, Channel) ->
+    case bc_config:get(beamclaw_core, session_sharing, shared) of
+        shared ->
+            derive_session_id(UserId, AgentId);
+        per_channel ->
+            ChBin = atom_to_binary(Channel, utf8),
+            Input = <<UserId/binary, ":", AgentId/binary, ":", ChBin/binary>>,
+            Hash = crypto:hash(sha256, Input),
+            Hex = binary:encode_hex(binary:part(Hash, 0, 16), lowercase),
+            <<"session-", Hex/binary>>
+    end.
 
 init([]) ->
     _ = ets:new(?TAB, [set, named_table, public, {read_concurrency, true}]),

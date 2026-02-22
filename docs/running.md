@@ -79,12 +79,59 @@ _build/default/bin/beamclaw tui
 # Ctrl+D to disconnect.
 ```
 
-Each remote TUI gets its own session (unique ID). Multiple remote TUIs can
-connect simultaneously. If the daemon dies mid-conversation, the TUI prints
-`[daemon disconnected]` and exits.
+Multiple remote TUIs can connect simultaneously. If the daemon dies mid-conversation,
+the TUI prints `[daemon disconnected]` and exits.
 
 If no daemon is running, `beamclaw tui` falls back to the normal in-process
 mode — no behaviour change from before.
+
+### Session sharing across channels
+
+By default (`session_sharing = shared`), BeamClaw derives session IDs
+deterministically from `{user_id, agent_id}`. This means the same user talking
+to the same agent will share a single conversation across all channels:
+
+```bash
+# Terminal 1: TUI as alice
+BEAMCLAW_USER=alice beamclaw tui --agent default
+> Hello, remember my name is Alice
+
+# Terminal 2: same user via another TUI or Telegram
+# Shares the same conversation — agent remembers Alice
+```
+
+User identity per channel:
+
+| Channel | User ID format | Source |
+|---------|---------------|--------|
+| TUI | `local:<username>` | `BEAMCLAW_USER` env → `USER` env → `anonymous` |
+| Telegram | `tg:<telegram_user_id>` | From Telegram message `from.id` |
+| HTTP | `api:<user_id>` | `X-User-Id` header or `user_id` in body |
+| WebSocket | `ws:<user_id>` | `user_id` in message payload |
+
+To isolate sessions per channel (legacy behaviour), set `{session_sharing, per_channel}`
+in `sys.config`.
+
+### Session persistence
+
+Session history is persisted to Mnesia by default (`session_persistence = true`).
+Conversations survive VM restarts:
+
+```bash
+beamclaw start
+BEAMCLAW_USER=alice beamclaw tui --agent default
+> Remember my favourite colour is blue
+# ... quit ...
+
+beamclaw restart
+
+BEAMCLAW_USER=alice beamclaw tui --agent default
+> What's my favourite colour?
+# Agent remembers: blue
+```
+
+Expired sessions are cleaned up automatically based on `session_ttl_seconds` (default: 1 hour).
+Disable persistence with `{session_persistence, false}` in `sys.config`.
 
 ### Agent Management
 
@@ -166,6 +213,7 @@ Per-agent skills override global skills with the same name:
 | `TELEGRAM_BOT_TOKEN` | No | Enable Telegram channel |
 | `BEAMCLAW_PORT` | No | Override gateway HTTP port (default: 8080) |
 | `BEAMCLAW_AGENT` | No | Default agent name for TUI (default: `default`) |
+| `BEAMCLAW_USER` | No | Override user identity for session sharing |
 | `BEAMCLAW_HOME` | No | Override workspace base directory (default: `~/.beamclaw`) |
 
 ### Pre-flight check

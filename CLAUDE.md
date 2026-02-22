@@ -158,6 +158,7 @@ beamclaw_gateway → beamclaw_core → beamclaw_mcp   → beamclaw_tools → bea
 ```
 beamclaw_core_sup  (one_for_one)
   ├── bc_session_registry     (gen_server, named — ETS: session_id → pid)
+  ├── bc_session_cleaner      (gen_server, permanent — periodic expired session cleanup)
   └── bc_sessions_sup         (simple_one_for_one)
         └── [per session] bc_session_sup  (one_for_one)
               ├── bc_session     (gen_server, permanent — the "lane")
@@ -442,6 +443,7 @@ Non-blocking cast; backends receive events asynchronously via `pg` process group
 | `approval_resolved` | `tool_name`, `decision` |
 | `session_start` | `session_id` |
 | `session_end` | `session_id` |
+| `session_restored` | `session_id`, `message_count` |
 
 Usage: `bc_obs:emit(tool_call_start, #{tool_name => Name, args => Args, session_id => SId})`.
 
@@ -479,6 +481,9 @@ Usage: `bc_obs:emit(tool_call_start, #{tool_name => Name, args => Args, session_
     {autonomy_level, supervised},
     {session_ttl_seconds, 3600},
     {default_agent, <<"default">>},
+    {session_persistence, true},
+    {session_sharing, shared},
+    {session_cleanup_interval_ms, 300000},
     {skills, #{}}
 ]},
 {beamclaw_mcp, [
@@ -596,6 +601,7 @@ beamclaw/
     beamclaw_core/
       include/
         bc_types.hrl
+        bc_session_store.hrl  %% Mnesia record for session persistence
       src/
         beamclaw_core.app.src
         beamclaw_core_app.erl
@@ -604,7 +610,9 @@ beamclaw/
         bc_provider_openrouter.erl
         bc_provider_openai.erl
         bc_channel.erl        %% behaviour
-        bc_session_registry.erl
+        bc_session_registry.erl   %% session_id → pid + derive_session_id/2,3
+        bc_session_store.erl      %% Mnesia-backed session persistence
+        bc_session_cleaner.erl    %% periodic expired session cleanup
         bc_sessions_sup.erl
         bc_session_sup.erl
         bc_session.erl

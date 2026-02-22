@@ -26,7 +26,13 @@ send_response(SessionId, Msg) ->
 
 init(Config) ->
     Enabled = maps:get(enabled, Config, false),
-    State   = #{enabled => Enabled, session_id => <<"tui">>},
+    AgentId = bc_config:get(beamclaw_core, default_agent, <<"default">>),
+    UserId  = tui_user_id(),
+    SessionId = bc_session_registry:derive_session_id(UserId, AgentId, tui),
+    State   = #{enabled    => Enabled,
+                session_id => SessionId,
+                user_id    => UserId,
+                agent_id   => AgentId},
     case Enabled of
         true  -> self() ! start_io;
         false -> ok
@@ -80,7 +86,9 @@ handle_info({line_result, {error, Reason}}, State) ->
     logger:warning("[bc_channel_tui] io:get_line failed (~p); "
                    "stdin unavailable, entering dormant mode", [Reason]),
     {noreply, State};
-handle_info({line_result, Line}, #{session_id := SessionId} = State) ->
+handle_info({line_result, Line}, #{session_id := SessionId,
+                                    user_id := UserId,
+                                    agent_id := AgentId} = State) ->
     Text = string:trim(unicode:characters_to_binary(Line)),
     case Text of
         <<>> ->
@@ -89,14 +97,15 @@ handle_info({line_result, Line}, #{session_id := SessionId} = State) ->
         _ ->
             ChannelMsg = #bc_channel_message{
                 session_id = SessionId,
-                user_id    = <<"tui_user">>,
+                user_id    = UserId,
+                agent_id   = AgentId,
                 channel    = tui,
                 content    = Text,
                 raw        = Line,
                 ts         = erlang:system_time(millisecond)
                 %% reply_pid unset — responses routed via send_response/2
             },
-            ensure_session_and_dispatch(SessionId, ChannelMsg)
+            ensure_session_and_dispatch(SessionId, ChannelMsg, UserId, AgentId)
             %% Do NOT send read_line here — wait for send_response to do it.
     end,
     {noreply, State};
@@ -108,14 +117,23 @@ code_change(_OldVsn, State, _)  -> {ok, State}.
 
 %% Internal
 
-ensure_session_and_dispatch(SessionId, Msg) ->
+tui_user_id() ->
+    case os:getenv("BEAMCLAW_USER") of
+        false ->
+            case os:getenv("USER") of
+                false -> <<"local:anonymous">>;
+                U     -> iolist_to_binary(["local:", U])
+            end;
+        U -> iolist_to_binary(["local:", U])
+    end.
+
+ensure_session_and_dispatch(SessionId, Msg, UserId, AgentId) ->
     case bc_session_registry:lookup(SessionId) of
         {ok, Pid} ->
             bc_session:dispatch_run(Pid, Msg);
         {error, not_found} ->
-            AgentId = bc_config:get(beamclaw_core, default_agent, <<"default">>),
             Config = #{session_id  => SessionId,
-                       user_id     => <<"tui_user">>,
+                       user_id     => UserId,
                        channel_id  => SessionId,
                        channel_mod => bc_channel_tui,
                        agent_id    => AgentId},

@@ -45,6 +45,7 @@ The rule: no dependency cycle. `beamclaw_obs` never imports from any sibling.
 ```
 beamclaw_core_sup  (one_for_one)
   ├── bc_session_registry     (gen_server, named — ETS: session_id → pid)
+  ├── bc_session_cleaner      (gen_server, permanent — periodic expired session cleanup)
   └── bc_sessions_sup         (simple_one_for_one)
         └── [per session] bc_session_sup  (one_for_one)
               ├── bc_session     (gen_server, permanent — conversation history)
@@ -108,6 +109,44 @@ re-fetches history from `bc_session` on restart and resumes the next pending run
 
 This pattern is borrowed from OpenClaw's lane-based command queue: the "lane" (`bc_session`)
 serialises runs and survives crashes; the "worker" (`bc_loop`) is ephemeral.
+
+### Mnesia-backed session persistence
+
+`bc_session_store` persists session state (history, user/agent IDs, config) to a Mnesia table
+(`bc_session_stored`). History is serialized via `term_to_binary` with a version tag for forward
+compatibility. On session `init/1`, `bc_session` checks for a persisted record and restores
+history if found — this means conversations survive VM restarts.
+
+`bc_session_cleaner` is a permanent gen_server that periodically (every 5 minutes by default)
+deletes sessions whose `updated_at` timestamp exceeds the `session_ttl_seconds` config.
+
+Persistence can be disabled with `{session_persistence, false}` in `sys.config`.
+
+### Cross-channel session sharing
+
+Session IDs are derived deterministically from `{user_id, agent_id}` via SHA-256:
+
+```erlang
+bc_session_registry:derive_session_id(UserId, AgentId) ->
+    <<"session-", Hex/binary>>.
+```
+
+Same user + same agent = same session ID regardless of channel (TUI, Telegram, HTTP, WebSocket).
+This means conversations are shared: a user can start in TUI and continue on Telegram.
+
+Each channel derives a structured user ID with a prefix to prevent cross-domain collisions:
+- TUI: `<<"local:username">>` (from `BEAMCLAW_USER` or `USER` env var)
+- Telegram: `<<"tg:12345">>` (from Telegram user ID)
+- HTTP: `<<"api:user_id">>` (from `X-User-Id` header or request body)
+- WebSocket: `<<"ws:user_id">>` (from message payload)
+
+Response routing is per-run, not per-session: `bc_loop` uses `reply_channel` from each
+incoming message to determine which channel module to route the response through. This
+ensures that if a user sends via Telegram, the response goes to Telegram — even though the
+session was originally created from TUI.
+
+Configurable via `{session_sharing, shared | per_channel}`. When `per_channel`, the channel
+atom is included in the session ID hash, producing separate sessions per channel.
 
 ---
 
@@ -260,6 +299,7 @@ Key events:
 | `compaction_complete` | `before`, `after` (message counts) |
 | `approval_requested` | `tool_name` |
 | `approval_resolved` | `tool_name`, `decision` |
+| `session_restored` | `session_id`, `message_count` |
 
 Adding a new observability backend: implement `bc_observer`, join the `bc_obs_backends` pg
 group in `init/1`, and add the process as a child of `beamclaw_obs_sup`. No changes to

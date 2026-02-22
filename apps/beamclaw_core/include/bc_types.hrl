@@ -64,6 +64,7 @@
 -record(bc_channel_message, {
     session_id :: binary(),
     user_id    :: binary(),
+    agent_id   = undefined :: binary() | undefined,
     channel    :: atom(),
     content    :: binary(),
     raw        :: term(),

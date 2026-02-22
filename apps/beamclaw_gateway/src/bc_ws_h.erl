@@ -14,8 +14,7 @@ init(Req, _State) ->
     {cowboy_websocket, Req, #{session_id => undefined}, #{idle_timeout => 3600000}}.
 
 websocket_init(State) ->
-    SessionId = generate_session_id(),
-    {ok, State#{session_id => SessionId}}.
+    {ok, State}.
 
 websocket_handle({text, Msg}, State) ->
     case jsx:decode(Msg, [return_maps]) of
@@ -42,30 +41,33 @@ terminate(_Reason, _Req, _State) ->
 %% Internal
 
 handle_ws_message(#{<<"type">> := <<"message">>, <<"content">> := Content} = Msg, State) ->
-    SessionId = maps:get(session_id, State),
     AgentId   = maps:get(<<"agent_id">>, Msg, <<"default">>),
+    RawUserId = maps:get(<<"user_id">>, Msg, <<"anonymous">>),
+    UserId    = <<"ws:", RawUserId/binary>>,
+    SessionId = bc_session_registry:derive_session_id(UserId, AgentId, websocket),
     ChannelMsg = #bc_channel_message{
         session_id = SessionId,
-        user_id    = <<"ws_user">>,
+        user_id    = UserId,
+        agent_id   = AgentId,
         channel    = websocket,
         content    = Content,
         raw        = Content,
         ts         = erlang:system_time(millisecond),
         reply_pid  = self()
     },
-    SessionPid = get_or_create_session(SessionId, AgentId),
+    SessionPid = get_or_create_session(SessionId, UserId, AgentId),
     bc_session:dispatch_run(SessionPid, ChannelMsg),
-    {ok, State};
+    {ok, State#{session_id => SessionId}};
 handle_ws_message(_Msg, State) ->
     {ok, State}.
 
-get_or_create_session(SessionId, AgentId) ->
+get_or_create_session(SessionId, UserId, AgentId) ->
     case bc_session_registry:lookup(SessionId) of
         {ok, Pid} ->
             Pid;
         {error, not_found} ->
             Config = #{session_id  => SessionId,
-                       user_id     => <<"ws_user">>,
+                       user_id     => UserId,
                        channel_id  => SessionId,
                        channel_mod => undefined,
                        agent_id    => AgentId},
@@ -74,8 +76,3 @@ get_or_create_session(SessionId, AgentId) ->
             Pid
     end.
 
-generate_session_id() ->
-    <<A:32, B:16, C:16, D:16, E:48>> = crypto:strong_rand_bytes(16),
-    iolist_to_binary(io_lib:format(
-        "~8.16.0b-~4.16.0b-4~3.16.0b-~4.16.0b-~12.16.0b",
-        [A, B, C band 16#0fff, D band 16#3fff bor 16#8000, E])).

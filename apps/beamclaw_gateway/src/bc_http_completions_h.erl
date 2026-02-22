@@ -48,19 +48,30 @@ handle_completion(Req, State) ->
 dispatch_and_respond(Decoded, Req, State) ->
     Messages  = maps:get(<<"messages">>, Decoded, []),
     Stream    = maps:get(<<"stream">>,   Decoded, false),
-    SessionId = maps:get(<<"session_id">>, Decoded, generate_session_id()),
     AgentId   = maps:get(<<"agent_id">>,   Decoded, <<"default">>),
     Content   = get_last_user_message(Messages),
+    %% Derive user_id from header or body, with prefix
+    RawUserId = case cowboy_req:header(<<"x-user-id">>, Req) of
+        undefined -> maps:get(<<"user_id">>, Decoded, <<"anonymous">>);
+        HeaderVal -> HeaderVal
+    end,
+    UserId = <<"api:", RawUserId/binary>>,
+    %% Use explicit session_id if provided (backward compat), else derive
+    SessionId = case maps:get(<<"session_id">>, Decoded, undefined) of
+        undefined -> bc_session_registry:derive_session_id(UserId, AgentId, http);
+        Explicit  -> Explicit
+    end,
     ChannelMsg = #bc_channel_message{
         session_id = SessionId,
-        user_id    = <<"api_user">>,
+        user_id    = UserId,
+        agent_id   = AgentId,
         channel    = http,
         content    = Content,
         raw        = Decoded,
         ts         = erlang:system_time(millisecond),
         reply_pid  = self()
     },
-    SessionPid = get_or_create_session(SessionId, AgentId),
+    SessionPid = get_or_create_session(SessionId, UserId, AgentId),
     bc_session:dispatch_run(SessionPid, ChannelMsg),
     case Stream of
         true  -> respond_sse(Req, SessionId, State);
@@ -138,13 +149,13 @@ get_last_user_message(Messages) ->
         []          -> <<>>
     end.
 
-get_or_create_session(SessionId, AgentId) ->
+get_or_create_session(SessionId, UserId, AgentId) ->
     case bc_session_registry:lookup(SessionId) of
         {ok, Pid} ->
             Pid;
         {error, not_found} ->
             Config = #{session_id  => SessionId,
-                       user_id     => <<"api_user">>,
+                       user_id     => UserId,
                        channel_id  => SessionId,
                        channel_mod => undefined,
                        agent_id    => AgentId},
@@ -156,9 +167,3 @@ get_or_create_session(SessionId, AgentId) ->
 peer_ip(Req) ->
     {Ip, _Port} = cowboy_req:peer(Req),
     Ip.
-
-generate_session_id() ->
-    <<A:32, B:16, C:16, D:16, E:48>> = crypto:strong_rand_bytes(16),
-    iolist_to_binary(io_lib:format(
-        "~8.16.0b-~4.16.0b-4~3.16.0b-~4.16.0b-~12.16.0b",
-        [A, B, C band 16#0fff, D band 16#3fff bor 16#8000, E])).

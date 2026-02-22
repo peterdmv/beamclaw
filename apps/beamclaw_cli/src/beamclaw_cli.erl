@@ -14,6 +14,7 @@
 -dialyzer([no_return, no_unused]).
 -dialyzer({nowarn_function, [cmd_local_tui/1, cmd_status/0,
                              cmd_stop/0, cmd_remote_console/0, cmd_doctor/0,
+                             cmd_remote_tui/1,
                              cmd_agent_create/1, cmd_agent_list/0,
                              cmd_agent_delete/1, cmd_agent_show/1,
                              cmd_agent_rehatch/1,
@@ -98,13 +99,21 @@ cmd_local_tui(AgentId) ->
 %% @doc Attach a remote TUI to a running daemon via Erlang distribution.
 cmd_remote_tui(AgentId) ->
     erlang:monitor_node(daemon_node(), true),
-    SessionId = generate_remote_session_id(),
+    UserId = cli_user_id(),
+    SessionId = case rpc:call(daemon_node(), bc_session_registry,
+                              derive_session_id, [UserId, AgentId, remote_tui]) of
+        {badrpc, Reason} ->
+            io:format(standard_error,
+                      "beamclaw: RPC failed deriving session ID: ~p~n", [Reason]),
+            halt(1);
+        Id -> Id
+    end,
     io:format("BeamClaw TUI (remote) — connected to ~s (agent: ~s)~n",
               [daemon_node(), AgentId]),
     io:format("Type a message and press Enter. Ctrl+D to disconnect.~n~n> "),
-    remote_tui_loop(SessionId, AgentId).
+    remote_tui_loop(SessionId, AgentId, UserId).
 
-remote_tui_loop(SessionId, AgentId) ->
+remote_tui_loop(SessionId, AgentId, UserId) ->
     case io:get_line("") of
         eof ->
             io:format("~n[disconnected]~n"),
@@ -117,20 +126,20 @@ remote_tui_loop(SessionId, AgentId) ->
             case Text of
                 "" ->
                     io:format("> "),
-                    remote_tui_loop(SessionId, AgentId);
+                    remote_tui_loop(SessionId, AgentId, UserId);
                 _ ->
-                    dispatch_remote(SessionId, iolist_to_binary(Text), AgentId),
+                    dispatch_remote(SessionId, iolist_to_binary(Text), AgentId, UserId),
                     receive_remote_response(SessionId),
-                    remote_tui_loop(SessionId, AgentId)
+                    remote_tui_loop(SessionId, AgentId, UserId)
             end
     end.
 
-dispatch_remote(SessionId, Text, AgentId) ->
+dispatch_remote(SessionId, Text, AgentId, UserId) ->
     %% Ensure session exists on daemon.
     case rpc:call(daemon_node(), bc_session_registry, lookup, [SessionId]) of
         {error, not_found} ->
             Config = #{session_id  => SessionId,
-                       user_id     => <<"remote_tui_user">>,
+                       user_id     => UserId,
                        channel_id  => SessionId,
                        channel_mod => undefined,
                        agent_id    => AgentId},
@@ -157,7 +166,8 @@ dispatch_remote(SessionId, Text, AgentId) ->
         {ok, SPid} ->
             Msg = #bc_channel_message{
                 session_id = SessionId,
-                user_id    = <<"remote_tui_user">>,
+                user_id    = UserId,
+                agent_id   = AgentId,
                 channel    = remote_tui,
                 content    = Text,
                 raw        = Text,
@@ -545,6 +555,7 @@ cmd_help() ->
         "  TELEGRAM_BOT_TOKEN   Optional Telegram channel~n"
         "  BEAMCLAW_PORT        Override gateway port (default: 8080)~n"
         "  BEAMCLAW_AGENT       Default agent name (default: default)~n"
+        "  BEAMCLAW_USER        Override user identity for session sharing~n"
         "  BEAMCLAW_HOME        Override workspace base directory~n"
     ).
 
@@ -600,6 +611,12 @@ apply_tui_config() ->
                         [{persistent, true}]),
     application:set_env(beamclaw_core, session_ttl_seconds, 3600,
                         [{persistent, true}]),
+    application:set_env(beamclaw_core, session_persistence, true,
+                        [{persistent, true}]),
+    application:set_env(beamclaw_core, session_sharing, shared,
+                        [{persistent, true}]),
+    application:set_env(beamclaw_core, session_cleanup_interval_ms, 300000,
+                        [{persistent, true}]),
     application:set_env(beamclaw_mcp, servers, [], [{persistent, true}]),
     application:set_env(beamclaw_gateway, http, #{port => ?GATEWAY_PORT},
                         [{persistent, true}]),
@@ -643,12 +660,16 @@ ensure_ctl_node_soft() ->
         {error, Reason}               -> {error, Reason}
     end.
 
-%% Generate a unique session ID for remote TUI connections.
-generate_remote_session_id() ->
-    <<A:32, B:16, C:16, D:16, E:48>> = crypto:strong_rand_bytes(16),
-    UUID = io_lib:format("~8.16.0b-~4.16.0b-4~3.16.0b-~4.16.0b-~12.16.0b",
-                         [A, B, C band 16#0fff, D band 16#3fff bor 16#8000, E]),
-    iolist_to_binary(["remote-tui-" | UUID]).
+%% @doc Derive user_id for CLI/remote TUI from BEAMCLAW_USER / USER env vars.
+cli_user_id() ->
+    case os:getenv("BEAMCLAW_USER") of
+        false ->
+            case os:getenv("USER") of
+                false -> <<"local:anonymous">>;
+                U     -> iolist_to_binary(["local:", U])
+            end;
+        U -> iolist_to_binary(["local:", U])
+    end.
 
 %%--------------------------------------------------------------------
 %% Internal: daemon lifecycle

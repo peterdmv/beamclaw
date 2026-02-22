@@ -20,6 +20,7 @@ resolved at runtime by `bc_config:get/2` via `os:getenv/1`.
 | `BEAMCLAW_COOKIE` | No | Erlang cluster cookie (default: `beamclaw_dev`) |
 | `BEAMCLAW_HOME` | No | Override workspace base directory (default: `~/.beamclaw`) |
 | `BEAMCLAW_AGENT` | No | Default agent name for TUI sessions (default: `default`) |
+| `BEAMCLAW_USER` | No | Override user identity for session sharing (default: system `USER`) |
 
 At least one of `OPENROUTER_API_KEY` or `OPENAI_API_KEY` must be set, depending on
 `default_provider`.
@@ -78,7 +79,20 @@ them to a file — `.env` and `*.secret` files are excluded by `.gitignore`.
     %% Default agent workspace. Sessions use this agent unless overridden
     %% via --agent flag (TUI), agent_id request field (HTTP/WS), or
     %% BEAMCLAW_AGENT env var.
-    {default_agent, <<"default">>}
+    {default_agent, <<"default">>},
+
+    %% Session persistence: store history in Mnesia across restarts.
+    %% true  — history survives VM restarts (default)
+    %% false — in-memory only; history lost on restart
+    {session_persistence, true},
+
+    %% Session sharing across channels.
+    %% shared      — same user + same agent = same session regardless of channel (default)
+    %% per_channel — separate session per channel (legacy behaviour)
+    {session_sharing, shared},
+
+    %% How often to scan for expired sessions (ms). Default: 5 minutes.
+    {session_cleanup_interval_ms, 300000}
 ]}
 ```
 

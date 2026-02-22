@@ -27,10 +27,10 @@
     session_id     :: binary(),
     user_id        :: binary(),
     agent_id       :: binary(),
-    channel_mod    :: module() | undefined,   %% for named-channel routing
     provider_mod   :: module(),
     provider_state :: term(),
     reply_pid      = undefined :: pid() | undefined,  %% for HTTP/WS routing
+    reply_channel  = undefined :: atom() | undefined,  %% per-run channel for routing
     config         :: map(),
     current_run    :: term() | undefined,
     tool_calls     :: [#bc_tool_call{}],
@@ -49,8 +49,7 @@ init(Config) ->
     %% during its own init/1. The supervisor starts bc_session before bc_loop,
     %% so this lookup always succeeds.
     {ok, SessionPid} = bc_session_registry:lookup(SessionId),
-    %% Fetch the channel module and agent ID for response routing / system prompt.
-    ChannelMod = bc_session:get_channel_mod(SessionPid),
+    %% Fetch agent ID for system prompt assembly.
     AgentId    = bc_session:get_agent_id(SessionPid),
     %% Initialise the provider.
     ProvConfig = get_provider_config(ProviderMod),
@@ -63,10 +62,10 @@ init(Config) ->
         session_id     = SessionId,
         user_id        = maps:get(user_id, Config, <<"anonymous">>),
         agent_id       = AgentId,
-        channel_mod    = ChannelMod,
         provider_mod   = ProviderMod,
         provider_state = ProvState,
         reply_pid      = undefined,
+        reply_channel  = undefined,
         config         = Config,
         current_run    = undefined,
         tool_calls     = [],
@@ -79,8 +78,9 @@ init(Config) ->
 idle(cast, {run, Message}, Data) ->
     logger:debug("[loop] run received: session=~s content=~s",
                  [Data#loop_data.session_id, Message#bc_channel_message.content]),
-    %% Extract per-run reply_pid (set by HTTP/WS handlers; undefined for channels).
-    ReplyPid = Message#bc_channel_message.reply_pid,
+    %% Extract per-run reply_pid and channel for routing.
+    ReplyPid     = Message#bc_channel_message.reply_pid,
+    ReplyChannel = Message#bc_channel_message.channel,
     %% Append the user message to history before the LLM call.
     %% append_message is a cast; get_history is a call to the same bc_session
     %% process, so FIFO ordering guarantees the cast is processed first.
@@ -99,7 +99,8 @@ idle(cast, {run, Message}, Data) ->
         false -> streaming
     end,
     {next_state, NextState,
-     Data#loop_data{current_run = Message, iteration = 0, reply_pid = ReplyPid}};
+     Data#loop_data{current_run = Message, iteration = 0,
+                    reply_pid = ReplyPid, reply_channel = ReplyChannel}};
 idle(EventType, EventContent, Data) ->
     handle_common(idle, EventType, EventContent, Data).
 
@@ -181,7 +182,8 @@ finalizing(cast, do_finalize, Data) ->
     bc_session:turn_complete(Data#loop_data.session_pid, ok),
     bc_obs:emit(turn_complete, #{session_id => Data#loop_data.session_id}),
     {next_state, idle,
-     Data#loop_data{current_run = undefined, tool_calls = [], reply_pid = undefined}};
+     Data#loop_data{current_run = undefined, tool_calls = [],
+                    reply_pid = undefined, reply_channel = undefined}};
 finalizing(EventType, EventContent, Data) ->
     handle_common(finalizing, EventType, EventContent, Data).
 
@@ -259,12 +261,12 @@ receive_stream(Data, T0) ->
 %% Route the completed LLM response to the appropriate destination.
 route_response(Data, Msg) ->
     SessionId = Data#loop_data.session_id,
-    logger:debug("[loop] route_response: session=~s channel_mod=~p reply_pid=~p",
-                 [SessionId, Data#loop_data.channel_mod, Data#loop_data.reply_pid]),
+    logger:debug("[loop] route_response: session=~s reply_channel=~p reply_pid=~p",
+                 [SessionId, Data#loop_data.reply_channel, Data#loop_data.reply_pid]),
     case Data#loop_data.reply_pid of
         undefined ->
             %% Named channel gen-server (Telegram, TUI).
-            case Data#loop_data.channel_mod of
+            case channel_mod_for(Data#loop_data.reply_channel) of
                 undefined -> ok;
                 Mod       -> Mod:send_response(SessionId, Msg)
             end;
@@ -272,6 +274,10 @@ route_response(Data, Msg) ->
             %% HTTP handler or WebSocket handler waiting directly.
             RPid ! {bc_done, SessionId, Msg}
     end.
+
+channel_mod_for(tui)       -> bc_channel_tui;
+channel_mod_for(telegram)  -> bc_channel_telegram;
+channel_mod_for(_)         -> undefined.
 
 maybe_await_approval(#loop_data{tool_calls = Calls} = Data) ->
     NeedsApproval = lists:any(fun(TC) ->

@@ -11,6 +11,7 @@
 -behaviour(gen_server).
 
 -include_lib("beamclaw_core/include/bc_types.hrl").
+-include_lib("beamclaw_core/include/bc_session_store.hrl").
 
 -export([start_link/1,
          dispatch_run/2,
@@ -59,7 +60,8 @@ get_history(Pid) ->
 set_history(Pid, History) ->
     gen_server:cast(Pid, {set_history, History}).
 
-%% @doc Return the channel module for this session (called by bc_loop on init).
+%% @doc Return the channel module for this session.
+%% Deprecated: bc_loop now uses per-run reply_channel instead.
 -spec get_channel_mod(Pid :: pid()) -> module() | undefined.
 get_channel_mod(Pid) ->
     gen_server:call(Pid, get_channel_mod).
@@ -90,6 +92,7 @@ init(Config) ->
     bc_session_registry:register(SessionId, self()),
     bc_obs:emit(session_start, #{session_id => SessionId}),
     DefaultAgent = bc_config:get(beamclaw_core, default_agent, <<"default">>),
+    RestoredHistory = maybe_load_history(SessionId),
     State = #state{
         session_id   = SessionId,
         user_id      = maps:get(user_id,      Config, <<"anonymous">>),
@@ -102,7 +105,7 @@ init(Config) ->
         channel_mod  = maps:get(channel_mod,  Config, undefined),
         provider_mod = maps:get(provider_mod, Config, bc_provider_openrouter),
         memory_mod   = maps:get(memory_mod,   Config, bc_memory_ets),
-        history      = [],
+        history      = RestoredHistory,
         pending_runs = queue:new(),
         config       = Config
     },
@@ -135,10 +138,14 @@ handle_cast({set_loop_pid, Pid}, State) ->
     end;
 
 handle_cast({set_history, NewHistory}, State) ->
-    {noreply, State#state{history = NewHistory}};
+    NewState = State#state{history = NewHistory},
+    maybe_persist(NewState),
+    {noreply, NewState};
 
 handle_cast({append_message, Msg}, State) ->
-    {noreply, State#state{history = State#state.history ++ [Msg]}};
+    NewState = State#state{history = State#state.history ++ [Msg]},
+    maybe_persist(NewState),
+    {noreply, NewState};
 
 handle_cast({turn_complete, _Result}, State) ->
     case queue:out(State#state.pending_runs) of
@@ -175,6 +182,39 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 %% Internal
+
+maybe_persist(#state{session_id = SessionId, user_id = UserId,
+                     agent_id = AgentId, autonomy = Autonomy,
+                     history = History, config = Config}) ->
+    case bc_config:get(beamclaw_core, session_persistence, true) of
+        true ->
+            bc_session_store:save(SessionId, #{
+                user_id  => UserId,
+                agent_id => AgentId,
+                autonomy => Autonomy,
+                history  => History,
+                config   => Config
+            });
+        false ->
+            ok
+    end.
+
+maybe_load_history(SessionId) ->
+    case bc_config:get(beamclaw_core, session_persistence, true) of
+        true ->
+            case bc_session_store:load(SessionId) of
+                {ok, #bc_session_stored{history = History}} ->
+                    bc_obs:emit(session_restored, #{
+                        session_id    => SessionId,
+                        message_count => length(History)
+                    }),
+                    History;
+                {error, not_found} ->
+                    []
+            end;
+        false ->
+            []
+    end.
 
 generate_id() ->
     <<A:32, B:16, C:16, D:16, E:48>> = crypto:strong_rand_bytes(16),

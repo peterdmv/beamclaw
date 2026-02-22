@@ -4,7 +4,8 @@
 
 Scaffolding is complete. All seven OTP apps compile clean with zero warnings.
 Multi-agent workspaces (M11–M13), rich templates (M14), daily logs (M15),
-and skill system (M16–M17) are complete. 155 EUnit tests pass.
+skill system (M16–M17), session persistence (M18), and cross-channel session
+sharing (M19) are complete. 179 EUnit tests pass.
 
 ---
 
@@ -274,6 +275,35 @@ All six OTP apps created, supervision trees defined, behaviours declared,
 | EUnit tests | ✅ | 3 tests: rehatch, not_found, preserves_skills |
 | `docs/running.md` update | ✅ | Agent rehatch documented |
 
+### M18 — Session Persistence (Mnesia-backed history) ✅
+
+| Module/Task | Status | Notes |
+|-------------|--------|-------|
+| `bc_session_store.hrl` | ✅ | Mnesia record: session_id, user_id, agent_id, autonomy, history, timestamps, config |
+| `bc_session_store.erl` | ✅ | init_table, load, save, delete, delete_expired; versioned serialization |
+| `bc_session_cleaner.erl` | ✅ | gen_server; periodic cleanup every 5 min; uses session_ttl_seconds |
+| `beamclaw_core_app.erl` update | ✅ | `bc_session_store:init_table()` on app start |
+| `beamclaw_core_sup.erl` update | ✅ | `bc_session_cleaner` as permanent child |
+| `bc_session.erl` persistence hooks | ✅ | Load history on init; persist on append/set_history; configurable |
+| `beamclaw_core.app.src` update | ✅ | Added `mnesia` to applications |
+| `sys.config` update | ✅ | `session_persistence`, `session_sharing`, `session_cleanup_interval_ms` |
+| EUnit tests | ✅ | 6 tests (bc_session_store_tests) |
+
+### M19 — Cross-Channel Session Sharing ✅
+
+| Module/Task | Status | Notes |
+|-------------|--------|-------|
+| `bc_session_registry` derive_session_id | ✅ | SHA-256 based; shared/per_channel modes |
+| `bc_types.hrl` update | ✅ | Added `agent_id` to `#bc_channel_message{}` |
+| `bc_loop.erl` per-run routing | ✅ | `reply_channel` replaces `channel_mod`; `channel_mod_for/1` |
+| `bc_session.erl` deprecate channel_mod | ✅ | `get_channel_mod/1` deprecated (returns stored value for compat) |
+| `bc_channel_tui.erl` update | ✅ | `tui_user_id/0`; derive session_id; pass user_id/agent_id |
+| `bc_channel_telegram.erl` update | ✅ | `tg:` prefix; derive session_id; ETS chat_id mapping |
+| `bc_http_completions_h.erl` update | ✅ | `X-User-Id` header; `api:` prefix; derive or explicit session_id |
+| `bc_ws_h.erl` update | ✅ | `ws:` prefix; derive session_id per message |
+| `beamclaw_cli.erl` update | ✅ | `cli_user_id/0`; remote derive_session_id via RPC; `BEAMCLAW_USER` |
+| EUnit tests | ✅ | 7 tests (bc_session_registry_tests) |
+
 ---
 
 ## Known Issues / Blockers
@@ -284,4 +314,4 @@ _None at this time._
 
 ## Last Updated
 
-2026-02-22 (Post-M17: Agent Rehatch — 166 tests, 0 warnings)
+2026-02-22 (M18–M19: Session Persistence + Cross-Channel Sharing — 179 tests, 0 warnings)
