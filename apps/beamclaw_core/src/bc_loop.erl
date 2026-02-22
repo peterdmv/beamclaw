@@ -26,6 +26,7 @@
     session_pid    :: pid(),
     session_id     :: binary(),
     user_id        :: binary(),
+    agent_id       :: binary(),
     channel_mod    :: module() | undefined,   %% for named-channel routing
     provider_mod   :: module(),
     provider_state :: term(),
@@ -48,8 +49,9 @@ init(Config) ->
     %% during its own init/1. The supervisor starts bc_session before bc_loop,
     %% so this lookup always succeeds.
     {ok, SessionPid} = bc_session_registry:lookup(SessionId),
-    %% Fetch the channel module for response routing.
+    %% Fetch the channel module and agent ID for response routing / system prompt.
     ChannelMod = bc_session:get_channel_mod(SessionPid),
+    AgentId    = bc_session:get_agent_id(SessionPid),
     %% Initialise the provider.
     ProvConfig = get_provider_config(ProviderMod),
     {ok, ProvState} = ProviderMod:init(ProvConfig),
@@ -60,6 +62,7 @@ init(Config) ->
         session_pid    = SessionPid,
         session_id     = SessionId,
         user_id        = maps:get(user_id, Config, <<"anonymous">>),
+        agent_id       = AgentId,
         channel_mod    = ChannelMod,
         provider_mod   = ProviderMod,
         provider_state = ProvState,
@@ -113,15 +116,20 @@ streaming(enter, _OldState, Data) ->
     gen_statem:cast(self(), do_stream),
     {keep_state, Data};
 streaming(cast, do_stream, Data) ->
-    History   = bc_session:get_history(Data#loop_data.session_pid),
+    History    = bc_session:get_history(Data#loop_data.session_pid),
+    SystemMsgs = bc_system_prompt:assemble(Data#loop_data.agent_id),
+    FullHistory = SystemMsgs ++ History,
     LoopCfg   = bc_config:get(beamclaw_core, agentic_loop, #{}),
     ChunkSize = maps:get(stream_chunk_size, LoopCfg, 80),
+    Tools     = bc_tool_registry:list(),
+    ToolDefs  = [Def || {_Name, _Mod, Def} <- Tools],
     T0 = erlang:monotonic_time(millisecond),
     bc_obs:emit(llm_request, #{session_id    => Data#loop_data.session_id,
-                                message_count => length(History)}),
+                                message_count => length(FullHistory)}),
     ProvMod   = Data#loop_data.provider_mod,
     ProvState = Data#loop_data.provider_state,
-    case ProvMod:stream(History, #{chunk_size => ChunkSize}, self(), ProvState) of
+    Options   = #{chunk_size => ChunkSize, tools => ToolDefs},
+    case ProvMod:stream(FullHistory, Options, self(), ProvState) of
         {ok, NewProvState} ->
             receive_stream(Data#loop_data{provider_state = NewProvState}, T0);
         {error, Reason, NewProvState} ->
@@ -166,7 +174,7 @@ finalizing(enter, _OldState, Data) ->
     {keep_state, Data};
 finalizing(cast, do_finalize, Data) ->
     %% Signal reply_pid consumers that the full turn is done (all tool rounds).
-    case Data#loop_data.reply_pid of
+    _ = case Data#loop_data.reply_pid of
         undefined -> ok;
         RPid      -> RPid ! {bc_turn_complete, Data#loop_data.session_id}
     end,
@@ -206,7 +214,8 @@ make_session_ref(Data) ->
         session_id  = Data#loop_data.session_id,
         user_id     = Data#loop_data.user_id,
         session_pid = Data#loop_data.session_pid,
-        autonomy    = supervised  %% TODO: pull from bc_session config in M7
+        autonomy    = supervised,  %% TODO: pull from bc_session config
+        agent_id    = Data#loop_data.agent_id
     }.
 
 receive_stream(Data, T0) ->

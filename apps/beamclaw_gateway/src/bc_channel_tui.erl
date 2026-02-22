@@ -113,10 +113,12 @@ ensure_session_and_dispatch(SessionId, Msg) ->
         {ok, Pid} ->
             bc_session:dispatch_run(Pid, Msg);
         {error, not_found} ->
+            AgentId = bc_config:get(beamclaw_core, default_agent, <<"default">>),
             Config = #{session_id  => SessionId,
                        user_id     => <<"tui_user">>,
                        channel_id  => SessionId,
-                       channel_mod => bc_channel_tui},
+                       channel_mod => bc_channel_tui,
+                       agent_id    => AgentId},
             {ok, _} = bc_sessions_sup:start_session(Config),
             %% bc_session_registry:register/2 is now a synchronous call,
             %% so the session is in the registry by the time start_session returns.

@@ -1,11 +1,22 @@
 %% @doc BeamClaw CLI entry point (escript).
 %%
-%% Usage: beamclaw [tui|start|stop|restart|remote_console|doctor|status|version|help]
+%% Usage: beamclaw [tui|start|stop|restart|remote_console|agent|doctor|status|version|help]
 %%
 %% Built with: rebar3 escriptize
 %% Output:     _build/default/bin/beamclaw
 -module(beamclaw_cli).
 -export([main/1]).
+
+%% All CLI command functions terminate via halt/1 (escript pattern).
+%% Dialyzer reports these as "only terminates with explicit exception" and
+%% "has no local return" — both are correct and intentional for a CLI tool.
+%% The unmatched application:ensure_all_started returns are also intentional.
+-dialyzer([no_return, no_unused]).
+-dialyzer({nowarn_function, [cmd_local_tui/1, cmd_status/0,
+                             cmd_stop/0, cmd_remote_console/0, cmd_doctor/0,
+                             cmd_agent_create/1, cmd_agent_list/0,
+                             cmd_agent_delete/1, cmd_agent_show/1,
+                             spawn_daemon/0, check_openrouter_network/0]}).
 
 -include_lib("beamclaw_core/include/bc_types.hrl").
 
@@ -17,18 +28,24 @@
 %% Entry point
 %%--------------------------------------------------------------------
 
-main([])                   -> cmd_tui();
-main(["tui"            |_]) -> cmd_tui();
-main(["start"          |_]) -> cmd_start();
-main(["stop"           |_]) -> cmd_stop();
-main(["restart"        |_]) -> cmd_restart();
-main(["remote_console" |_]) -> cmd_remote_console();
-main(["doctor"         |_]) -> cmd_doctor();
-main(["status"         |_]) -> cmd_status();
-main(["version"        |_]) -> cmd_version();
-main(["help"           |_]) -> cmd_help();
-main(["--help"         |_]) -> cmd_help();
-main([Unknown          |_]) ->
+main([])                                  -> cmd_tui(default_agent());
+main(["tui", "--agent", Name    | _])     -> cmd_tui(list_to_binary(Name));
+main(["tui"                     | _])     -> cmd_tui(default_agent());
+main(["start"                   | _])     -> cmd_start();
+main(["stop"                    | _])     -> cmd_stop();
+main(["restart"                 | _])     -> cmd_restart();
+main(["remote_console"          | _])     -> cmd_remote_console();
+main(["agent", "create", Name   | _])     -> cmd_agent_create(list_to_binary(Name));
+main(["agent", "list"           | _])     -> cmd_agent_list();
+main(["agent", "delete", Name   | _])     -> cmd_agent_delete(list_to_binary(Name));
+main(["agent", "show",   Name   | _])     -> cmd_agent_show(list_to_binary(Name));
+main(["agent"                   | _])     -> cmd_agent_list();
+main(["doctor"                  | _])     -> cmd_doctor();
+main(["status"                  | _])     -> cmd_status();
+main(["version"                 | _])     -> cmd_version();
+main(["help"                    | _])     -> cmd_help();
+main(["--help"                  | _])     -> cmd_help();
+main([Unknown                   | _]) ->
     io:format(standard_error, "beamclaw: unknown command '~s'~n", [Unknown]),
     io:format(standard_error, "Run 'beamclaw help' for usage.~n", []),
     halt(1).
@@ -38,15 +55,17 @@ main([Unknown          |_]) ->
 %%--------------------------------------------------------------------
 
 %% @doc Start interactive TUI chat — auto-detects running daemon.
-cmd_tui() ->
+cmd_tui(AgentId) ->
     case try_connect_daemon() of
-        connected   -> cmd_remote_tui();
-        not_running -> cmd_local_tui()
+        connected   -> cmd_remote_tui(AgentId);
+        not_running -> cmd_local_tui(AgentId)
     end.
 
 %% @doc Start the TUI in-process (no daemon running).
-cmd_local_tui() ->
+cmd_local_tui(AgentId) ->
     apply_tui_config(),
+    application:set_env(beamclaw_core, default_agent, AgentId,
+                        [{persistent, true}]),
     case application:ensure_all_started(beamclaw_gateway) of
         {ok, _} ->
             ok;
@@ -68,14 +87,15 @@ cmd_local_tui() ->
     end.
 
 %% @doc Attach a remote TUI to a running daemon via Erlang distribution.
-cmd_remote_tui() ->
+cmd_remote_tui(AgentId) ->
     erlang:monitor_node(daemon_node(), true),
     SessionId = generate_remote_session_id(),
-    io:format("BeamClaw TUI (remote) — connected to ~s~n", [daemon_node()]),
+    io:format("BeamClaw TUI (remote) — connected to ~s (agent: ~s)~n",
+              [daemon_node(), AgentId]),
     io:format("Type a message and press Enter. Ctrl+D to disconnect.~n~n> "),
-    remote_tui_loop(SessionId).
+    remote_tui_loop(SessionId, AgentId).
 
-remote_tui_loop(SessionId) ->
+remote_tui_loop(SessionId, AgentId) ->
     case io:get_line("") of
         eof ->
             io:format("~n[disconnected]~n"),
@@ -88,22 +108,23 @@ remote_tui_loop(SessionId) ->
             case Text of
                 "" ->
                     io:format("> "),
-                    remote_tui_loop(SessionId);
+                    remote_tui_loop(SessionId, AgentId);
                 _ ->
-                    dispatch_remote(SessionId, iolist_to_binary(Text)),
+                    dispatch_remote(SessionId, iolist_to_binary(Text), AgentId),
                     receive_remote_response(SessionId),
-                    remote_tui_loop(SessionId)
+                    remote_tui_loop(SessionId, AgentId)
             end
     end.
 
-dispatch_remote(SessionId, Text) ->
+dispatch_remote(SessionId, Text, AgentId) ->
     %% Ensure session exists on daemon.
     case rpc:call(daemon_node(), bc_session_registry, lookup, [SessionId]) of
         {error, not_found} ->
             Config = #{session_id  => SessionId,
                        user_id     => <<"remote_tui_user">>,
                        channel_id  => SessionId,
-                       channel_mod => undefined},
+                       channel_mod => undefined,
+                       agent_id    => AgentId},
             case rpc:call(daemon_node(), bc_sessions_sup, start_session, [Config]) of
                 {ok, _}         -> ok;
                 {badrpc, Reason} ->
@@ -223,7 +244,8 @@ cmd_doctor() ->
         check_openrouter_key(),
         check_openai_key(),
         check_telegram_token(),
-        check_epmd()
+        check_epmd(),
+        check_workspace()
     ],
     AllChecks = case os:getenv("OPENROUTER_API_KEY") of
         false -> Checks;
@@ -262,31 +284,138 @@ cmd_status() ->
 cmd_version() ->
     io:format("beamclaw ~s~n", [?VERSION]).
 
+%% @doc Create a new agent workspace.
+cmd_agent_create(Name) ->
+    case bc_workspace:create_agent(Name) of
+        ok ->
+            Dir = bc_workspace:agent_dir(Name),
+            io:format("Agent '~s' created at ~s~n", [Name, Dir]),
+            halt(0);
+        {error, exists} ->
+            io:format(standard_error, "beamclaw: agent '~s' already exists~n", [Name]),
+            halt(1);
+        {error, invalid_agent_id} ->
+            io:format(standard_error,
+                      "beamclaw: invalid agent name '~s' "
+                      "(must match [a-z0-9_-]+)~n", [Name]),
+            halt(1)
+    end.
+
+%% @doc List all agents.
+cmd_agent_list() ->
+    bc_workspace:ensure_default_agent(),
+    Agents = bc_workspace:list_agents(),
+    case Agents of
+        [] ->
+            io:format("No agents found.~n");
+        _ ->
+            io:format("Agents:~n"),
+            lists:foreach(fun(Id) ->
+                Label = agent_display_name(Id),
+                io:format("  ~s~s~n", [Id, Label])
+            end, Agents)
+    end,
+    halt(0).
+
+%% @doc Delete an agent workspace.
+cmd_agent_delete(Name) ->
+    case bc_workspace:delete_agent(Name) of
+        ok ->
+            io:format("Agent '~s' deleted.~n", [Name]),
+            halt(0);
+        {error, cannot_delete_default} ->
+            io:format(standard_error,
+                      "beamclaw: cannot delete the default agent~n", []),
+            halt(1);
+        {error, not_found} ->
+            io:format(standard_error,
+                      "beamclaw: agent '~s' not found~n", [Name]),
+            halt(1);
+        {error, invalid_agent_id} ->
+            io:format(standard_error,
+                      "beamclaw: invalid agent name '~s'~n", [Name]),
+            halt(1)
+    end.
+
+%% @doc Show all bootstrap files for an agent.
+cmd_agent_show(Name) ->
+    case bc_workspace:agent_exists(Name) of
+        false ->
+            io:format(standard_error,
+                      "beamclaw: agent '~s' not found~n", [Name]),
+            halt(1);
+        true ->
+            Files = bc_workspace:read_all_bootstrap_files(Name),
+            Order = [<<"IDENTITY.md">>, <<"SOUL.md">>, <<"USER.md">>,
+                     <<"TOOLS.md">>, <<"AGENTS.md">>, <<"MEMORY.md">>],
+            lists:foreach(fun(Filename) ->
+                io:format("--- ~s ---~n", [Filename]),
+                case maps:get(Filename, Files, undefined) of
+                    undefined -> io:format("(not found)~n");
+                    Content   -> io:format("~s~n", [Content])
+                end
+            end, Order),
+            halt(0)
+    end.
+
 cmd_help() ->
     io:format(
         "Usage: beamclaw <command>~n~n"
         "Commands:~n"
-        "  tui              Start interactive TUI chat (default)~n"
-        "                   Connects to running daemon if available~n"
-        "  start            Start gateway as background daemon~n"
-        "  stop             Stop running daemon~n"
-        "  restart          Stop then start daemon~n"
-        "  remote_console   Print command to attach live Erlang shell~n"
-        "  doctor           Check environment and connectivity~n"
-        "  status           Ping running gateway HTTP health endpoint~n"
-        "  version          Print version~n"
-        "  help             Show this help~n~n"
+        "  tui [--agent NAME]   Start interactive TUI chat (default)~n"
+        "                       Connects to running daemon if available~n"
+        "  start                Start gateway as background daemon~n"
+        "  stop                 Stop running daemon~n"
+        "  restart              Stop then start daemon~n"
+        "  remote_console       Print command to attach live Erlang shell~n"
+        "  agent create NAME    Create a new agent workspace~n"
+        "  agent list           List all agents~n"
+        "  agent show NAME      Show agent bootstrap files~n"
+        "  agent delete NAME    Delete an agent workspace~n"
+        "  doctor               Check environment and connectivity~n"
+        "  status               Ping running gateway HTTP health endpoint~n"
+        "  version              Print version~n"
+        "  help                 Show this help~n~n"
         "Notes:~n"
         "  TUI: use Ctrl+D (EOF) to quit.~n"
         "  If a daemon is running (beamclaw start), tui auto-connects to it.~n"
         "  Ctrl+C shows the OTP break menu (type 'q' + Enter to exit).~n"
         "  Daemon IPC uses Erlang distribution; epmd must be available.~n~n"
         "Environment:~n"
-        "  OPENROUTER_API_KEY  Required for LLM completions~n"
-        "  OPENAI_API_KEY      Optional alternative provider~n"
-        "  TELEGRAM_BOT_TOKEN  Optional Telegram channel~n"
-        "  BEAMCLAW_PORT       Override gateway port (default: 8080)~n"
+        "  OPENROUTER_API_KEY   Required for LLM completions~n"
+        "  OPENAI_API_KEY       Optional alternative provider~n"
+        "  TELEGRAM_BOT_TOKEN   Optional Telegram channel~n"
+        "  BEAMCLAW_PORT        Override gateway port (default: 8080)~n"
+        "  BEAMCLAW_AGENT       Default agent name (default: default)~n"
+        "  BEAMCLAW_HOME        Override workspace base directory~n"
     ).
+
+%%--------------------------------------------------------------------
+%% Internal: agent helpers
+%%--------------------------------------------------------------------
+
+%% @doc Resolve default agent from BEAMCLAW_AGENT env var or fallback.
+default_agent() ->
+    case os:getenv("BEAMCLAW_AGENT") of
+        false -> <<"default">>;
+        Name  -> list_to_binary(Name)
+    end.
+
+%% @doc Extract the Name field from IDENTITY.md for display, if present.
+agent_display_name(AgentId) ->
+    case bc_workspace:read_bootstrap_file(AgentId, <<"IDENTITY.md">>) of
+        {ok, Content} ->
+            case re:run(Content, "\\*\\*Name:\\*\\*\\s*(.+)",
+                        [{capture, [1], binary}]) of
+                {match, [Name]} ->
+                    Trimmed = string:trim(Name),
+                    <<" (", Trimmed/binary, ")">>;
+                nomatch ->
+                    <<>>
+            end;
+        {error, _} ->
+            <<>>
+    end.
 
 %%--------------------------------------------------------------------
 %% Internal: TUI embedded config
@@ -520,6 +649,21 @@ check_epmd() ->
                               "(needed for start/stop/remote_console)");
         _ ->
             print_check(ok, "epmd found")
+    end.
+
+check_workspace() ->
+    BaseDir = bc_workspace:base_dir(),
+    case bc_workspace:agent_exists(<<"default">>) of
+        true ->
+            print_check(ok, "Workspace directory: " ++ BaseDir);
+        false ->
+            bc_workspace:ensure_default_agent(),
+            case bc_workspace:agent_exists(<<"default">>) of
+                true ->
+                    print_check(ok, "Workspace created: " ++ BaseDir);
+                false ->
+                    print_check(warn, "Cannot create workspace at " ++ BaseDir)
+            end
     end.
 
 check_openrouter_network() ->

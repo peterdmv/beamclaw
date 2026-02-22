@@ -2,8 +2,8 @@
 
 ## Current Phase: Implementation
 
-Scaffolding is complete. All six OTP apps compile clean with zero warnings.
-Active work is building out the core modules from stub to full implementation.
+Scaffolding is complete. All seven OTP apps compile clean with zero warnings.
+Multi-agent workspaces (M11–M13) are complete. 99 EUnit tests pass.
 
 ---
 
@@ -175,6 +175,49 @@ All six OTP apps created, supervision trees defined, behaviours declared,
 | `docs/running.md` update | ✅ | "Viewing daemon logs" subsection |
 | `CLAUDE.md` Configuration update | ✅ | Added `kernel` logger entry to config block |
 
+### M11 — Workspace Foundation (Filesystem + System Prompt) ✅
+
+| Module | Status | Notes |
+|--------|--------|-------|
+| `bc_workspace_templates` | ✅ | Pure data module; 6 default bootstrap file templates |
+| `bc_workspace` | ✅ | Agent workspace filesystem ops (create/delete/list/read/write) |
+| `bc_system_prompt` | ✅ | Assembles bootstrap files into system messages for LLM |
+| `bc_types.hrl` update | ✅ | Added `agent_id` to `#bc_session_ref{}` |
+| `bc_session` update | ✅ | `agent_id` in state; `get_agent_id/1` API |
+| `bc_loop` update | ✅ | `agent_id` in loop_data; system prompt injection before LLM call |
+| `beamclaw_core_app` update | ✅ | `ensure_default_agent/0` on app start |
+| `sys.config` update | ✅ | `{default_agent, <<"default">>}` |
+| EUnit tests | ✅ | 37 tests (bc_workspace_tests + bc_system_prompt_tests) |
+
+### M12 — CLI Agent Management + Channel Integration ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| `beamclaw agent create NAME` | ✅ | Validate ID → create workspace → print path |
+| `beamclaw agent list` | ✅ | List agents with display name from IDENTITY.md |
+| `beamclaw agent show NAME` | ✅ | Print all bootstrap file contents |
+| `beamclaw agent delete NAME` | ✅ | Refuse "default"; recursive delete |
+| `beamclaw tui --agent NAME` | ✅ | Thread agent_id through local + remote TUI |
+| `BEAMCLAW_AGENT` env var | ✅ | Default agent name when `--agent` not specified |
+| `bc_channel_tui` update | ✅ | `agent_id` in session Config |
+| `bc_channel_telegram` update | ✅ | `agent_id` in session Config |
+| `bc_http_completions_h` update | ✅ | Accept `agent_id` from request body |
+| `bc_ws_h` update | ✅ | Accept `agent_id` in WebSocket messages |
+| `cmd_doctor` update | ✅ | Workspace directory + default agent check |
+| `cmd_help` update | ✅ | Agent commands and `--agent` flag documented |
+| `docs/running.md` update | ✅ | Agent Management section |
+
+### M13 — Workspace Memory Tool + Tool Defs in LLM ✅
+
+| Module | Status | Notes |
+|--------|--------|-------|
+| `bc_workspace_path` | ✅ | Pure path resolution in `beamclaw_tools` (avoids dep cycle) |
+| `bc_tool_workspace_memory` | ✅ | read/append/replace MEMORY.md; no approval; read_only autonomy |
+| `bc_tool_registry` update | ✅ | 7 built-in tools (added workspace_memory) |
+| `bc_loop` update | ✅ | Fetch tool defs from registry; pass in Options |
+| `bc_provider_openrouter` update | ✅ | Include tool defs in request body (OpenAI function-calling format) |
+| EUnit tests | ✅ | 14 tests (bc_tool_workspace_memory_tests + bc_workspace_path_tests) |
+
 ---
 
 ## Known Issues / Blockers
@@ -185,4 +228,4 @@ _None at this time._
 
 ## Last Updated
 
-2026-02-22 (Post-M10: Daemon file logging — OTP kernel logger writes to `/tmp/beamclaw_daemon.log`)
+2026-02-22 (M11–M13: Multi-Agent Workspaces — 99 tests, 0 warnings, 0 dialyzer warnings)

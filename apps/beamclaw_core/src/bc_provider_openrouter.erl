@@ -51,16 +51,39 @@ terminate(_Reason, _State) ->
 
 %% Internal
 
-build_request_body(Messages, _Options, #{model := Model} = _State, Stream) ->
-    jsx:encode(#{
+build_request_body(Messages, Options, #{model := Model} = _State, Stream) ->
+    Base = #{
         model    => list_to_binary(Model),
         messages => [message_to_map(M) || M <- Messages],
         stream   => Stream
-    }).
+    },
+    case maps:get(tools, Options, []) of
+        [] ->
+            jsx:encode(Base);
+        ToolDefs ->
+            jsx:encode(Base#{tools => [tool_def_to_map(T) || T <- ToolDefs]})
+    end.
 
 message_to_map(#bc_message{role = Role, content = Content}) ->
     #{role    => atom_to_binary(Role, utf8),
       content => case Content of undefined -> <<"">>;  _ -> Content end}.
+
+tool_def_to_map(#{name := N, description := D, parameters := P}) ->
+    #{type => <<"function">>,
+      function => #{name => N, description => D, parameters => encode_params(P)}}.
+
+%% Convert atom keys in parameter schemas to binary keys for JSON encoding.
+encode_params(M) when is_map(M) ->
+    maps:fold(fun(K, V, Acc) ->
+        BK = if is_atom(K) -> atom_to_binary(K, utf8); true -> K end,
+        Acc#{BK => encode_params(V)}
+    end, #{}, M);
+encode_params(L) when is_list(L) ->
+    [encode_params(E) || E <- L];
+encode_params(V) when is_atom(V) ->
+    atom_to_binary(V, utf8);
+encode_params(V) ->
+    V.
 
 post(#{api_key := Key, base_url := Base}, Path, Body) ->
     Url     = Base ++ Path,

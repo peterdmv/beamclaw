@@ -41,8 +41,9 @@ terminate(_Reason, _Req, _State) ->
 
 %% Internal
 
-handle_ws_message(#{<<"type">> := <<"message">>, <<"content">> := Content}, State) ->
+handle_ws_message(#{<<"type">> := <<"message">>, <<"content">> := Content} = Msg, State) ->
     SessionId = maps:get(session_id, State),
+    AgentId   = maps:get(<<"agent_id">>, Msg, <<"default">>),
     ChannelMsg = #bc_channel_message{
         session_id = SessionId,
         user_id    = <<"ws_user">>,
@@ -52,13 +53,13 @@ handle_ws_message(#{<<"type">> := <<"message">>, <<"content">> := Content}, Stat
         ts         = erlang:system_time(millisecond),
         reply_pid  = self()
     },
-    SessionPid = get_or_create_session(SessionId),
+    SessionPid = get_or_create_session(SessionId, AgentId),
     bc_session:dispatch_run(SessionPid, ChannelMsg),
     {ok, State};
 handle_ws_message(_Msg, State) ->
     {ok, State}.
 
-get_or_create_session(SessionId) ->
+get_or_create_session(SessionId, AgentId) ->
     case bc_session_registry:lookup(SessionId) of
         {ok, Pid} ->
             Pid;
@@ -66,7 +67,8 @@ get_or_create_session(SessionId) ->
             Config = #{session_id  => SessionId,
                        user_id     => <<"ws_user">>,
                        channel_id  => SessionId,
-                       channel_mod => undefined},
+                       channel_mod => undefined,
+                       agent_id    => AgentId},
             {ok, _} = bc_sessions_sup:start_session(Config),
             {ok, Pid} = bc_session_registry:lookup(SessionId),
             Pid

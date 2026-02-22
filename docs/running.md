@@ -10,15 +10,19 @@ single self-contained binary at `_build/default/bin/beamclaw`.
 Usage: beamclaw <command>
 
 Commands:
-  tui              Start interactive TUI chat (default when no command given)
-  start            Start gateway as background daemon
-  stop             Stop running daemon
-  restart          Stop then start daemon
-  remote_console   Print erl -remsh command to attach a live Erlang shell
-  doctor           Check environment and connectivity (OTP version, API keys, epmd)
-  status           Ping running gateway HTTP health endpoint
-  version          Print version
-  help             Show this help
+  tui [--agent NAME]   Start interactive TUI chat (default when no command given)
+  start                Start gateway as background daemon
+  stop                 Stop running daemon
+  restart              Stop then start daemon
+  remote_console       Print erl -remsh command to attach a live Erlang shell
+  agent create NAME    Create a new agent workspace
+  agent list           List all agents
+  agent show NAME      Show agent bootstrap files
+  agent delete NAME    Delete an agent workspace
+  doctor               Check environment and connectivity
+  status               Ping running gateway HTTP health endpoint
+  version              Print version
+  help                 Show this help
 ```
 
 ### Quick start — TUI
@@ -81,6 +85,36 @@ connect simultaneously. If the daemon dies mid-conversation, the TUI prints
 If no daemon is running, `beamclaw tui` falls back to the normal in-process
 mode — no behaviour change from before.
 
+### Agent Management
+
+Agents are named workspaces containing six markdown bootstrap files that define
+the agent's personality, instructions, and memory. A `default` agent is created
+automatically on first start.
+
+```bash
+# Create a new agent
+_build/default/bin/beamclaw agent create my-assistant
+
+# List all agents
+_build/default/bin/beamclaw agent list
+
+# Show an agent's bootstrap files
+_build/default/bin/beamclaw agent show my-assistant
+
+# Start TUI with a specific agent
+_build/default/bin/beamclaw tui --agent my-assistant
+
+# Delete an agent (cannot delete "default")
+_build/default/bin/beamclaw agent delete my-assistant
+```
+
+Edit the agent's files directly in `~/.beamclaw/agents/<name>/` to customize
+its personality (SOUL.md), identity (IDENTITY.md), user context (USER.md),
+tool guidance (TOOLS.md), workspace rules (AGENTS.md), and memory (MEMORY.md).
+
+The `BEAMCLAW_AGENT` env var sets the default agent name when `--agent` is
+not specified.
+
 ### Environment variables
 
 | Variable | Required | Description |
@@ -89,6 +123,8 @@ mode — no behaviour change from before.
 | `OPENAI_API_KEY` | No | Alternative OpenAI provider |
 | `TELEGRAM_BOT_TOKEN` | No | Enable Telegram channel |
 | `BEAMCLAW_PORT` | No | Override gateway HTTP port (default: 8080) |
+| `BEAMCLAW_AGENT` | No | Default agent name for TUI (default: `default`) |
+| `BEAMCLAW_HOME` | No | Override workspace base directory (default: `~/.beamclaw`) |
 
 ### Pre-flight check
 

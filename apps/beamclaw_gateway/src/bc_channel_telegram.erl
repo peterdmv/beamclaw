@@ -148,6 +148,7 @@ dispatch_telegram_message(Update) ->
         ts         = erlang:system_time(millisecond)
         %% reply_pid unset — responses routed via send_response/2
     },
+    AgentId = bc_config:get(beamclaw_core, default_agent, <<"default">>),
     case bc_session_registry:lookup(ChatId) of
         {ok, Pid} ->
             bc_session:dispatch_run(Pid, ChannelMsg);
@@ -155,7 +156,8 @@ dispatch_telegram_message(Update) ->
             Config = #{session_id  => ChatId,
                        user_id     => UserId,
                        channel_id  => ChatId,
-                       channel_mod => bc_channel_telegram},
+                       channel_mod => bc_channel_telegram,
+                       agent_id    => AgentId},
             {ok, _} = bc_sessions_sup:start_session(Config),
             %% bc_session_registry:register/2 is synchronous — no sleep needed.
             {ok, Pid} = bc_session_registry:lookup(ChatId),

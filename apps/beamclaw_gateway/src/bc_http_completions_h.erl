@@ -49,6 +49,7 @@ dispatch_and_respond(Decoded, Req, State) ->
     Messages  = maps:get(<<"messages">>, Decoded, []),
     Stream    = maps:get(<<"stream">>,   Decoded, false),
     SessionId = maps:get(<<"session_id">>, Decoded, generate_session_id()),
+    AgentId   = maps:get(<<"agent_id">>,   Decoded, <<"default">>),
     Content   = get_last_user_message(Messages),
     ChannelMsg = #bc_channel_message{
         session_id = SessionId,
@@ -59,7 +60,7 @@ dispatch_and_respond(Decoded, Req, State) ->
         ts         = erlang:system_time(millisecond),
         reply_pid  = self()
     },
-    SessionPid = get_or_create_session(SessionId),
+    SessionPid = get_or_create_session(SessionId, AgentId),
     bc_session:dispatch_run(SessionPid, ChannelMsg),
     case Stream of
         true  -> respond_sse(Req, SessionId, State);
@@ -137,7 +138,7 @@ get_last_user_message(Messages) ->
         []          -> <<>>
     end.
 
-get_or_create_session(SessionId) ->
+get_or_create_session(SessionId, AgentId) ->
     case bc_session_registry:lookup(SessionId) of
         {ok, Pid} ->
             Pid;
@@ -145,7 +146,8 @@ get_or_create_session(SessionId) ->
             Config = #{session_id  => SessionId,
                        user_id     => <<"api_user">>,
                        channel_id  => SessionId,
-                       channel_mod => undefined},
+                       channel_mod => undefined,
+                       agent_id    => AgentId},
             {ok, _} = bc_sessions_sup:start_session(Config),
             {ok, Pid} = bc_session_registry:lookup(SessionId),
             Pid

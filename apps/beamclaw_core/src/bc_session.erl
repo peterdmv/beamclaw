@@ -17,6 +17,7 @@
          get_history/1,
          set_history/2,
          get_channel_mod/1,
+         get_agent_id/1,
          append_message/2,
          set_loop_pid/2,
          turn_complete/2]).
@@ -28,6 +29,7 @@
     session_id    :: binary(),
     user_id       :: binary(),
     channel_id    :: binary(),
+    agent_id      :: binary(),
     autonomy      :: autonomy_level(),
     loop_pid      :: pid() | undefined,
     loop_busy     :: boolean(),          %% true while a run is in progress
@@ -62,6 +64,11 @@ set_history(Pid, History) ->
 get_channel_mod(Pid) ->
     gen_server:call(Pid, get_channel_mod).
 
+%% @doc Return the agent ID for this session.
+-spec get_agent_id(Pid :: pid()) -> binary().
+get_agent_id(Pid) ->
+    gen_server:call(Pid, get_agent_id).
+
 %% @doc Append a single message to history (called by bc_loop).
 -spec append_message(Pid :: pid(), Message :: #bc_message{}) -> ok.
 append_message(Pid, Message) ->
@@ -82,10 +89,12 @@ init(Config) ->
     SessionId = maps:get(session_id, Config, generate_id()),
     bc_session_registry:register(SessionId, self()),
     bc_obs:emit(session_start, #{session_id => SessionId}),
+    DefaultAgent = bc_config:get(beamclaw_core, default_agent, <<"default">>),
     State = #state{
         session_id   = SessionId,
         user_id      = maps:get(user_id,      Config, <<"anonymous">>),
         channel_id   = maps:get(channel_id,   Config, <<"default">>),
+        agent_id     = maps:get(agent_id,     Config, DefaultAgent),
         autonomy     = maps:get(autonomy,      Config,
                            bc_config:get(beamclaw_core, autonomy_level, supervised)),
         loop_pid     = undefined,
@@ -149,6 +158,8 @@ handle_call(get_history, _From, State) ->
     {reply, State#state.history, State};
 handle_call(get_channel_mod, _From, State) ->
     {reply, State#state.channel_mod, State};
+handle_call(get_agent_id, _From, State) ->
+    {reply, State#state.agent_id, State};
 handle_call(_Req, _From, State) ->
     {reply, {error, unknown}, State}.
 

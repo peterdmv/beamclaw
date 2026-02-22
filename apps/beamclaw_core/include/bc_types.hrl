@@ -53,7 +53,8 @@
     session_id  :: binary(),
     user_id     :: binary(),
     session_pid :: pid(),
-    autonomy    :: autonomy_level()
+    autonomy    :: autonomy_level(),
+    agent_id    :: binary()
 }).
 
 %% A message arriving from a channel (Telegram, WebSocket, etc.).

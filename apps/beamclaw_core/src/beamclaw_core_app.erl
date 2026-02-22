@@ -4,6 +4,7 @@
 -export([start/2, stop/1]).
 
 start(_StartType, _StartArgs) ->
+    bc_workspace:ensure_default_agent(),
     beamclaw_core_sup:start_link().
 
 stop(_State) ->

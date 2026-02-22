@@ -18,6 +18,8 @@ resolved at runtime by `bc_config:get/2` via `os:getenv/1`.
 | `OPENAI_API_KEY` | Yes (if using OpenAI) | OpenAI API key (`sk-...`) |
 | `TELEGRAM_BOT_TOKEN` | Only if using Telegram | Telegram bot token from @BotFather |
 | `BEAMCLAW_COOKIE` | No | Erlang cluster cookie (default: `beamclaw_dev`) |
+| `BEAMCLAW_HOME` | No | Override workspace base directory (default: `~/.beamclaw`) |
+| `BEAMCLAW_AGENT` | No | Default agent name for TUI sessions (default: `default`) |
 
 At least one of `OPENROUTER_API_KEY` or `OPENAI_API_KEY` must be set, depending on
 `default_provider`.
@@ -71,7 +73,12 @@ them to a file — `.env` and `*.secret` files are excluded by `.gitignore`.
     {autonomy_level, supervised},
 
     %% How long an idle session is retained (seconds). 0 = never expire.
-    {session_ttl_seconds, 3600}
+    {session_ttl_seconds, 3600},
+
+    %% Default agent workspace. Sessions use this agent unless overridden
+    %% via --agent flag (TUI), agent_id request field (HTTP/WS), or
+    %% BEAMCLAW_AGENT env var.
+    {default_agent, <<"default">>}
 ]}
 ```
 

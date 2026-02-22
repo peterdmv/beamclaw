@@ -208,7 +208,7 @@ Implementations: `bc_provider_openrouter`, `bc_provider_openai`.
 ```
 
 Built-in implementations: `bc_tool_bash`, `bc_tool_terminal`, `bc_tool_curl`,
-`bc_tool_jq`, `bc_tool_read_file`, `bc_tool_write_file`.
+`bc_tool_jq`, `bc_tool_read_file`, `bc_tool_write_file`, `bc_tool_workspace_memory`.
 
 ### `bc_channel` — Messaging channel abstraction
 
@@ -264,6 +264,50 @@ Key events:
 Adding a new observability backend: implement `bc_observer`, join the `bc_obs_backends` pg
 group in `init/1`, and add the process as a child of `beamclaw_obs_sup`. No changes to
 `bc_obs_manager` or any caller are required.
+
+---
+
+## Agent Workspaces
+
+Agent identity is a *data path* problem, not a *process architecture* problem. The existing
+session/loop/supervisor structure is unchanged — an `agent_id` binary is threaded through
+the session Config and used to load bootstrap files before each LLM call.
+
+### Workspace directory structure
+
+```
+~/.beamclaw/agents/
+  default/
+    SOUL.md        — personality / instructions → primary system prompt
+    IDENTITY.md    — metadata: Name, Type, Emoji
+    USER.md        — owner profile
+    TOOLS.md       — tool guidance
+    MEMORY.md      — long-term curated memory (agent reads + updates)
+    AGENTS.md      — workspace guidelines
+  my-custom-agent/
+    ...
+```
+
+Override the base directory with the `BEAMCLAW_HOME` environment variable.
+
+### System prompt assembly (`bc_system_prompt`)
+
+On each LLM call, `bc_system_prompt:assemble(AgentId)` reads all six bootstrap files and
+converts them into system-role messages prepended to the conversation history. Order:
+IDENTITY → SOUL → USER → TOOLS → AGENTS → MEMORY (MEMORY last = closest to conversation).
+Empty/missing files are skipped. If the agent doesn't exist, a single fallback message is used.
+
+### Workspace memory tool (`bc_tool_workspace_memory`)
+
+A built-in tool that allows the agent to read, append to, or replace its own `MEMORY.md`.
+The path is constructed internally from `bc_session_ref.agent_id`, preventing path traversal.
+Requires no approval and runs at `read_only` autonomy.
+
+### Tool definitions in LLM requests
+
+`bc_loop` fetches all registered tool definitions from `bc_tool_registry:list()` and passes
+them in the `Options` map to the provider. `bc_provider_openrouter` includes them in the
+request body as OpenAI-format function-calling tool definitions.
 
 ---
 

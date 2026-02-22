@@ -107,6 +107,13 @@ rebar3 release
 rebar3 escriptize       # build beamclaw CLI → _build/default/bin/beamclaw
 rebar3 dialyzer
 rebar3 lint
+
+# Agent management (via CLI escript)
+beamclaw agent create NAME   # create workspace
+beamclaw agent list          # list agents
+beamclaw agent show NAME     # show bootstrap files
+beamclaw agent delete NAME   # delete workspace
+beamclaw tui --agent NAME    # TUI with specific agent
 ```
 
 ---
@@ -223,7 +230,7 @@ Implementations: `bc_provider_openrouter`, `bc_provider_openai`.
 -callback min_autonomy() -> autonomy_level().
 ```
 
-Implementations: `bc_tool_terminal`, `bc_tool_bash`, `bc_tool_curl`, `bc_tool_jq`, `bc_tool_read_file`, `bc_tool_write_file`.
+Implementations: `bc_tool_terminal`, `bc_tool_bash`, `bc_tool_curl`, `bc_tool_jq`, `bc_tool_read_file`, `bc_tool_write_file`, `bc_tool_workspace_memory`.
 
 ### `bc_channel` — Messaging channel abstraction (`beamclaw_core`)
 
@@ -288,7 +295,7 @@ Implementations: `bc_obs_log`.
     tool_call_id, name, content, is_error = false
 }).
 -record(bc_session_ref, {
-    session_id, user_id, session_pid, autonomy
+    session_id, user_id, session_pid, autonomy, agent_id
 }).
 -record(bc_channel_message, {
     session_id, user_id, channel, content, raw, ts
@@ -460,7 +467,8 @@ Usage: `bc_obs:emit(tool_call_start, #{tool_name => Name, args => Args, session_
                      compaction_target    => 20,
                      stream_chunk_size    => 80}},
     {autonomy_level, supervised},
-    {session_ttl_seconds, 3600}
+    {session_ttl_seconds, 3600},
+    {default_agent, <<"default">>}
 ]},
 {beamclaw_mcp, [
     {servers, []}
@@ -565,6 +573,8 @@ beamclaw/
       bc_tool_jq.erl
       bc_tool_read_file.erl
       bc_tool_write_file.erl
+      bc_tool_workspace_memory.erl  %% agent MEMORY.md read/append/replace
+      bc_workspace_path.erl         %% pure path resolution (avoids dep cycle)
     beamclaw_mcp/src/
       beamclaw_mcp.app.src
       beamclaw_mcp_app.erl
@@ -593,6 +603,9 @@ beamclaw/
         bc_scrubber.erl
         bc_tool_parser.erl
         bc_config.erl
+        bc_workspace_templates.erl  %% default bootstrap file content
+        bc_workspace.erl            %% agent workspace filesystem ops
+        bc_system_prompt.erl        %% assemble bootstrap files into system messages
     beamclaw_gateway/src/
       beamclaw_gateway.app.src
       beamclaw_gateway_app.erl
@@ -610,5 +623,5 @@ beamclaw/
       bc_webhook_telegram_h.erl
     beamclaw_cli/src/
       beamclaw_cli.app.src
-      beamclaw_cli.erl        %% escript main; 9 commands (tui/start/stop/restart/remote_console/doctor/status/version/help)
+      beamclaw_cli.erl        %% escript main; 14 commands (tui/start/stop/restart/remote_console/agent create/list/show/delete/doctor/status/version/help)
 ```
