@@ -132,6 +132,7 @@ compacting(EventType, EventContent, Data) ->
     handle_common(compacting, EventType, EventContent, Data).
 
 streaming(enter, _OldState, Data) ->
+    emit_typing(Data),
     gen_statem:cast(self(), do_stream),
     {keep_state, Data};
 streaming(cast, do_stream, Data) ->
@@ -148,10 +149,12 @@ streaming(cast, do_stream, Data) ->
     ProvMod   = Data#loop_data.provider_mod,
     ProvState = Data#loop_data.provider_state,
     Options   = #{chunk_size => ChunkSize, tools => ToolDefs},
+    TickRef = schedule_typing_tick(),
     case ProvMod:stream(FullHistory, Options, self(), ProvState) of
         {ok, NewProvState} ->
-            receive_stream(Data#loop_data{provider_state = NewProvState}, T0);
+            receive_stream(Data#loop_data{provider_state = NewProvState}, T0, TickRef);
         {error, Reason, NewProvState} ->
+            cancel_typing_tick(TickRef),
             bc_obs:emit(llm_response, #{session_id => Data#loop_data.session_id,
                                         success => false, error => Reason}),
             ErrContent = iolist_to_binary(io_lib:format("[Error: ~p]", [Reason])),
@@ -173,6 +176,7 @@ awaiting_approval(EventType, EventContent, Data) ->
     handle_common(awaiting_approval, EventType, EventContent, Data).
 
 executing_tools(enter, _OldState, Data) ->
+    emit_typing(Data),
     gen_statem:cast(self(), do_execute),
     {keep_state, Data};
 executing_tools(cast, do_execute, Data) ->
@@ -238,7 +242,7 @@ make_session_ref(Data) ->
         agent_id    = Data#loop_data.agent_id
     }.
 
-receive_stream(Data, T0) ->
+receive_stream(Data, T0, TickRef) ->
     receive
         {stream_chunk, _Pid, Chunk} ->
             %% Forward to direct reply target (HTTP/WS); channel gen-servers
@@ -247,8 +251,9 @@ receive_stream(Data, T0) ->
                 undefined -> ok;
                 RPid -> RPid ! {bc_chunk, Data#loop_data.session_id, Chunk}
             end,
-            receive_stream(Data, T0);
+            receive_stream(Data, T0, TickRef);
         {stream_done, _Pid, FullMsg} ->
+            cancel_typing_tick(TickRef),
             Duration = erlang:monotonic_time(millisecond) - T0,
             bc_obs:emit(llm_response, #{session_id  => Data#loop_data.session_id,
                                         duration_ms => Duration, success => true}),
@@ -262,13 +267,19 @@ receive_stream(Data, T0) ->
                 _  -> maybe_await_approval(NewData)
             end;
         {stream_error, _Pid, Reason} ->
+            cancel_typing_tick(TickRef),
             logger:error("[loop] stream error: ~p", [Reason]),
             ErrContent = iolist_to_binary(io_lib:format("[Error: ~p]", [Reason])),
             route_response(Data, #bc_message{role    = assistant,
                                              content = ErrContent,
                                              ts      = erlang:system_time(millisecond)}),
-            {next_state, finalizing, Data}
+            {next_state, finalizing, Data};
+        typing_tick ->
+            emit_typing(Data),
+            NewTickRef = schedule_typing_tick(),
+            receive_stream(Data, T0, NewTickRef)
     after 60000 ->
+        cancel_typing_tick(TickRef),
         logger:error("[loop] stream timeout"),
         route_response(Data, #bc_message{role    = assistant,
                                          content = <<"[Error: LLM response timed out]">>,
@@ -296,6 +307,26 @@ route_response(Data, Msg) ->
 channel_mod_for(tui)       -> bc_channel_tui;
 channel_mod_for(telegram)  -> bc_channel_telegram;
 channel_mod_for(_)         -> undefined.
+
+emit_typing(Data) ->
+    case Data#loop_data.reply_pid of
+        undefined ->
+            case channel_mod_for(Data#loop_data.reply_channel) of
+                undefined -> ok;
+                Mod       -> Mod:notify_typing(Data#loop_data.session_id)
+            end;
+        _RPid ->
+            %% HTTP/WS consumers don't need typing indicators
+            ok
+    end.
+
+schedule_typing_tick() ->
+    erlang:send_after(4000, self(), typing_tick).
+
+cancel_typing_tick(Ref) ->
+    _ = erlang:cancel_timer(Ref),
+    %% Flush any tick that arrived between cancel and now.
+    receive typing_tick -> ok after 0 -> ok end.
 
 maybe_await_approval(#loop_data{tool_calls = Calls} = Data) ->
     NeedsApproval = lists:any(fun(TC) ->

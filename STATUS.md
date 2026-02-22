@@ -5,8 +5,8 @@
 Scaffolding is complete. All seven OTP apps compile clean with zero warnings.
 Multi-agent workspaces (M11–M13), rich templates (M14), daily logs (M15),
 skill system (M16–M17), session persistence (M18), cross-channel session
-sharing (M19), and Telegram pairing access control (M20) are complete.
-Cross-channel session fix applied. 192 EUnit tests pass.
+sharing (M19), Telegram pairing access control (M20), and typing indicators
+(Post-M20) are complete. Cross-channel session fix applied. 192 EUnit tests pass.
 
 ---
 
@@ -342,6 +342,16 @@ All six OTP apps created, supervision trees defined, behaviours declared,
 | `docs/running.md` update | ✅ | Telegram Pairing section with flow, CLI, modes, storage |
 | `docs/configuration.md` update | ✅ | `dm_policy` and `allow_from` config keys documented |
 
+### Post-M20 — Typing Indicators ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| `bc_channel_telegram` `notify_typing/1` | ✅ | Public API + handle_cast; calls existing `send_typing/2` |
+| `bc_channel_tui` `notify_typing/1` | ✅ | Public API + handle_cast; calls existing `send_typing/2` |
+| `bc_loop` typing on `streaming` enter | ✅ | `emit_typing/1` fires before LLM call |
+| `bc_loop` typing on `executing_tools` enter | ✅ | `emit_typing/1` fires before tool execution |
+| `bc_loop` periodic typing tick | ✅ | 4 s timer in `receive_stream/3`; re-sends typing during long streams |
+
 ---
 
 ## Known Issues / Blockers
@@ -352,4 +362,4 @@ _None at this time._
 
 ## Last Updated
 
-2026-02-22 (Telegram pairing access control — M20)
+2026-02-22 (Typing indicators — Post-M20)

@@ -27,7 +27,7 @@ handles {send_response, ...} casts and sends the reply via Telegram API.
 
 -include_lib("beamclaw_core/include/bc_types.hrl").
 
--export([start_link/1, handle_webhook/1, send_response/2]).
+-export([start_link/1, handle_webhook/1, send_response/2, notify_typing/1]).
 -export([listen/1, send/3, send_typing/2, update_draft/4, finalize_draft/3]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -39,6 +39,11 @@ start_link(Config) ->
 -spec send_response(SessionId :: binary(), Msg :: #bc_message{}) -> ok.
 send_response(SessionId, Msg) ->
     gen_server:cast(?MODULE, {send_response, SessionId, Msg}).
+
+-doc "Called by bc_loop to send a typing indicator for the given session.".
+-spec notify_typing(SessionId :: binary()) -> ok.
+notify_typing(SessionId) ->
+    gen_server:cast(?MODULE, {notify_typing, SessionId}).
 
 -doc "Entry point for bc_webhook_telegram_h.".
 handle_webhook(Update) ->
@@ -88,6 +93,9 @@ finalize_draft(_SessionId, _DraftId, State) ->
 handle_cast({send_response, SessionId, Msg}, State) ->
     {ok, NewState} = send(SessionId, Msg, State),
     {noreply, NewState};
+handle_cast({notify_typing, SessionId}, State) ->
+    send_typing(SessionId, State),
+    {noreply, State};
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
