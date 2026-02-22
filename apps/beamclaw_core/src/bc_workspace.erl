@@ -20,6 +20,7 @@
          ensure_default_agent/0,
          create_agent/1,
          delete_agent/1,
+         rehatch_agent/1,
          list_agents/0,
          agent_exists/1,
          read_bootstrap_file/2,
@@ -78,6 +79,36 @@ create_agent(AgentId) ->
                     %% Create memory/ subdirectory for daily logs
                     MemDir = filename:join(Dir, "memory"),
                     filelib:ensure_dir(filename:join(MemDir, "dummy")),
+                    ok
+            end
+    end.
+
+%% @doc Factory reset: restore all bootstrap files to defaults and wipe daily logs.
+%% Preserves the skills/ subdirectory.
+-spec rehatch_agent(binary()) -> ok | {error, not_found | invalid_agent_id}.
+rehatch_agent(AgentId) ->
+    case validate_agent_id(AgentId) of
+        {error, _} = Err -> Err;
+        ok ->
+            case agent_exists(AgentId) of
+                false -> {error, not_found};
+                true ->
+                    Dir = agent_dir(AgentId),
+                    %% Reset all 7 bootstrap files to templates
+                    Templates = bc_workspace_templates:all_templates(),
+                    lists:foreach(fun({Filename, Content}) ->
+                        Path = filename:join(Dir, binary_to_list(Filename)),
+                        ok = file:write_file(Path, Content)
+                    end, Templates),
+                    %% Wipe daily logs in memory/ dir
+                    MemDir = filename:join(Dir, "memory"),
+                    case file:list_dir(MemDir) of
+                        {ok, Entries} ->
+                            lists:foreach(fun(E) ->
+                                file:delete(filename:join(MemDir, E))
+                            end, Entries);
+                        {error, _} -> ok
+                    end,
                     ok
             end
     end.

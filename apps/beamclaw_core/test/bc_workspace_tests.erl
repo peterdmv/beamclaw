@@ -143,3 +143,45 @@ list_daily_logs_empty_test_() -> ?setup(list_daily_logs_empty_t).
 list_daily_logs_empty_t(_TmpDir) ->
     ok = bc_workspace:create_agent(<<"log-agent4">>),
     [?_assertEqual([], bc_workspace:list_daily_logs(<<"log-agent4">>))].
+
+%% ---- rehatch_agent ----
+
+rehatch_agent_test_() -> ?setup(rehatch_t).
+rehatch_t(_TmpDir) ->
+    ok = bc_workspace:create_agent(<<"rehatch-agent">>),
+    %% Modify IDENTITY.md and write a daily log
+    ok = bc_workspace:write_bootstrap_file(<<"rehatch-agent">>,
+                                           <<"IDENTITY.md">>, <<"custom identity">>),
+    Dir = bc_workspace:agent_dir(<<"rehatch-agent">>),
+    MemDir = filename:join(Dir, "memory"),
+    ok = file:write_file(filename:join(MemDir, "2026-02-22.md"), <<"daily log">>),
+    %% Rehatch
+    ok = bc_workspace:rehatch_agent(<<"rehatch-agent">>),
+    %% All 7 files should be restored to template defaults
+    Templates = bc_workspace_templates:all_templates(),
+    FileChecks = lists:map(fun({Filename, Expected}) ->
+        {ok, Actual} = bc_workspace:read_bootstrap_file(<<"rehatch-agent">>, Filename),
+        ?_assertEqual(Expected, Actual)
+    end, Templates),
+    %% Daily log should be wiped
+    FileChecks ++ [?_assertEqual([], bc_workspace:list_daily_logs(<<"rehatch-agent">>))].
+
+rehatch_not_found_test_() -> ?setup(rehatch_not_found_t).
+rehatch_not_found_t(_TmpDir) ->
+    [?_assertEqual({error, not_found},
+                   bc_workspace:rehatch_agent(<<"nonexistent">>))].
+
+rehatch_preserves_skills_test_() -> ?setup(rehatch_preserves_skills_t).
+rehatch_preserves_skills_t(_TmpDir) ->
+    ok = bc_workspace:create_agent(<<"rehatch-skills">>),
+    Dir = bc_workspace:agent_dir(<<"rehatch-skills">>),
+    %% Create a per-agent skills/ subdirectory with a file
+    SkillsDir = filename:join([Dir, "skills", "my-skill"]),
+    ok = filelib:ensure_dir(filename:join(SkillsDir, "dummy")),
+    ok = file:write_file(filename:join(SkillsDir, "SKILL.md"), <<"skill content">>),
+    %% Rehatch
+    ok = bc_workspace:rehatch_agent(<<"rehatch-skills">>),
+    %% skills/ dir and file should still be present
+    [?_assert(filelib:is_dir(SkillsDir)),
+     ?_assertEqual({ok, <<"skill content">>},
+                   file:read_file(filename:join(SkillsDir, "SKILL.md")))].

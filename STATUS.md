@@ -265,6 +265,15 @@ All six OTP apps created, supervision trees defined, behaviours declared,
 | `cmd_help` updated | ✅ | Skills commands documented |
 | EUnit tests | ✅ | Installer tests |
 
+### Post-M17 — Agent Rehatch ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| `bc_workspace:rehatch_agent/1` | ✅ | Restore 7 bootstrap files to defaults, wipe daily logs, preserve skills/ |
+| `beamclaw agent rehatch NAME` | ✅ | CLI command with error handling |
+| EUnit tests | ✅ | 3 tests: rehatch, not_found, preserves_skills |
+| `docs/running.md` update | ✅ | Agent rehatch documented |
+
 ---
 
 ## Known Issues / Blockers
@@ -275,4 +284,4 @@ _None at this time._
 
 ## Last Updated
 
-2026-02-22 (M14–M17: Rich Templates, Daily Logs, Skill System — 155 tests, 0 warnings)
+2026-02-22 (Post-M17: Agent Rehatch — 166 tests, 0 warnings)

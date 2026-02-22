@@ -19,6 +19,7 @@ Commands:
   agent list           List all agents
   agent show NAME      Show agent bootstrap files
   agent delete NAME    Delete an agent workspace
+  agent rehatch NAME   Factory reset: restore all files to defaults
   doctor               Check environment and connectivity
   status               Ping running gateway HTTP health endpoint
   version              Print version
@@ -103,6 +104,9 @@ _build/default/bin/beamclaw agent show my-assistant
 
 # Start TUI with a specific agent
 _build/default/bin/beamclaw tui --agent my-assistant
+
+# Factory reset an agent (restore all files to defaults, wipe daily logs)
+_build/default/bin/beamclaw agent rehatch my-assistant
 
 # Delete an agent (cannot delete "default")
 _build/default/bin/beamclaw agent delete my-assistant

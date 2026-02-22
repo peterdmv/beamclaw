@@ -113,6 +113,7 @@ beamclaw agent create NAME   # create workspace
 beamclaw agent list          # list agents
 beamclaw agent show NAME     # show bootstrap files
 beamclaw agent delete NAME   # delete workspace
+beamclaw agent rehatch NAME  # factory reset: restore defaults
 beamclaw tui --agent NAME    # TUI with specific agent
 
 # Skill management (via CLI escript)
@@ -639,5 +640,5 @@ beamclaw/
       bc_webhook_telegram_h.erl
     beamclaw_cli/src/
       beamclaw_cli.app.src
-      beamclaw_cli.erl        %% escript main; 18 commands (tui/start/stop/restart/remote_console/agent create/list/show/delete/skills list/status/show/install/doctor/status/version/help)
+      beamclaw_cli.erl        %% escript main; 19 commands (tui/start/stop/restart/remote_console/agent create/list/show/delete/rehatch/skills list/status/show/install/doctor/status/version/help)
 ```

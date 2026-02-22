@@ -16,6 +16,7 @@
                              cmd_stop/0, cmd_remote_console/0, cmd_doctor/0,
                              cmd_agent_create/1, cmd_agent_list/0,
                              cmd_agent_delete/1, cmd_agent_show/1,
+                             cmd_agent_rehatch/1,
                              cmd_skills_list/0, cmd_skills_status/0,
                              cmd_skills_show/1, cmd_skills_install/1,
                              spawn_daemon/0, check_openrouter_network/0]}).
@@ -39,8 +40,9 @@ main(["restart"                 | _])     -> cmd_restart();
 main(["remote_console"          | _])     -> cmd_remote_console();
 main(["agent", "create", Name   | _])     -> cmd_agent_create(list_to_binary(Name));
 main(["agent", "list"           | _])     -> cmd_agent_list();
-main(["agent", "delete", Name   | _])     -> cmd_agent_delete(list_to_binary(Name));
-main(["agent", "show",   Name   | _])     -> cmd_agent_show(list_to_binary(Name));
+main(["agent", "delete",  Name   | _])     -> cmd_agent_delete(list_to_binary(Name));
+main(["agent", "show",    Name   | _])     -> cmd_agent_show(list_to_binary(Name));
+main(["agent", "rehatch", Name   | _])     -> cmd_agent_rehatch(list_to_binary(Name));
 main(["agent"                   | _])     -> cmd_agent_list();
 main(["skills", "status"        | _])     -> cmd_skills_status();
 main(["skills", "list"          | _])     -> cmd_skills_list();
@@ -367,6 +369,22 @@ cmd_agent_show(Name) ->
             halt(0)
     end.
 
+%% @doc Factory reset an agent: restore all files to defaults, wipe daily logs.
+cmd_agent_rehatch(Name) ->
+    case bc_workspace:rehatch_agent(Name) of
+        ok ->
+            io:format("Agent '~s' rehatched — all files reset to defaults.~n", [Name]),
+            io:format("The bootstrap ritual will run on the next conversation.~n"),
+            halt(0);
+        {error, not_found} ->
+            io:format(standard_error, "beamclaw: agent '~s' not found~n", [Name]),
+            halt(1);
+        {error, invalid_agent_id} ->
+            io:format(standard_error,
+                      "beamclaw: invalid agent name '~s'~n", [Name]),
+            halt(1)
+    end.
+
 %% @doc List all discovered skills with eligible status.
 cmd_skills_list() ->
     AgentId = default_agent(),
@@ -507,6 +525,7 @@ cmd_help() ->
         "  agent list           List all agents~n"
         "  agent show NAME      Show agent bootstrap files~n"
         "  agent delete NAME    Delete an agent workspace~n"
+        "  agent rehatch NAME   Factory reset: restore all files to defaults~n"
         "  skills [list]        List discovered skills with status~n"
         "  skills status        Detailed requirements check for all skills~n"
         "  skills show NAME     Show a skill's SKILL.md content~n"
