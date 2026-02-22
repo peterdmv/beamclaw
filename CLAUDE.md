@@ -19,7 +19,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | Supervision tree change | Supervision Trees | `docs/architecture.md` |
 | New/removed behaviour or callback | Key Behaviours | `docs/architecture.md` |
 | New/removed CLI command | Common Commands | `docs/running.md` |
-| New/removed config key | Configuration | `docs/configuration.md` |
+| New/removed config key | Configuration | `docs/configuration.md`, `config/sys.docker.config` |
 | New/removed HTTP route | HTTP Gateway Routes | `docs/running.md` |
 | New rebar3 dependency | Rebar3 Dependencies | `docs/building.md` |
 | Security pattern added | Credential Scrubbing | — |
