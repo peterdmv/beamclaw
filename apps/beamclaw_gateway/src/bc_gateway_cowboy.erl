@@ -18,6 +18,10 @@
 -moduledoc """
 Cowboy HTTP listener wrapper.
 
+Runs as a gen_server child of bc_gateway_http_sup. The Cowboy/Ranch listener
+is started in init/1 and stopped in terminate/2, so the supervisor owns our
+gen_server pid (not Ranch's) and shutdown is clean.
+
 Routes:
   GET  /health                 → bc_http_health_h
   GET  /metrics                → bc_http_metrics_h
@@ -26,10 +30,16 @@ Routes:
   POST /webhook/telegram       → bc_webhook_telegram_h
 """.
 
+-behaviour(gen_server).
+
 -export([start_link/0]).
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 start_link() ->
-    Port   = maps:get(port, bc_config:get(beamclaw_gateway, http, #{port => 8080}), 8080),
+    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+
+init([]) ->
+    Port = maps:get(port, bc_config:get(beamclaw_gateway, http, #{port => 8080}), 8080),
     Routes = cowboy_router:compile([
         {'_', [
             {"/health",               bc_http_health_h,      []},
@@ -39,6 +49,24 @@ start_link() ->
             {"/webhook/telegram",     bc_webhook_telegram_h, []}
         ]}
     ]),
-    cowboy:start_clear(bc_http_listener,
-        [{port, Port}],
-        #{env => #{dispatch => Routes}}).
+    case cowboy:start_clear(bc_http_listener,
+            [{port, Port}],
+            #{env => #{dispatch => Routes}}) of
+        {ok, _ListenerPid} ->
+            {ok, #{}};
+        {error, Reason} ->
+            {stop, Reason}
+    end.
+
+handle_call(_Request, _From, State) ->
+    {reply, ok, State}.
+
+handle_cast(_Msg, State) ->
+    {noreply, State}.
+
+handle_info(_Msg, State) ->
+    {noreply, State}.
+
+terminate(_Reason, _State) ->
+    cowboy:stop_listener(bc_http_listener),
+    ok.

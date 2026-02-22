@@ -17,18 +17,10 @@
 -module(beamclaw_gateway_app).
 -behaviour(application).
 
--export([start/2, prep_stop/1, stop/1]).
+-export([start/2, stop/1]).
 
 start(_StartType, _StartArgs) ->
     beamclaw_gateway_sup:start_link().
-
-prep_stop(State) ->
-    %% Stop the Ranch listener before the supervision tree is torn down.
-    %% This releases the listen socket cleanly, preventing Ranch's supervisor
-    %% from attempting a restart (which would fail with eaddrinuse) during
-    %% OTP application shutdown.
-    catch cowboy:stop_listener(bc_http_listener),
-    State.
 
 stop(_State) ->
     ok.

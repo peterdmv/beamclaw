@@ -357,7 +357,8 @@ All six OTP apps created, supervision trees defined, behaviours declared,
 | Task | Status | Notes |
 |------|--------|-------|
 | `beamclaw_cli.erl` stop timeout | ✅ | 10s → 20s (40 × 500ms); covers Telegram long-poll drain |
-| `beamclaw_gateway_app.erl` `prep_stop/1` | ✅ | `cowboy:stop_listener/1` before supervision tree teardown; eliminates Ranch `eaddrinuse` noise |
+| `bc_gateway_cowboy.erl` gen_server wrap | ✅ | Proper gen_server; `terminate/2` calls `cowboy:stop_listener/1`; supervisor owns our pid, not Ranch's |
+| `beamclaw_gateway_app.erl` `prep_stop/1` removed | ✅ | No longer needed; gen_server terminate handles cleanup |
 
 ---
 
@@ -369,4 +370,4 @@ _None at this time._
 
 ## Last Updated
 
-2026-02-22 (Daemon shutdown fix — Post-M20)
+2026-02-22 (Cowboy gen_server wrap — Post-M20)
