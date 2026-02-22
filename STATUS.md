@@ -3,7 +3,8 @@
 ## Current Phase: Implementation
 
 Scaffolding is complete. All seven OTP apps compile clean with zero warnings.
-Multi-agent workspaces (M11–M13) are complete. 99 EUnit tests pass.
+Multi-agent workspaces (M11–M13), rich templates (M14), daily logs (M15),
+and skill system (M16–M17) are complete. 155 EUnit tests pass.
 
 ---
 
@@ -218,6 +219,52 @@ All six OTP apps created, supervision trees defined, behaviours declared,
 | `bc_provider_openrouter` update | ✅ | Include tool defs in request body (OpenAI function-calling format) |
 | EUnit tests | ✅ | 14 tests (bc_tool_workspace_memory_tests + bc_workspace_path_tests) |
 
+### M14 — Rich Agent Templates + BOOTSTRAP.md ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Rich template content (all 7 files) | ✅ | OpenClaw-derived: SOUL, IDENTITY, USER, TOOLS, MEMORY, AGENTS, BOOTSTRAP |
+| BOOTSTRAP.md as 7th template | ✅ | First-run discovery ritual; self-deleting |
+| Workspace: 7 files + memory/ dir | ✅ | `create_agent` creates memory/ subdirectory |
+| System prompt: BOOTSTRAP.md ordering | ✅ | IDENTITY → SOUL → USER → TOOLS → AGENTS → BOOTSTRAP → MEMORY |
+| EUnit tests updated | ✅ | 7-file assertions, memory dir check |
+
+### M15 — Daily Log System ✅
+
+| Module/Task | Status | Notes |
+|-------------|--------|-------|
+| `bc_workspace_path` extensions | ✅ | `memory_dir/1`, `daily_log_file/2` |
+| `bc_tool_workspace_memory` daily actions | ✅ | `read_daily`, `append_daily`, `list_daily` |
+| `bc_workspace` daily log functions | ✅ | `read_daily_log/2`, `list_daily_logs/1` |
+| `bc_system_prompt` daily log loading | ✅ | Today + yesterday auto-included |
+| EUnit tests | ✅ | Daily log tool tests, workspace tests, system prompt tests |
+
+### M16 — Skill System Core ✅
+
+| Module | Status | Notes |
+|--------|--------|-------|
+| `bc_skill` record in `bc_types.hrl` | ✅ | name, description, homepage, emoji, content, source, metadata, path |
+| `bc_skill_parser` | ✅ | SKILL.md frontmatter parser (key:value + JSON metadata) |
+| `bc_skill_discovery` | ✅ | Bundled + global + per-agent discovery; name-based merge |
+| `bc_skill_eligibility` | ✅ | bins/env/os requirement checks; `always` bypass flag |
+| System prompt skill injection | ✅ | Skills appended after daily logs |
+| `sys.config` skills entry | ✅ | `{skills, #{}}` |
+| EUnit tests | ✅ | Parser, discovery, eligibility tests |
+
+### M17 — Skill CLI & Installation ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| `bc_skill_installer` | ✅ | apt/brew/npm/pip/download install specs |
+| `beamclaw skills list` | ✅ | Discovered skills with eligible status |
+| `beamclaw skills status` | ✅ | Detailed requirements check |
+| `beamclaw skills show NAME` | ✅ | Show SKILL.md content |
+| `beamclaw skills install NAME` | ✅ | Run compatible install spec |
+| Bundled example skill | ✅ | `priv/skills/example-skill/SKILL.md` |
+| `cmd_doctor` skills check | ✅ | Skills directory + count |
+| `cmd_help` updated | ✅ | Skills commands documented |
+| EUnit tests | ✅ | Installer tests |
+
 ---
 
 ## Known Issues / Blockers
@@ -228,4 +275,4 @@ _None at this time._
 
 ## Last Updated
 
-2026-02-22 (M11–M13: Multi-Agent Workspaces — 99 tests, 0 warnings, 0 dialyzer warnings)
+2026-02-22 (M14–M17: Rich Templates, Daily Logs, Skill System — 155 tests, 0 warnings)

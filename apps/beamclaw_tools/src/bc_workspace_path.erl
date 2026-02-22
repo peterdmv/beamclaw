@@ -5,7 +5,7 @@
 %% (beamclaw_core → beamclaw_tools already exists).
 -module(bc_workspace_path).
 
--export([base_dir/0, agent_dir/1, bootstrap_file/2]).
+-export([base_dir/0, agent_dir/1, bootstrap_file/2, memory_dir/1, daily_log_file/2]).
 
 %% @doc Return the base directory for all agent workspaces.
 -spec base_dir() -> string().
@@ -27,3 +27,15 @@ agent_dir(AgentId) ->
 -spec bootstrap_file(binary(), binary()) -> string().
 bootstrap_file(AgentId, Filename) ->
     filename:join(agent_dir(AgentId), binary_to_list(Filename)).
+
+%% @doc Return the memory subdirectory for daily logs.
+-spec memory_dir(binary()) -> string().
+memory_dir(AgentId) ->
+    filename:join(agent_dir(AgentId), "memory").
+
+%% @doc Return the full path to a daily log file.
+%% Date is a <<"YYYY-MM-DD">> binary.
+-spec daily_log_file(binary(), binary()) -> string().
+daily_log_file(AgentId, Date) ->
+    Filename = <<Date/binary, ".md">>,
+    filename:join(memory_dir(AgentId), binary_to_list(Filename)).

@@ -45,16 +45,19 @@ validate_non_binary_test() ->
 %% ---- create_agent ----
 
 create_agent_test_() -> ?setup(create_agent_t).
-create_agent_t(_TmpDir) ->
+create_agent_t(TmpDir) ->
     [?_assertEqual(ok, bc_workspace:create_agent(<<"test-agent">>)),
      ?_assert(bc_workspace:agent_exists(<<"test-agent">>)),
-     %% All 6 files should exist
+     %% All 7 files should exist
      ?_assertMatch({ok, _}, bc_workspace:read_bootstrap_file(<<"test-agent">>, <<"SOUL.md">>)),
      ?_assertMatch({ok, _}, bc_workspace:read_bootstrap_file(<<"test-agent">>, <<"IDENTITY.md">>)),
      ?_assertMatch({ok, _}, bc_workspace:read_bootstrap_file(<<"test-agent">>, <<"USER.md">>)),
      ?_assertMatch({ok, _}, bc_workspace:read_bootstrap_file(<<"test-agent">>, <<"TOOLS.md">>)),
      ?_assertMatch({ok, _}, bc_workspace:read_bootstrap_file(<<"test-agent">>, <<"MEMORY.md">>)),
-     ?_assertMatch({ok, _}, bc_workspace:read_bootstrap_file(<<"test-agent">>, <<"AGENTS.md">>))].
+     ?_assertMatch({ok, _}, bc_workspace:read_bootstrap_file(<<"test-agent">>, <<"AGENTS.md">>)),
+     ?_assertMatch({ok, _}, bc_workspace:read_bootstrap_file(<<"test-agent">>, <<"BOOTSTRAP.md">>)),
+     %% memory/ subdirectory should exist
+     ?_assert(filelib:is_dir(filename:join([TmpDir, "agents", "test-agent", "memory"])))].
 
 create_duplicate_test_() -> ?setup(create_duplicate_t).
 create_duplicate_t(_TmpDir) ->
@@ -107,3 +110,36 @@ truncation_t(_TmpDir) ->
     {ok, Read} = bc_workspace:read_bootstrap_file(<<"trunc-agent">>, <<"SOUL.md">>),
     [?_assert(byte_size(Read) < 25000),
      ?_assert(binary:match(Read, <<"[...truncated at 20KB...]">>) =/= nomatch)].
+
+%% ---- daily logs ----
+
+read_daily_log_test_() -> ?setup(read_daily_log_t).
+read_daily_log_t(_TmpDir) ->
+    ok = bc_workspace:create_agent(<<"log-agent">>),
+    Dir = filename:join([bc_workspace:agent_dir(<<"log-agent">>), "memory"]),
+    ok = file:write_file(filename:join(Dir, "2026-02-22.md"),
+                         <<"## Notes\nDiscussed architecture.">>),
+    {ok, Content} = bc_workspace:read_daily_log(<<"log-agent">>, <<"2026-02-22">>),
+    [?_assert(binary:match(Content, <<"Discussed architecture">>) =/= nomatch)].
+
+read_daily_log_missing_test_() -> ?setup(read_daily_log_missing_t).
+read_daily_log_missing_t(_TmpDir) ->
+    ok = bc_workspace:create_agent(<<"log-agent2">>),
+    [?_assertEqual({error, not_found},
+                   bc_workspace:read_daily_log(<<"log-agent2">>, <<"2026-01-01">>))].
+
+list_daily_logs_test_() -> ?setup(list_daily_logs_t).
+list_daily_logs_t(_TmpDir) ->
+    ok = bc_workspace:create_agent(<<"log-agent3">>),
+    Dir = filename:join([bc_workspace:agent_dir(<<"log-agent3">>), "memory"]),
+    ok = file:write_file(filename:join(Dir, "2026-02-20.md"), <<"day 1">>),
+    ok = file:write_file(filename:join(Dir, "2026-02-21.md"), <<"day 2">>),
+    ok = file:write_file(filename:join(Dir, "2026-02-22.md"), <<"day 3">>),
+    Logs = bc_workspace:list_daily_logs(<<"log-agent3">>),
+    %% Newest first
+    [?_assertEqual([<<"2026-02-22.md">>, <<"2026-02-21.md">>, <<"2026-02-20.md">>], Logs)].
+
+list_daily_logs_empty_test_() -> ?setup(list_daily_logs_empty_t).
+list_daily_logs_empty_t(_TmpDir) ->
+    ok = bc_workspace:create_agent(<<"log-agent4">>),
+    [?_assertEqual([], bc_workspace:list_daily_logs(<<"log-agent4">>))].

@@ -26,3 +26,15 @@ bootstrap_file_test() ->
     ?assertEqual("/tmp/test/agents/my-agent/SOUL.md",
                  bc_workspace_path:bootstrap_file(<<"my-agent">>, <<"SOUL.md">>)),
     os:unsetenv("BEAMCLAW_HOME").
+
+memory_dir_test() ->
+    os:putenv("BEAMCLAW_HOME", "/tmp/test"),
+    ?assertEqual("/tmp/test/agents/my-agent/memory",
+                 bc_workspace_path:memory_dir(<<"my-agent">>)),
+    os:unsetenv("BEAMCLAW_HOME").
+
+daily_log_file_test() ->
+    os:putenv("BEAMCLAW_HOME", "/tmp/test"),
+    ?assertEqual("/tmp/test/agents/my-agent/memory/2026-02-22.md",
+                 bc_workspace_path:daily_log_file(<<"my-agent">>, <<"2026-02-22">>)),
+    os:unsetenv("BEAMCLAW_HOME").

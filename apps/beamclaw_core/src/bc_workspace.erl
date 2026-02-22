@@ -1,8 +1,9 @@
 %% @doc Agent workspace management — filesystem operations.
 %%
 %% Pure functional module (no gen_server). Manages agent workspace directories
-%% under ~/.beamclaw/agents/<agent-id>/, each containing six markdown bootstrap
-%% files (SOUL.md, IDENTITY.md, USER.md, TOOLS.md, MEMORY.md, AGENTS.md).
+%% under ~/.beamclaw/agents/<agent-id>/, each containing seven markdown bootstrap
+%% files (SOUL.md, IDENTITY.md, USER.md, TOOLS.md, MEMORY.md, AGENTS.md,
+%% BOOTSTRAP.md) and a memory/ subdirectory for daily logs.
 %%
 %% The base directory defaults to $HOME/.beamclaw/agents/ but can be overridden
 %% via the BEAMCLAW_HOME environment variable.
@@ -24,6 +25,8 @@
          read_bootstrap_file/2,
          write_bootstrap_file/3,
          read_all_bootstrap_files/1,
+         read_daily_log/2,
+         list_daily_logs/1,
          validate_agent_id/1]).
 
 -define(MAX_BOOTSTRAP_SIZE, 20480). %% 20 KB
@@ -72,6 +75,9 @@ create_agent(AgentId) ->
                             false -> ok = file:write_file(Path, Content)
                         end
                     end, Templates),
+                    %% Create memory/ subdirectory for daily logs
+                    MemDir = filename:join(Dir, "memory"),
+                    filelib:ensure_dir(filename:join(MemDir, "dummy")),
                     ok
             end
     end.
@@ -129,17 +135,43 @@ write_bootstrap_file(AgentId, Filename, Content) ->
     Path = filename:join(agent_dir(AgentId), binary_to_list(Filename)),
     file:write_file(Path, Content).
 
-%% @doc Read all six bootstrap files. Missing files map to undefined.
+%% @doc Read all seven bootstrap files. Missing files map to undefined.
 -spec read_all_bootstrap_files(binary()) -> #{binary() => binary() | undefined}.
 read_all_bootstrap_files(AgentId) ->
     Files = [<<"IDENTITY.md">>, <<"SOUL.md">>, <<"USER.md">>,
-             <<"TOOLS.md">>, <<"AGENTS.md">>, <<"MEMORY.md">>],
+             <<"TOOLS.md">>, <<"AGENTS.md">>, <<"BOOTSTRAP.md">>,
+             <<"MEMORY.md">>],
     maps:from_list(lists:map(fun(F) ->
         case read_bootstrap_file(AgentId, F) of
             {ok, Content} -> {F, Content};
             {error, _}    -> {F, undefined}
         end
     end, Files)).
+
+%% @doc Read a daily log file for a given date (<<"YYYY-MM-DD">>).
+-spec read_daily_log(binary(), binary()) -> {ok, binary()} | {error, atom()}.
+read_daily_log(AgentId, Date) ->
+    Path = filename:join([agent_dir(AgentId), "memory",
+                          binary_to_list(<<Date/binary, ".md">>)]),
+    case file:read_file(Path) of
+        {ok, Bin} when byte_size(Bin) > ?MAX_BOOTSTRAP_SIZE ->
+            Truncated = binary:part(Bin, 0, ?MAX_BOOTSTRAP_SIZE),
+            {ok, <<Truncated/binary, "\n[...truncated at 20KB...]">>};
+        {ok, Bin} -> {ok, Bin};
+        {error, _} -> {error, not_found}
+    end.
+
+%% @doc List available daily log files (returns filenames, newest first, max 30).
+-spec list_daily_logs(binary()) -> [binary()].
+list_daily_logs(AgentId) ->
+    Dir = filename:join(agent_dir(AgentId), "memory"),
+    case file:list_dir(Dir) of
+        {ok, Entries} ->
+            MdFiles = [list_to_binary(E) || E <- Entries,
+                        filename:extension(E) =:= ".md"],
+            lists:sublist(lists:reverse(lists:sort(MdFiles)), 30);
+        {error, _} -> []
+    end.
 
 %% @doc Validate an agent ID: must match ^[a-z0-9_-]+$.
 -spec validate_agent_id(binary()) -> ok | {error, invalid_agent_id}.

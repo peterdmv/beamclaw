@@ -32,7 +32,7 @@ The rule: no dependency cycle. `beamclaw_obs` never imports from any sibling.
 | `beamclaw_memory` | Session memory | `bc_memory`, `bc_memory_ets`, `bc_memory_mnesia` |
 | `beamclaw_tools` | Tool execution | `bc_tool`, `bc_tool_registry`, built-in tools |
 | `beamclaw_mcp` | MCP protocol | `bc_mcp_server`, `bc_mcp_registry` |
-| `beamclaw_core` | Brain | `bc_session`, `bc_loop`, `bc_provider_*`, `bc_approval`, `bc_scrubber` |
+| `beamclaw_core` | Brain | `bc_session`, `bc_loop`, `bc_provider_*`, `bc_approval`, `bc_scrubber`, `bc_skill_parser`, `bc_skill_discovery`, `bc_skill_eligibility`, `bc_skill_installer` |
 | `beamclaw_gateway` | Interfaces | `bc_channel_telegram`, `bc_channel_tui`, Cowboy handlers |
 | `beamclaw_cli` | CLI escript | `beamclaw_cli` (escript `main/1`); not started as a daemon |
 
@@ -284,6 +284,8 @@ the session Config and used to load bootstrap files before each LLM call.
     TOOLS.md       — tool guidance
     MEMORY.md      — long-term curated memory (agent reads + updates)
     AGENTS.md      — workspace guidelines
+    BOOTSTRAP.md   — first-run discovery ritual; self-deleting
+    memory/        — daily log files (YYYY-MM-DD.md)
   my-custom-agent/
     ...
 ```
@@ -292,9 +294,9 @@ Override the base directory with the `BEAMCLAW_HOME` environment variable.
 
 ### System prompt assembly (`bc_system_prompt`)
 
-On each LLM call, `bc_system_prompt:assemble(AgentId)` reads all six bootstrap files and
+On each LLM call, `bc_system_prompt:assemble(AgentId)` reads all seven bootstrap files and
 converts them into system-role messages prepended to the conversation history. Order:
-IDENTITY → SOUL → USER → TOOLS → AGENTS → MEMORY (MEMORY last = closest to conversation).
+IDENTITY → SOUL → USER → TOOLS → AGENTS → BOOTSTRAP → MEMORY (MEMORY last = closest to conversation).
 Empty/missing files are skipped. If the agent doesn't exist, a single fallback message is used.
 
 ### Workspace memory tool (`bc_tool_workspace_memory`)
@@ -302,6 +304,29 @@ Empty/missing files are skipped. If the agent doesn't exist, a single fallback m
 A built-in tool that allows the agent to read, append to, or replace its own `MEMORY.md`.
 The path is constructed internally from `bc_session_ref.agent_id`, preventing path traversal.
 Requires no approval and runs at `read_only` autonomy.
+
+### Daily logs
+
+Agents can write daily logs to `memory/YYYY-MM-DD.md` files via the `workspace_memory`
+tool (actions: `read_daily`, `append_daily`, `list_daily`). The system prompt automatically
+includes today's and yesterday's daily logs, providing recent context without polluting
+the long-term MEMORY.md.
+
+### Skill system
+
+Skills are markdown SKILL.md files that provide specialized knowledge and capabilities.
+Discovery sources (lowest to highest precedence):
+
+1. Bundled: `<app_priv>/skills/*/SKILL.md`
+2. Global: `~/.beamclaw/skills/*/SKILL.md`
+3. Per-agent: `~/.beamclaw/agents/<name>/skills/*/SKILL.md`
+
+Each skill has a frontmatter block with `name:`, `description:`, and optional `metadata:`
+(JSON with requirements, install specs, emoji). `bc_skill_eligibility` checks that required
+binaries, environment variables, and OS constraints are met before including a skill in the
+system prompt.
+
+Key modules: `bc_skill_parser`, `bc_skill_discovery`, `bc_skill_eligibility`, `bc_skill_installer`.
 
 ### Tool definitions in LLM requests
 

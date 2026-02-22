@@ -115,6 +115,44 @@ tool guidance (TOOLS.md), workspace rules (AGENTS.md), and memory (MEMORY.md).
 The `BEAMCLAW_AGENT` env var sets the default agent name when `--agent` is
 not specified.
 
+### Skill Management
+
+Skills extend your agent's capabilities with domain-specific knowledge.
+
+#### Discovering skills
+
+```bash
+beamclaw skills list           # List all discovered skills with status
+beamclaw skills status         # Detailed requirements check for each skill
+beamclaw skills show NAME      # Show a skill's SKILL.md content
+beamclaw skills install NAME   # Install a skill's dependencies
+```
+
+#### Creating a skill
+
+1. Create a directory: `~/.beamclaw/skills/my-skill/`
+2. Add a `SKILL.md` file with frontmatter:
+
+```markdown
+---
+name: my-skill
+description: What this skill does
+metadata: {"beamclaw": {"requires": {"bins": ["curl"]}, "install": [{"kind": "apt", "package": "curl"}]}}
+---
+
+# My Skill
+
+Instructions for the agent...
+```
+
+#### Skill precedence
+
+Per-agent skills override global skills with the same name:
+
+1. Bundled (lowest): shipped with BeamClaw
+2. Global: `~/.beamclaw/skills/*/SKILL.md`
+3. Per-agent (highest): `~/.beamclaw/agents/<name>/skills/*/SKILL.md`
+
 ### Environment variables
 
 | Variable | Required | Description |

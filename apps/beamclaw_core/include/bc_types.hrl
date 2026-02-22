@@ -95,4 +95,16 @@
     ref        :: reference()
 }).
 
+%% A parsed SKILL.md file.
+-record(bc_skill, {
+    name        :: binary(),                     %% from frontmatter
+    description :: binary() | undefined,         %% from frontmatter
+    homepage    :: binary() | undefined,
+    emoji       :: binary() | undefined,
+    content     :: binary(),                     %% markdown body (after frontmatter)
+    source      :: global | {agent, binary()},   %% where discovered
+    metadata    :: map(),                        %% parsed "beamclaw" metadata object
+    path        :: string()                      %% filesystem path to SKILL.md
+}).
+
 -endif. %% BC_TYPES_HRL

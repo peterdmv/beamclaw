@@ -1,6 +1,6 @@
 %% @doc BeamClaw CLI entry point (escript).
 %%
-%% Usage: beamclaw [tui|start|stop|restart|remote_console|agent|doctor|status|version|help]
+%% Usage: beamclaw [tui|start|stop|restart|remote_console|agent|skills|doctor|status|version|help]
 %%
 %% Built with: rebar3 escriptize
 %% Output:     _build/default/bin/beamclaw
@@ -16,6 +16,8 @@
                              cmd_stop/0, cmd_remote_console/0, cmd_doctor/0,
                              cmd_agent_create/1, cmd_agent_list/0,
                              cmd_agent_delete/1, cmd_agent_show/1,
+                             cmd_skills_list/0, cmd_skills_status/0,
+                             cmd_skills_show/1, cmd_skills_install/1,
                              spawn_daemon/0, check_openrouter_network/0]}).
 
 -include_lib("beamclaw_core/include/bc_types.hrl").
@@ -40,6 +42,11 @@ main(["agent", "list"           | _])     -> cmd_agent_list();
 main(["agent", "delete", Name   | _])     -> cmd_agent_delete(list_to_binary(Name));
 main(["agent", "show",   Name   | _])     -> cmd_agent_show(list_to_binary(Name));
 main(["agent"                   | _])     -> cmd_agent_list();
+main(["skills", "status"        | _])     -> cmd_skills_status();
+main(["skills", "list"          | _])     -> cmd_skills_list();
+main(["skills", "install", Name | _])     -> cmd_skills_install(list_to_binary(Name));
+main(["skills", "show", Name    | _])     -> cmd_skills_show(list_to_binary(Name));
+main(["skills"                  | _])     -> cmd_skills_list();
 main(["doctor"                  | _])     -> cmd_doctor();
 main(["status"                  | _])     -> cmd_status();
 main(["version"                 | _])     -> cmd_version();
@@ -245,7 +252,8 @@ cmd_doctor() ->
         check_openai_key(),
         check_telegram_token(),
         check_epmd(),
-        check_workspace()
+        check_workspace(),
+        check_skills_dir()
     ],
     AllChecks = case os:getenv("OPENROUTER_API_KEY") of
         false -> Checks;
@@ -347,7 +355,8 @@ cmd_agent_show(Name) ->
         true ->
             Files = bc_workspace:read_all_bootstrap_files(Name),
             Order = [<<"IDENTITY.md">>, <<"SOUL.md">>, <<"USER.md">>,
-                     <<"TOOLS.md">>, <<"AGENTS.md">>, <<"MEMORY.md">>],
+                     <<"TOOLS.md">>, <<"AGENTS.md">>, <<"BOOTSTRAP.md">>,
+                     <<"MEMORY.md">>],
             lists:foreach(fun(Filename) ->
                 io:format("--- ~s ---~n", [Filename]),
                 case maps:get(Filename, Files, undefined) of
@@ -356,6 +365,132 @@ cmd_agent_show(Name) ->
                 end
             end, Order),
             halt(0)
+    end.
+
+%% @doc List all discovered skills with eligible status.
+cmd_skills_list() ->
+    AgentId = default_agent(),
+    Skills = bc_skill_discovery:discover(AgentId),
+    case Skills of
+        [] ->
+            io:format("No skills found.~n"),
+            io:format("  Global:    ~s~n", [bc_skill_discovery:global_skills_dir()]),
+            io:format("  Per-agent: ~s~n", [bc_skill_discovery:agent_skills_dir(AgentId)]);
+        _ ->
+            io:format("Skills:~n"),
+            lists:foreach(fun(Skill) ->
+                Name  = Skill#bc_skill.name,
+                Desc  = case Skill#bc_skill.description of
+                    undefined -> <<"">>;
+                    D         -> D
+                end,
+                Emoji = case Skill#bc_skill.emoji of
+                    undefined -> <<"">>;
+                    E         -> <<E/binary, " ">>
+                end,
+                Eligible = bc_skill_eligibility:is_eligible(Skill),
+                Status = case Eligible of
+                    true  -> "[ok]  ";
+                    false -> "[miss]"
+                end,
+                SourceTag = case Skill#bc_skill.source of
+                    global       -> "(global)";
+                    {agent, Aid} -> io_lib:format("(agent:~s)", [Aid])
+                end,
+                io:format("  ~s ~s~s~s ~s~n",
+                          [Status, Emoji, Name, case Desc of <<>> -> ""; _ -> " - " ++ binary_to_list(Desc) end, SourceTag])
+            end, Skills)
+    end,
+    halt(0).
+
+%% @doc Show detailed requirements status for all skills.
+cmd_skills_status() ->
+    AgentId = default_agent(),
+    Skills = bc_skill_discovery:discover(AgentId),
+    case Skills of
+        [] ->
+            io:format("No skills found.~n");
+        _ ->
+            lists:foreach(fun(Skill) ->
+                Name = Skill#bc_skill.name,
+                io:format("~s:~n", [Name]),
+                case bc_skill_eligibility:check(Skill) of
+                    ok ->
+                        io:format("  Status: eligible~n");
+                    {missing, Details} ->
+                        io:format("  Status: missing requirements~n"),
+                        case maps:get(bins, Details, []) of
+                            [] -> ok;
+                            Bins -> io:format("  Missing binaries: ~s~n",
+                                [lists:join(", ", [binary_to_list(B) || B <- Bins])])
+                        end,
+                        case maps:get(env, Details, []) of
+                            [] -> ok;
+                            Envs -> io:format("  Missing env vars: ~s~n",
+                                [lists:join(", ", [binary_to_list(E) || E <- Envs])])
+                        end,
+                        case maps:get(os, Details, []) of
+                            [] -> ok;
+                            Oses -> io:format("  Required OS: ~s~n",
+                                [lists:join(", ", [binary_to_list(O) || O <- Oses])])
+                        end
+                end,
+                Specs = bc_skill_installer:available_install_specs(Skill),
+                case Specs of
+                    [] -> ok;
+                    _  ->
+                        io:format("  Install options: ~s~n",
+                            [lists:join(", ", [binary_to_list(maps:get(<<"kind">>, S, <<"?">>)) || S <- Specs])])
+                end,
+                io:format("~n")
+            end, Skills)
+    end,
+    halt(0).
+
+%% @doc Show a specific skill's SKILL.md content.
+cmd_skills_show(Name) ->
+    AgentId = default_agent(),
+    Skills = bc_skill_discovery:discover(AgentId),
+    case [S || S <- Skills, S#bc_skill.name =:= Name] of
+        [] ->
+            io:format(standard_error, "beamclaw: skill '~s' not found~n", [Name]),
+            halt(1);
+        [Skill | _] ->
+            io:format("--- ~s ---~n", [Skill#bc_skill.name]),
+            case Skill#bc_skill.description of
+                undefined -> ok;
+                Desc      -> io:format("Description: ~s~n", [Desc])
+            end,
+            io:format("Source: ~p~n", [Skill#bc_skill.source]),
+            io:format("Path: ~s~n", [Skill#bc_skill.path]),
+            io:format("~n~s~n", [Skill#bc_skill.content]),
+            halt(0)
+    end.
+
+%% @doc Install a skill's dependencies.
+cmd_skills_install(Name) ->
+    AgentId = default_agent(),
+    Skills = bc_skill_discovery:discover(AgentId),
+    case [S || S <- Skills, S#bc_skill.name =:= Name] of
+        [] ->
+            io:format(standard_error, "beamclaw: skill '~s' not found~n", [Name]),
+            halt(1);
+        [Skill | _] ->
+            io:format("Installing dependencies for '~s'...~n", [Name]),
+            case bc_skill_installer:install(Skill) of
+                ok ->
+                    io:format("Done.~n"),
+                    halt(0);
+                {error, no_install_specs} ->
+                    io:format("No install specs defined for '~s'.~n", [Name]),
+                    halt(1);
+                {error, no_compatible_installer} ->
+                    io:format("No compatible installer found for this system.~n"),
+                    halt(1);
+                {error, Reason} ->
+                    io:format(standard_error, "Install failed: ~p~n", [Reason]),
+                    halt(1)
+            end
     end.
 
 cmd_help() ->
@@ -372,6 +507,10 @@ cmd_help() ->
         "  agent list           List all agents~n"
         "  agent show NAME      Show agent bootstrap files~n"
         "  agent delete NAME    Delete an agent workspace~n"
+        "  skills [list]        List discovered skills with status~n"
+        "  skills status        Detailed requirements check for all skills~n"
+        "  skills show NAME     Show a skill's SKILL.md content~n"
+        "  skills install NAME  Install a skill's dependencies~n"
         "  doctor               Check environment and connectivity~n"
         "  status               Ping running gateway HTTP health endpoint~n"
         "  version              Print version~n"
@@ -664,6 +803,17 @@ check_workspace() ->
                 false ->
                     print_check(warn, "Cannot create workspace at " ++ BaseDir)
             end
+    end.
+
+check_skills_dir() ->
+    Dir = bc_skill_discovery:global_skills_dir(),
+    case filelib:is_dir(Dir) of
+        true ->
+            Skills = bc_skill_discovery:discover(default_agent()),
+            print_check(ok, "Skills directory: " ++ Dir ++
+                " (" ++ integer_to_list(length(Skills)) ++ " skills)");
+        false ->
+            print_check(info, "Skills directory not found: " ++ Dir)
     end.
 
 check_openrouter_network() ->

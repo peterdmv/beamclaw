@@ -226,6 +226,29 @@ The TUI reads from stdin, which is not available in detached Docker containers. 
 
 ---
 
+## Skills
+
+Skills are configured via `sys.config` under `beamclaw_core`:
+
+```erlang
+{skills, #{
+    %% Per-skill overrides (optional)
+    %% entries => #{<<"skill-name">> => #{enabled => false}}
+}}
+```
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `skills` | `#{}` | Skills configuration map |
+
+Skills are discovered from the filesystem. Use `beamclaw skills list` to see
+available skills and `beamclaw skills status` for detailed requirements info.
+
+Environment variables:
+- `BEAMCLAW_HOME` — overrides the base directory for skills (default: `~/.beamclaw/`)
+
+---
+
 ## Adding a New API Integration
 
 When adding a new provider or external service:
