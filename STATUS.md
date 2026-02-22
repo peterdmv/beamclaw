@@ -352,6 +352,13 @@ All six OTP apps created, supervision trees defined, behaviours declared,
 | `bc_loop` typing on `executing_tools` enter | ✅ | `emit_typing/1` fires before tool execution |
 | `bc_loop` periodic typing tick | ✅ | 4 s timer in `receive_stream/3`; re-sends typing during long streams |
 
+### Post-M20 — Daemon Shutdown Fix ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| `beamclaw_cli.erl` stop timeout | ✅ | 10s → 20s (40 × 500ms); covers Telegram long-poll drain |
+| `beamclaw_gateway_app.erl` `prep_stop/1` | ✅ | `cowboy:stop_listener/1` before supervision tree teardown; eliminates Ranch `eaddrinuse` noise |
+
 ---
 
 ## Known Issues / Blockers
@@ -362,4 +369,4 @@ _None at this time._
 
 ## Last Updated
 
-2026-02-22 (Typing indicators — Post-M20)
+2026-02-22 (Daemon shutdown fix — Post-M20)

@@ -249,7 +249,7 @@ cmd_stop() ->
             halt(1);
         timeout ->
             io:format(standard_error,
-                      "beamclaw: daemon did not stop within 10s~n", []),
+                      "beamclaw: daemon did not stop within 20s~n", []),
             halt(1)
     end.
 
@@ -261,7 +261,7 @@ cmd_restart() ->
         not_running -> io:format("Gateway was not running.~n");
         timeout     ->
             io:format(standard_error,
-                      "beamclaw: daemon did not stop within 10s~n", []),
+                      "beamclaw: daemon did not stop within 20s~n", []),
             halt(1)
     end,
     spawn_daemon().
@@ -801,7 +801,7 @@ do_stop() ->
         pang -> not_running;
         pong ->
             rpc:call(daemon_node(), init, stop, []),
-            poll_node_down(daemon_node(), 20, 500)
+            poll_node_down(daemon_node(), 40, 500)
     end.
 
 spawn_daemon() ->
