@@ -26,6 +26,7 @@ Requires: Docker
 ```bash
 docker run -d \
   --name beamclaw \
+  -v beamclaw_data:/home/beamclaw/.beamclaw \
   -e OPENROUTER_API_KEY=sk-or-... \
   -e TELEGRAM_BOT_TOKEN=...      \
   -p 18800:18800                 \

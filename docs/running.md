@@ -372,11 +372,16 @@ Best for: production deployment, zero Erlang installation required.
 docker run -d \
   --name beamclaw \
   --restart unless-stopped \
+  -v beamclaw_data:/home/beamclaw/.beamclaw \
   -e OPENROUTER_API_KEY=sk-or-... \
   -e TELEGRAM_BOT_TOKEN=...       \
   -p 18800:18800                    \
   beamclaw:latest
 ```
+
+The named volume `beamclaw_data` persists agent workspaces (bootstrap files,
+daily logs, skills) and Mnesia session history across container restarts.
+Omit the `-v` flag if you don't need persistence.
 
 ### Health check
 
