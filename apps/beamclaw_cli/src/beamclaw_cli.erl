@@ -421,7 +421,7 @@ spawn_daemon() ->
                      [{args, DaemonArgs}]),
     case poll_node_up(daemon_node(), 10, 500) of
         ok ->
-            io:format("Gateway started.~n"),
+            io:format("Gateway started. Logs: /tmp/beamclaw_daemon.log~n"),
             halt(0);
         timeout ->
             io:format(standard_error,

@@ -46,6 +46,18 @@ Daemon IPC uses Erlang distribution; `epmd` must be available (`epmd -daemon`
 if not already running). The daemon node registers as `beamclaw@<hostname>`
 (short hostname from `inet:gethostname/0`).
 
+### Viewing daemon logs
+
+The daemon writes logs to `/tmp/beamclaw_daemon.log` via OTP's kernel logger file
+handler. To follow logs in real time:
+
+```bash
+tail -f /tmp/beamclaw_daemon.log
+```
+
+Log rotation is automatic: 5 MB per file, 3 files retained. The file handler captures
+`debug`-level events, including message dispatch traces for Telegram and the agentic loop.
+
 ### Remote TUI (daemon + tui)
 
 When a daemon is already running, `beamclaw tui` auto-detects it and connects

@@ -435,6 +435,16 @@ Usage: `bc_obs:emit(tool_call_start, #{tool_name => Name, args => Args, session_
 `bc_config:get(App, Key)` resolves `{env, "VAR"}` tuples at runtime via `os:getenv/1`.
 
 ```erlang
+{kernel, [
+    {logger_level, info},
+    {logger, [
+        {handler, default, logger_std_h, #{level => info, ...}},
+        {handler, file, logger_std_h, #{
+            level => debug,
+            config => #{file => "/tmp/beamclaw_daemon.log",
+                        max_no_bytes => 5242880, max_no_files => 3}, ...}}
+    ]}
+]},
 {beamclaw_core, [
     {default_provider, openrouter},
     {providers, [
@@ -462,12 +472,7 @@ Usage: `bc_obs:emit(tool_call_start, #{tool_name => Name, args => Args, session_
         {tui,      #{enabled => true}}
     ]}
 ]},
-{beamclaw_obs, [
-    {backends, [
-        {log,        #{level => info}},
-        {prometheus, #{port => 9090}}
-    ]}
-]},
+{beamclaw_obs, []},
 {beamclaw_memory, [
     {backend, ets}
 ]}

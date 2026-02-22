@@ -122,6 +122,7 @@ dispatch_telegram_message(Update) ->
     Chat   = maps:get(<<"chat">>,    Msg,    #{}),
     UserId = integer_to_binary(maps:get(<<"id">>, From, 0)),
     ChatId = integer_to_binary(maps:get(<<"id">>, Chat, 0)),
+    logger:debug("[telegram] dispatch message: chat_id=~s text=~s", [ChatId, Text]),
     ChannelMsg = #bc_channel_message{
         session_id = ChatId,
         user_id    = UserId,

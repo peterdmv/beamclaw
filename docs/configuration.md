@@ -149,6 +149,46 @@ backend automatically falls back to `ram_copies`.
 {beamclaw_obs, []}
 ```
 
+### kernel (OTP logger)
+
+```erlang
+{kernel, [
+    {logger_level, info},
+    {logger, [
+        %% Console handler for foreground modes (rebar3 shell, TUI)
+        {handler, default, logger_std_h, #{
+            level => info,
+            formatter => {logger_formatter, #{
+                template => [time, " [", level, "] ", msg, "\n"]
+            }}
+        }},
+        %% File handler for daemon mode (stdout goes nowhere with -detached)
+        {handler, file, logger_std_h, #{
+            level => debug,
+            config => #{
+                file => "/tmp/beamclaw_daemon.log",
+                max_no_bytes => 5242880,       %% 5 MB per file
+                max_no_files => 3              %% keep 3 rotated files
+            },
+            formatter => {logger_formatter, #{
+                template => [time, " [", level, "] ", msg, "\n"]
+            }}
+        }}
+    ]}
+]}
+```
+
+The file handler writes to `/tmp/beamclaw_daemon.log` with automatic rotation (5 MB per
+file, 3 files retained = 15 MB max disk usage). The `debug` level on the file handler
+captures all trace events; the console handler stays at `info` to avoid noise in
+interactive modes.
+
+To change the log level at runtime (e.g., enable debug on the console handler):
+
+```erlang
+logger:set_handler_config(default, level, debug).
+```
+
 ---
 
 ## vm.args

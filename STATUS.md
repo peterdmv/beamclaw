@@ -163,6 +163,18 @@ All six OTP apps created, supervision trees defined, behaviours declared,
 | `cmd_help/0` update | ✅ | Documents auto-connect behaviour |
 | `docs/running.md` update | ✅ | Remote TUI workflow documented |
 
+### Post-M10 — Daemon File Logging ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| `kernel` logger config in `sys.config` | ✅ | Console handler (info) + file handler (debug, `/tmp/beamclaw_daemon.log`, 5 MB × 3 rotation) |
+| `bc_channel_telegram` debug log | ✅ | Traces message dispatch with chat_id and text |
+| `bc_loop` debug logs | ✅ | Traces `run received` and `route_response` with session/channel/reply_pid |
+| CLI start message update | ✅ | Prints log file path after "Gateway started." |
+| `docs/configuration.md` update | ✅ | Kernel logger section with runtime level change example |
+| `docs/running.md` update | ✅ | "Viewing daemon logs" subsection |
+| `CLAUDE.md` Configuration update | ✅ | Added `kernel` logger entry to config block |
+
 ---
 
 ## Known Issues / Blockers
@@ -173,4 +185,4 @@ _None at this time._
 
 ## Last Updated
 
-2026-02-22 (M10: Remote TUI — `beamclaw tui` auto-connects to running daemon via Erlang distribution)
+2026-02-22 (Post-M10: Daemon file logging — OTP kernel logger writes to `/tmp/beamclaw_daemon.log`)

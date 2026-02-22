@@ -74,6 +74,8 @@ init(Config) ->
 %% ---- States ----
 
 idle(cast, {run, Message}, Data) ->
+    logger:debug("[loop] run received: session=~s content=~s",
+                 [Data#loop_data.session_id, Message#bc_channel_message.content]),
     %% Extract per-run reply_pid (set by HTTP/WS handlers; undefined for channels).
     ReplyPid = Message#bc_channel_message.reply_pid,
     %% Append the user message to history before the LLM call.
@@ -248,6 +250,8 @@ receive_stream(Data, T0) ->
 %% Route the completed LLM response to the appropriate destination.
 route_response(Data, Msg) ->
     SessionId = Data#loop_data.session_id,
+    logger:debug("[loop] route_response: session=~s channel_mod=~p reply_pid=~p",
+                 [SessionId, Data#loop_data.channel_mod, Data#loop_data.reply_pid]),
     case Data#loop_data.reply_pid of
         undefined ->
             %% Named channel gen-server (Telegram, TUI).
