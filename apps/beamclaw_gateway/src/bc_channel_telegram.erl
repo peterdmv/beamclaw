@@ -43,17 +43,17 @@ listen(State) ->
 
 send(SessionId, #bc_message{content = Content}, State) ->
     ChatId = resolve_chat_id(SessionId, State),
-    _ = send_message(ChatId, Content, State),
+    send_message(ChatId, Content, State),
     {ok, State}.
 
 send_typing(SessionId, State) ->
     ChatId = resolve_chat_id(SessionId, State),
-    _ = send_action(ChatId, <<"typing">>, State),
+    send_action(ChatId, <<"typing">>, State),
     ok.
 
 update_draft(SessionId, DraftId, Content, State) ->
     ChatId = resolve_chat_id(SessionId, State),
-    _ = edit_message(ChatId, DraftId, Content, State),
+    edit_message(ChatId, DraftId, Content, State),
     {ok, State}.
 
 finalize_draft(_SessionId, _DraftId, State) ->
@@ -90,7 +90,12 @@ get_updates(Offset, #{token := Token}) ->
         {ok, {{_, 200, _}, _, Body}} ->
             Decoded = jsx:decode(iolist_to_binary(Body), [return_maps]),
             maps:get(<<"result">>, Decoded, []);
-        _ -> []
+        {ok, {{_, Code, _}, _, RBody}} ->
+            logger:warning("[telegram] getUpdates failed: ~p ~s", [Code, RBody]),
+            [];
+        {error, Reason} ->
+            logger:warning("[telegram] getUpdates error: ~p", [Reason]),
+            []
     end.
 
 process_updates([], State) ->
@@ -143,17 +148,35 @@ dispatch_telegram_message(Update) ->
 send_message(ChatId, Text, #{token := Token}) ->
     Url  = "https://api.telegram.org/bot" ++ Token ++ "/sendMessage",
     Body = jsx:encode(#{chat_id => ChatId, text => Text}),
-    httpc:request(post, {Url, [], "application/json", Body}, [], []).
+    case httpc:request(post, {Url, [], "application/json", Body}, [], []) of
+        {ok, {{_, 200, _}, _, _}} -> ok;
+        {ok, {{_, Code, _}, _, RBody}} ->
+            logger:warning("[telegram] sendMessage failed: ~p ~s", [Code, RBody]);
+        {error, Reason} ->
+            logger:warning("[telegram] sendMessage error: ~p", [Reason])
+    end.
 
 send_action(ChatId, Action, #{token := Token}) ->
     Url  = "https://api.telegram.org/bot" ++ Token ++ "/sendChatAction",
     Body = jsx:encode(#{chat_id => ChatId, action => Action}),
-    httpc:request(post, {Url, [], "application/json", Body}, [], []).
+    case httpc:request(post, {Url, [], "application/json", Body}, [], []) of
+        {ok, {{_, 200, _}, _, _}} -> ok;
+        {ok, {{_, Code, _}, _, RBody}} ->
+            logger:warning("[telegram] sendChatAction failed: ~p ~s", [Code, RBody]);
+        {error, Reason} ->
+            logger:warning("[telegram] sendChatAction error: ~p", [Reason])
+    end.
 
 edit_message(ChatId, MessageId, Text, #{token := Token}) ->
     Url  = "https://api.telegram.org/bot" ++ Token ++ "/editMessageText",
     Body = jsx:encode(#{chat_id => ChatId, message_id => MessageId, text => Text}),
-    httpc:request(post, {Url, [], "application/json", Body}, [], []).
+    case httpc:request(post, {Url, [], "application/json", Body}, [], []) of
+        {ok, {{_, 200, _}, _, _}} -> ok;
+        {ok, {{_, Code, _}, _, RBody}} ->
+            logger:warning("[telegram] editMessageText failed: ~p ~s", [Code, RBody]);
+        {error, Reason} ->
+            logger:warning("[telegram] editMessageText error: ~p", [Reason])
+    end.
 
 resolve_chat_id(SessionId, _State) ->
-    SessionId.
+    binary_to_integer(SessionId).
