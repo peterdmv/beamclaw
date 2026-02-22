@@ -407,7 +407,8 @@ spawn_daemon() ->
     end,
     %% Disable the TUI channel in daemon mode — no stdin available.
     %% Replace the tui entry in the channels list; preserve other channels.
-    Eval = "Chs = application:get_env(beamclaw_gateway, channels, []),"
+    Eval = "application:load(beamclaw_gateway),"
+           "Chs = application:get_env(beamclaw_gateway, channels, []),"
            "Chs2 = lists:keyreplace(tui, 1, Chs, {tui, #{enabled => false}}),"
            "application:set_env(beamclaw_gateway, channels, Chs2, [{persistent, true}]),"
            "application:ensure_all_started(beamclaw_gateway),"
