@@ -335,7 +335,7 @@ get_provider_config(ProviderMod) ->
         bc_provider_openai     -> openai;
         _                      -> openrouter
     end,
-    Providers = bc_config:get(beamclaw_core, providers, []),
+    Providers = application:get_env(beamclaw_core, providers, []),
     ProvMap = proplists:get_value(ProviderKey, Providers, #{}),
     try bc_config:resolve(ProvMap)
     catch error:{missing_env_var, Var} ->

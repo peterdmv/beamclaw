@@ -33,8 +33,11 @@ init(Config) ->
     Mode  = maps:get(mode, Config, long_poll),
     State = #{token => Token, mode => Mode, offset => 0, seen_ids => sets:new()},
     case Mode of
-        long_poll -> self() ! poll;
-        webhook   -> ok
+        long_poll ->
+            delete_webhook(State),
+            self() ! poll;
+        webhook ->
+            ok
     end,
     {ok, State}.
 
@@ -82,6 +85,19 @@ terminate(_Reason, _State) -> ok.
 code_change(_OldVsn, State, _) -> {ok, State}.
 
 %% Internal
+
+delete_webhook(#{token := Token}) ->
+    Url = "https://api.telegram.org/bot" ++ Token ++ "/deleteWebhook",
+    case httpc:request(post, {Url, [], "application/json", <<"{}">>},
+                       [{timeout, 10000}], []) of
+        {ok, {{_, 200, _}, _, _}} ->
+            logger:info("[telegram] webhook deleted (long_poll mode)");
+        {ok, {{_, Code, _}, _, RBody}} ->
+            logger:warning("[telegram] deleteWebhook failed: ~p ~s",
+                           [Code, RBody]);
+        {error, Reason} ->
+            logger:warning("[telegram] deleteWebhook error: ~p", [Reason])
+    end.
 
 get_updates(Offset, #{token := Token}) ->
     Url = "https://api.telegram.org/bot" ++ Token ++
