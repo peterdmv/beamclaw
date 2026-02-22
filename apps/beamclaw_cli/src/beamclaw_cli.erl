@@ -10,7 +10,7 @@
 -include_lib("beamclaw_core/include/bc_types.hrl").
 
 -define(VERSION, "0.1.0").
--define(DAEMON_NODE, 'beamclaw@localhost').
+-define(DAEMON_SNAME, beamclaw).
 -define(GATEWAY_PORT, 8080).
 
 %%--------------------------------------------------------------------
@@ -69,9 +69,9 @@ cmd_local_tui() ->
 
 %% @doc Attach a remote TUI to a running daemon via Erlang distribution.
 cmd_remote_tui() ->
-    erlang:monitor_node(?DAEMON_NODE, true),
+    erlang:monitor_node(daemon_node(), true),
     SessionId = generate_remote_session_id(),
-    io:format("BeamClaw TUI (remote) — connected to ~s~n", [?DAEMON_NODE]),
+    io:format("BeamClaw TUI (remote) — connected to ~s~n", [daemon_node()]),
     io:format("Type a message and press Enter. Ctrl+D to disconnect.~n~n> "),
     remote_tui_loop(SessionId).
 
@@ -98,13 +98,13 @@ remote_tui_loop(SessionId) ->
 
 dispatch_remote(SessionId, Text) ->
     %% Ensure session exists on daemon.
-    case rpc:call(?DAEMON_NODE, bc_session_registry, lookup, [SessionId]) of
+    case rpc:call(daemon_node(), bc_session_registry, lookup, [SessionId]) of
         {error, not_found} ->
             Config = #{session_id  => SessionId,
                        user_id     => <<"remote_tui_user">>,
                        channel_id  => SessionId,
                        channel_mod => undefined},
-            case rpc:call(?DAEMON_NODE, bc_sessions_sup, start_session, [Config]) of
+            case rpc:call(daemon_node(), bc_sessions_sup, start_session, [Config]) of
                 {ok, _}         -> ok;
                 {badrpc, Reason} ->
                     io:format(standard_error,
@@ -123,7 +123,7 @@ dispatch_remote(SessionId, Text) ->
             halt(1)
     end,
     %% Lookup session pid and dispatch the run with reply_pid = self().
-    case rpc:call(?DAEMON_NODE, bc_session_registry, lookup, [SessionId]) of
+    case rpc:call(daemon_node(), bc_session_registry, lookup, [SessionId]) of
         {ok, SPid} ->
             Msg = #bc_channel_message{
                 session_id = SessionId,
@@ -134,7 +134,7 @@ dispatch_remote(SessionId, Text) ->
                 ts         = erlang:system_time(millisecond),
                 reply_pid  = self()
             },
-            rpc:call(?DAEMON_NODE, bc_session, dispatch_run, [SPid, Msg]);
+            rpc:call(daemon_node(), bc_session, dispatch_run, [SPid, Msg]);
         {badrpc, Reason2} ->
             io:format(standard_error,
                       "~nbeamclaw: RPC failed dispatching run: ~p~n", [Reason2]),
@@ -165,7 +165,7 @@ receive_remote_response(SessionId) ->
 %% @doc Start gateway as a background daemon (Erlang distribution IPC).
 cmd_start() ->
     ensure_ctl_node(),
-    case net_adm:ping(?DAEMON_NODE) of
+    case net_adm:ping(daemon_node()) of
         pong ->
             io:format("Gateway already running.~n"),
             halt(1);
@@ -205,14 +205,14 @@ cmd_restart() ->
 %% @doc Print the erl -remsh command to attach a live shell to the daemon.
 cmd_remote_console() ->
     ensure_ctl_node(),
-    case net_adm:ping(?DAEMON_NODE) of
+    case net_adm:ping(daemon_node()) of
         pang ->
             io:format("Gateway not running.~n"),
             halt(1);
         pong ->
             Cookie = atom_to_list(erlang:get_cookie()),
             io:format("Run: erl -remsh ~s -setcookie ~s~n",
-                      [atom_to_list(?DAEMON_NODE), Cookie]),
+                      [atom_to_list(daemon_node()), Cookie]),
             halt(0)
     end.
 
@@ -338,7 +338,7 @@ apply_tui_config() ->
 try_connect_daemon() ->
     case ensure_ctl_node_soft() of
         ok ->
-            case net_adm:ping(?DAEMON_NODE) of
+            case net_adm:ping(daemon_node()) of
                 pong -> connected;
                 pang -> not_running
             end;
@@ -349,7 +349,7 @@ try_connect_daemon() ->
 %% Like ensure_ctl_node/0 but returns ok | {error, Reason} instead of halt(1).
 ensure_ctl_node_soft() ->
     Id   = integer_to_list(erlang:unique_integer([positive])),
-    Name = list_to_atom("beamclaw_ctl_" ++ Id ++ "@localhost"),
+    Name = list_to_atom("beamclaw_ctl_" ++ Id),
     case net_kernel:start([Name, shortnames]) of
         {ok, _}                       -> ok;
         {error, {already_started, _}} -> ok;
@@ -367,10 +367,16 @@ generate_remote_session_id() ->
 %% Internal: daemon lifecycle
 %%--------------------------------------------------------------------
 
+%% Compute the daemon node name using the real hostname.
+%% `-sname beamclaw` registers as `beamclaw@<hostname>`, not `beamclaw@localhost`.
+daemon_node() ->
+    {ok, Host} = inet:gethostname(),
+    list_to_atom(atom_to_list(?DAEMON_SNAME) ++ "@" ++ Host).
+
 %% Enable Erlang distribution with a unique ctl node name.
 ensure_ctl_node() ->
     Id   = integer_to_list(erlang:unique_integer([positive])),
-    Name = list_to_atom("beamclaw_ctl_" ++ Id ++ "@localhost"),
+    Name = list_to_atom("beamclaw_ctl_" ++ Id),
     case net_kernel:start([Name, shortnames]) of
         {ok, _}                       -> ok;
         {error, {already_started, _}} -> ok;
@@ -383,19 +389,20 @@ ensure_ctl_node() ->
     end.
 
 do_stop() ->
-    case net_adm:ping(?DAEMON_NODE) of
+    case net_adm:ping(daemon_node()) of
         pang -> not_running;
         pong ->
-            rpc:call(?DAEMON_NODE, init, stop, []),
-            poll_node_down(?DAEMON_NODE, 20, 500)
+            rpc:call(daemon_node(), init, stop, []),
+            poll_node_down(daemon_node(), 20, 500)
     end.
 
 spawn_daemon() ->
-    ErlBin    = find_erl_bin(),
-    EbinPaths = code:get_path(),
-    PaArgs    = lists:flatmap(fun(P) -> ["-pa", P] end, EbinPaths),
-    ConfigArgs = case filelib:is_file("config/sys.config") of
-        true  -> ["-config", "config/sys"];
+    ErlBin     = find_erl_bin(),
+    EbinPaths  = daemon_ebin_paths(),
+    PaArgs     = lists:flatmap(fun(P) -> ["-pa", P] end, EbinPaths),
+    ConfigFile = filename:absname("config/sys.config"),
+    ConfigArgs = case filelib:is_file(ConfigFile) of
+        true  -> ["-config", filename:rootname(ConfigFile)];
         false -> []
     end,
     %% Disable the TUI channel in daemon mode — no stdin available.
@@ -405,13 +412,13 @@ spawn_daemon() ->
            "application:set_env(beamclaw_gateway, channels, Chs2, [{persistent, true}]),"
            "application:ensure_all_started(beamclaw_gateway),"
            "receive after infinity -> ok end.",
-    DaemonArgs = ["-detached", "-noshell", "-sname", "beamclaw"]
+    DaemonArgs = ["-detached", "-noshell", "-sname", atom_to_list(?DAEMON_SNAME)]
                  ++ PaArgs
                  ++ ConfigArgs
                  ++ ["-eval", Eval],
     erlang:open_port({'spawn_executable', ErlBin},
                      [{args, DaemonArgs}]),
-    case poll_node_up(?DAEMON_NODE, 10, 500) of
+    case poll_node_up(daemon_node(), 10, 500) of
         ok ->
             io:format("Gateway started.~n"),
             halt(0);
@@ -435,6 +442,26 @@ find_erl_bin() ->
                     halt(1);
                 Path -> Path
             end
+    end.
+
+%% Derive ebin paths for the daemon process from the escript location.
+%% code:get_path() returns archive-internal paths that only work inside the
+%% escript process; a standalone erl cannot load from them. Instead, walk from
+%% _build/default/bin/beamclaw → _build/default/lib/*/ebin.
+daemon_ebin_paths() ->
+    ScriptPath = filename:absname(escript:script_name()),
+    %% _build/default/bin/beamclaw → _build/default/bin → _build/default
+    BuildDir   = filename:dirname(filename:dirname(ScriptPath)),
+    LibDir     = filename:join(BuildDir, "lib"),
+    Ebins      = filelib:wildcard(filename:join([LibDir, "*", "ebin"])),
+    case Ebins of
+        [] ->
+            io:format(standard_error,
+                      "beamclaw: no ebin dirs found under ~s~n"
+                      "  (Was the escript moved outside _build?)~n",
+                      [LibDir]),
+            halt(1);
+        _ -> Ebins
     end.
 
 poll_node_up(_Node, 0, _Interval) -> timeout;

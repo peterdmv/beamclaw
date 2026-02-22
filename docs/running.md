@@ -43,7 +43,8 @@ _build/default/bin/beamclaw stop           # graceful shutdown
 ```
 
 Daemon IPC uses Erlang distribution; `epmd` must be available (`epmd -daemon`
-if not already running). The daemon node registers as `beamclaw@localhost`.
+if not already running). The daemon node registers as `beamclaw@<hostname>`
+(short hostname from `inet:gethostname/0`).
 
 ### Remote TUI (daemon + tui)
 
@@ -56,7 +57,7 @@ _build/default/bin/beamclaw start
 
 # Terminal 2: attach a remote TUI
 _build/default/bin/beamclaw tui
-# Prints: BeamClaw TUI (remote) — connected to beamclaw@localhost
+# Prints: BeamClaw TUI (remote) — connected to beamclaw@<hostname>
 # Type messages; responses stream back from the daemon.
 # Ctrl+D to disconnect.
 ```
