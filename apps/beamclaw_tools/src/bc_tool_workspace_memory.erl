@@ -79,10 +79,11 @@ execute(#{<<"action">> := <<"append">>, <<"content">> := Content}, Session, _Con
     AgentId = Session#bc_session_ref.agent_id,
     Path = bc_workspace_path:bootstrap_file(AgentId, <<"MEMORY.md">>),
     Existing = case file:read_file(Path) of
-        {ok, Bin}       -> Bin;
-        {error, enoent} -> <<>>
+        {ok, Bin}  -> Bin;
+        {error, _} -> <<>>
     end,
     NewContent = <<Existing/binary, "\n", Content/binary>>,
+    filelib:ensure_dir(Path),
     case file:write_file(Path, NewContent) of
         ok              -> {ok, <<"Memory updated.">>};
         {error, Reason} -> {error, iolist_to_binary(io_lib:format("write error: ~p", [Reason]))}
@@ -91,6 +92,7 @@ execute(#{<<"action">> := <<"append">>, <<"content">> := Content}, Session, _Con
 execute(#{<<"action">> := <<"replace">>, <<"content">> := Content}, Session, _Context) ->
     AgentId = Session#bc_session_ref.agent_id,
     Path = bc_workspace_path:bootstrap_file(AgentId, <<"MEMORY.md">>),
+    filelib:ensure_dir(Path),
     case file:write_file(Path, Content) of
         ok              -> {ok, <<"Memory replaced.">>};
         {error, Reason} -> {error, iolist_to_binary(io_lib:format("write error: ~p", [Reason]))}
@@ -121,8 +123,8 @@ execute(#{<<"action">> := <<"append_daily">>, <<"content">> := Content} = Args, 
     filelib:ensure_dir(filename:join(Dir, "dummy")),
     Path = bc_workspace_path:daily_log_file(AgentId, Date),
     Existing = case file:read_file(Path) of
-        {ok, Bin}       -> Bin;
-        {error, enoent} -> <<>>
+        {ok, Bin}  -> Bin;
+        {error, _} -> <<>>
     end,
     NewContent = <<Existing/binary, "\n", Content/binary>>,
     case file:write_file(Path, NewContent) of
