@@ -42,6 +42,11 @@ RUN printf '#!/bin/sh\nexec /opt/beamclaw/bin/beamclaw escript beamclaw-ctl "$@"
     > /usr/local/bin/beamclaw-ctl && chmod +x /usr/local/bin/beamclaw-ctl
 
 USER beamclaw
+
+# Pre-create the data directory so Docker named volumes inherit beamclaw:beamclaw
+# ownership instead of defaulting to root:root on first mount.
+RUN mkdir -p /home/beamclaw/.beamclaw
+
 WORKDIR /opt/beamclaw
 
 # HTTP gateway (configurable via sys.docker.config)
