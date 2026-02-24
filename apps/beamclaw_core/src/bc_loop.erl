@@ -52,7 +52,8 @@ Response routing (route_response/2):
     config         :: map(),
     current_run    :: term() | undefined,
     tool_calls     :: [#bc_tool_call{}],
-    iteration      :: non_neg_integer()
+    iteration      :: non_neg_integer(),
+    typing_tick_ref = undefined :: reference() | undefined
 }).
 
 start_link(Config) ->
@@ -123,12 +124,14 @@ idle(EventType, EventContent, Data) ->
     handle_common(idle, EventType, EventContent, Data).
 
 compacting(enter, _OldState, Data) ->
+    emit_typing(Data),
+    TickRef = schedule_typing_tick(),
     LoopCfg = bc_config:get(beamclaw_core, agentic_loop, #{}),
     case maps:get(memory_flush, LoopCfg, true) of
         true  -> gen_statem:cast(self(), do_memory_flush);
         false -> gen_statem:cast(self(), do_compact)
     end,
-    {keep_state, Data};
+    {keep_state, Data#loop_data{typing_tick_ref = TickRef}};
 compacting(cast, do_memory_flush, Data) ->
     logger:debug("[loop] pre-compaction memory flush: session=~s",
                  [Data#loop_data.session_id]),
@@ -140,8 +143,13 @@ compacting(cast, do_memory_flush, Data) ->
     gen_statem:cast(self(), do_compact),
     {keep_state, Data};
 compacting(cast, do_compact, Data) ->
+    cancel_typing_tick(Data#loop_data.typing_tick_ref),
     bc_compactor:compact(Data#loop_data.session_pid),
-    {next_state, streaming, Data};
+    {next_state, streaming, Data#loop_data{typing_tick_ref = undefined}};
+compacting(info, typing_tick, Data) ->
+    emit_typing(Data),
+    TickRef = schedule_typing_tick(),
+    {keep_state, Data#loop_data{typing_tick_ref = TickRef}};
 compacting(EventType, EventContent, Data) ->
     handle_common(compacting, EventType, EventContent, Data).
 
@@ -191,18 +199,24 @@ awaiting_approval(EventType, EventContent, Data) ->
 
 executing_tools(enter, _OldState, Data) ->
     emit_typing(Data),
+    TickRef = schedule_typing_tick(),
     gen_statem:cast(self(), do_execute),
-    {keep_state, Data};
+    {keep_state, Data#loop_data{typing_tick_ref = TickRef}};
 executing_tools(cast, do_execute, Data) ->
     LoopCfg = bc_config:get(beamclaw_core, agentic_loop, #{}),
     MaxIter = maps:get(max_tool_iterations, LoopCfg, 10),
     case Data#loop_data.iteration >= MaxIter of
         true ->
+            cancel_typing_tick(Data#loop_data.typing_tick_ref),
             logger:warning("[loop] max tool iterations (~p) reached", [MaxIter]),
-            {next_state, finalizing, Data};
+            {next_state, finalizing, Data#loop_data{typing_tick_ref = undefined}};
         false ->
             execute_tool_calls(Data)
     end;
+executing_tools(info, typing_tick, Data) ->
+    emit_typing(Data),
+    TickRef = schedule_typing_tick(),
+    {keep_state, Data#loop_data{typing_tick_ref = TickRef}};
 executing_tools(EventType, EventContent, Data) ->
     handle_common(executing_tools, EventType, EventContent, Data).
 
@@ -337,6 +351,7 @@ emit_typing(Data) ->
 schedule_typing_tick() ->
     erlang:send_after(4000, self(), typing_tick).
 
+cancel_typing_tick(undefined) -> ok;
 cancel_typing_tick(Ref) ->
     _ = erlang:cancel_timer(Ref),
     %% Flush any tick that arrived between cancel and now.
@@ -355,6 +370,7 @@ maybe_await_approval(#loop_data{tool_calls = Calls} = Data) ->
     end.
 
 execute_tool_calls(Data) ->
+    cancel_typing_tick(Data#loop_data.typing_tick_ref),
     SessionRef = make_session_ref(Data),
     Results = lists:map(fun(TC) ->
         bc_obs:emit(tool_call_start, #{tool_name  => TC#bc_tool_call.name,
@@ -379,7 +395,8 @@ execute_tool_calls(Data) ->
     lists:foreach(fun(M) ->
         bc_session:append_message(Data#loop_data.session_pid, M)
     end, ToolMsgs),
-    NewData = Data#loop_data{tool_calls = [], iteration = Data#loop_data.iteration + 1},
+    NewData = Data#loop_data{tool_calls = [], iteration = Data#loop_data.iteration + 1,
+                             typing_tick_ref = undefined},
     {next_state, streaming, NewData}.
 
 run_tool(#bc_tool_call{name = Name, args = Args}, SessionRef) ->
