@@ -119,7 +119,8 @@ parse_response(Body) ->
     Decoded = jsx:decode(Body, [return_maps]),
     Choice  = hd(maps:get(<<"choices">>, Decoded, [#{}])),
     MsgMap  = maps:get(<<"message">>, Choice, #{}),
-    Content = maps:get(<<"content">>, MsgMap, <<>>),
+    RawContent = maps:get(<<"content">>, MsgMap, <<>>),
+    Content = bc_thinking:strip(RawContent),
     ToolCalls = maps:get(<<"tool_calls">>, MsgMap, []),
     #bc_message{
         id         = maps:get(<<"id">>, Decoded, <<>>),

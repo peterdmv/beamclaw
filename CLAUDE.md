@@ -634,6 +634,7 @@ beamclaw/
         bc_approval.erl
         bc_compactor.erl
         bc_scrubber.erl
+        bc_thinking.erl       %% strip LLM thinking/reasoning tags
         bc_tool_parser.erl
         bc_config.erl
         bc_workspace_templates.erl  %% seven default bootstrap file templates

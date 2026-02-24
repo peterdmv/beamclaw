@@ -404,6 +404,17 @@ All six OTP apps created, supervision trees defined, behaviours declared,
 | EUnit tests | ✅ | 8 new tests (26 total for bc_tool_workspace_memory_tests); 200 total |
 | Docs update | ✅ | CLAUDE.md, architecture.md, configuration.md |
 
+### Post-M20 — Strip LLM Thinking/Reasoning Tags ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| `bc_thinking.erl` | ✅ | Pure-function module; strips `<think>`, `<thinking>`, `<thought>`, `<antThinking>`, `<final>` tags |
+| Code block preservation | ✅ | Skips tags inside fenced (` ``` `/`~~~`) and inline (`` ` ``) code blocks |
+| Strict mode (unclosed tags) | ✅ | Truncates content from unclosed opening tag to prevent partial leak |
+| `bc_provider_openrouter` integration | ✅ | `bc_thinking:strip/1` applied in `parse_response/1` before history entry |
+| EUnit tests | ✅ | 17 tests: passthrough, all tag types, code preservation, strict mode, edge cases |
+| CLAUDE.md update | ✅ | `bc_thinking.erl` added to File Layout |
+
 ---
 
 ## Known Issues / Blockers
@@ -414,4 +425,4 @@ _None at this time._
 
 ## Last Updated
 
-2026-02-23 (Workspace memory bootstrap routing + memory flush — Post-M20)
+2026-02-24 (Strip LLM thinking/reasoning tags — Post-M20)
