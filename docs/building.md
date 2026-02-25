@@ -183,6 +183,17 @@ Verify with:
 beamclaw sandbox status
 ```
 
+**Docker deployments**: When running BeamClaw in Docker (sibling container pattern), the
+sandbox image must be built on the **host** (since sandbox containers run on the host Docker
+daemon). Alternatively, if the Docker socket is already mounted, you can build from inside
+the container:
+
+```bash
+docker exec beamclaw beamclaw-ctl sandbox build
+```
+
+See `docs/running.md` "Sandbox in Docker deployments" for the full setup guide.
+
 ---
 
 ## Creating a Release Tarball

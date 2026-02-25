@@ -24,7 +24,8 @@ FROM alpine:3.23
 
 # Erlang runtime C-library dependencies only — no Erlang package needed
 # because the OTP release from stage 1 bundles its own ERTS.
-RUN apk add --no-cache ncurses-libs openssl libstdc++ libgcc
+# docker-cli enables sandbox sibling containers when Docker socket is mounted.
+RUN apk add --no-cache ncurses-libs openssl libstdc++ libgcc docker-cli
 
 # Non-root user for principle-of-least-privilege
 RUN addgroup -S beamclaw && adduser -S beamclaw -G beamclaw -h /home/beamclaw
@@ -43,9 +44,9 @@ RUN printf '#!/bin/sh\nexec /opt/beamclaw/bin/beamclaw escript beamclaw-ctl "$@"
 
 USER beamclaw
 
-# Pre-create the data directory so Docker named volumes inherit beamclaw:beamclaw
-# ownership instead of defaulting to root:root on first mount.
-RUN mkdir -p /home/beamclaw/.beamclaw
+# Pre-create data + bridge socket directories so Docker named volumes inherit
+# beamclaw:beamclaw ownership instead of defaulting to root:root on first mount.
+RUN mkdir -p /home/beamclaw/.beamclaw /tmp/beamclaw-bridges
 
 WORKDIR /opt/beamclaw
 

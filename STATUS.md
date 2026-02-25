@@ -11,6 +11,7 @@ bootstrap file routing and pre-compaction memory flush (Post-M20) added.
 Memory search with BM25 + vector hybrid (M21–M23) is complete.
 Telegram photo/vision support (M24) is complete.
 Docker sandbox code execution with MCP tool bridge (M25–M30) is complete.
+Docker sibling container support for sandbox in Docker deployments (Post-M30) is complete.
 407 EUnit tests pass.
 
 ---
@@ -550,6 +551,18 @@ All six OTP apps created, supervision trees defined, behaviours declared,
 | docs/running.md update | ✅ | Sandbox CLI commands, setup and usage |
 | docs/building.md update | ✅ | Sandbox image build instructions |
 
+### Post-M30 — Docker Sibling Container Support ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| `Dockerfile` update | ✅ | Install `docker-cli` in runtime stage; pre-create bridge socket dir |
+| `docker-compose.yml` update | ✅ | Mount Docker socket + bridge dir; `group_add` for socket permissions |
+| `.env.example` update | ✅ | `DOCKER_GID` variable |
+| `docs/running.md` update | ✅ | Sandbox in Docker deployments subsection |
+| `docs/configuration.md` update | ✅ | Docker socket note in beamclaw_sandbox section |
+| `docs/building.md` update | ✅ | Docker deployment note for sandbox image build |
+| `CLAUDE.md` update | ✅ | Docker socket comment in Configuration section |
+
 ---
 
 ## Known Issues / Blockers
@@ -560,4 +573,4 @@ _None at this time._
 
 ## Last Updated
 
-2026-02-25 (Docker Sandbox Code Execution — M25–M30)
+2026-02-25 (Docker Sibling Container Support — Post-M30)

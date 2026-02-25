@@ -7,6 +7,10 @@ services:
       - "${BEAMCLAW_PORT:-18800}:18800"
     volumes:
       - beamclaw_data:/home/beamclaw/.beamclaw
+      - /var/run/docker.sock:/var/run/docker.sock    # Sandbox: host Docker access
+      - /tmp/beamclaw-bridges:/tmp/beamclaw-bridges  # Sandbox: bridge sockets
+    group_add:
+      - "${DOCKER_GID:-0}"   # Host docker group GID for socket access
     env_file:
       - .env
     healthcheck:

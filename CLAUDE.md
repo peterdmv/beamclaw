@@ -555,6 +555,8 @@ as the user_id, enabling cross-channel session sharing for single-user deploymen
 ]},
 {beamclaw_sandbox, [
     {enabled, false},                          %% opt-in; requires Docker
+                                               %% In Docker: mount host socket
+                                               %% -v /var/run/docker.sock:/var/run/docker.sock
     {docker_image, "beamclaw-sandbox:latest"},
     {scope, session},                          %% session | agent | shared
     {timeout_seconds, 60},

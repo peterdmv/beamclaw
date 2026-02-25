@@ -224,6 +224,9 @@ backend automatically falls back to `ram_copies`.
     %% Master switch — sandbox features require Docker.
     %% When false (default), bc_tool_exec is not registered and all
     %% sandbox features are disabled with zero overhead.
+    %% When running BeamClaw in Docker, the host Docker socket must be
+    %% mounted (-v /var/run/docker.sock:/var/run/docker.sock) for sandbox
+    %% to work. See docs/running.md "Sandbox in Docker deployments".
     {enabled, false},
 
     %% Docker image used for sandbox containers.

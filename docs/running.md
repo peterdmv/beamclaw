@@ -342,6 +342,56 @@ result = call_tool("read_file", path="/workspace/data.json")
 See `docs/configuration.md` for sandbox configuration options and
 `docs/architecture.md` for the full architecture description.
 
+#### Sandbox in Docker deployments (sibling containers)
+
+When BeamClaw itself runs in Docker, the sandbox uses the **sibling container** pattern:
+the host's Docker socket is mounted into the BeamClaw container so it can spawn sandbox
+containers as peers on the host Docker daemon.
+
+The `docker-compose.yml` already includes the necessary mounts. To enable:
+
+1. Find your host's Docker socket GID:
+
+```bash
+stat -c '%g' /var/run/docker.sock
+# e.g. 999
+```
+
+2. Set `DOCKER_GID` in `.env`:
+
+```bash
+DOCKER_GID=999
+```
+
+3. Build the sandbox image on the host (sandbox containers run on the host daemon):
+
+```bash
+docker build -t beamclaw-sandbox:latest \
+  -f apps/beamclaw_sandbox/priv/docker/Dockerfile.sandbox \
+  apps/beamclaw_sandbox/priv/docker/
+```
+
+4. Enable sandbox in `config/sys.docker.config`: set `{enabled, true}` in the
+   `beamclaw_sandbox` section.
+
+5. Rebuild and start:
+
+```bash
+docker compose up -d --build
+```
+
+6. Verify:
+
+```bash
+docker exec beamclaw beamclaw-ctl sandbox status
+# Should show: Docker: available, Image: ok
+docker exec beamclaw docker ps
+# Should list running containers (confirms Docker CLI works)
+```
+
+The bridge Unix sockets (`/tmp/beamclaw-bridges/`) are shared between the BeamClaw
+container and sandbox containers via a bind mount, so both can access the same sockets.
+
 ### Telegram Pairing (Access Control)
 
 By default, BeamClaw's Telegram channel uses **pairing** to control access.
