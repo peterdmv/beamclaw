@@ -25,7 +25,7 @@ FROM alpine:3.23
 # Erlang runtime C-library dependencies only — no Erlang package needed
 # because the OTP release from stage 1 bundles its own ERTS.
 # docker-cli enables sandbox sibling containers when Docker socket is mounted.
-RUN apk add --no-cache ncurses-libs openssl libstdc++ libgcc docker-cli
+RUN apk add --no-cache ncurses-libs openssl libstdc++ libgcc docker-cli su-exec
 
 # Non-root user for principle-of-least-privilege
 RUN addgroup -S beamclaw && adduser -S beamclaw -G beamclaw -h /home/beamclaw
@@ -42,11 +42,13 @@ COPY --from=builder --chown=beamclaw:beamclaw \
 RUN printf '#!/bin/sh\nexec /opt/beamclaw/bin/beamclaw escript beamclaw-ctl "$@"\n' \
     > /usr/local/bin/beamclaw-ctl && chmod +x /usr/local/bin/beamclaw-ctl
 
-USER beamclaw
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-# Pre-create data + bridge socket directories so Docker named volumes inherit
-# beamclaw:beamclaw ownership instead of defaulting to root:root on first mount.
-RUN mkdir -p /home/beamclaw/.beamclaw /tmp/beamclaw-bridges
+# Pre-create directories with correct ownership for non-compose (plain docker run) usage.
+# Bind mounts override these at runtime; the entrypoint fixes ownership in that case.
+RUN mkdir -p /home/beamclaw/.beamclaw /tmp/beamclaw-bridges && \
+    chown beamclaw:beamclaw /home/beamclaw/.beamclaw /tmp/beamclaw-bridges
 
 WORKDIR /opt/beamclaw
 
@@ -56,6 +58,7 @@ EXPOSE 18800
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD wget -qO- http://127.0.0.1:18800/health || exit 1
 
-# Run the node in foreground so Docker can capture stdout and manage lifecycle.
+# Start as root; entrypoint fixes bind-mount ownership then drops to beamclaw user.
 # Secrets are injected via -e flags at runtime — never baked into the image.
-ENTRYPOINT ["/opt/beamclaw/bin/beamclaw", "foreground"]
+ENTRYPOINT ["docker-entrypoint.sh"]
+CMD ["foreground"]
