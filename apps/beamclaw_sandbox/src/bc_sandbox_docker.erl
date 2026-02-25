@@ -124,9 +124,13 @@ env_args(Config) ->
     end, EnvVars).
 
 truncate_session_id(SessionId) when is_binary(SessionId) ->
-    %% Take first 8 chars for container naming
-    Prefix = binary_to_list(binary:part(SessionId, 0,
-                                        min(8, byte_size(SessionId)))),
+    %% Session IDs are <<"session-<hex>">>, skip the prefix to get the unique part
+    Stripped = case SessionId of
+        <<"session-", Rest/binary>> -> Rest;
+        Other -> Other
+    end,
+    Prefix = binary_to_list(binary:part(Stripped, 0,
+                                        min(8, byte_size(Stripped)))),
     %% Sanitize for Docker naming (alphanumeric + dash)
     [case C of
          C when C >= $a, C =< $z -> C;

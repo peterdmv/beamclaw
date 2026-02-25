@@ -158,3 +158,14 @@ build_args_test() ->
     Args = bc_sandbox_docker:build_args("/path/to/Dockerfile.sandbox", "myimg:latest"),
     ?assertEqual(["build", "-f", "/path/to/Dockerfile.sandbox",
                   "-t", "myimg:latest", "/path/to"], Args).
+
+%% ---------------------------------------------------------------------------
+%% container_name session-prefix stripping test
+%% ---------------------------------------------------------------------------
+
+container_name_strips_session_prefix_test() ->
+    Config = #{sandbox_key => {<<"session-a1b2c3d4e5f6">>, session}},
+    Name = bc_sandbox_docker:container_name(Config),
+    ?assert(lists:prefix("beamclaw-sbx-session-a1b2c3d4", Name)),
+    %% Must NOT contain "session-session"
+    ?assertEqual(nomatch, string:find(Name, "session-session")).

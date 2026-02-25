@@ -45,10 +45,11 @@ API:
     listen_socket    :: port() | undefined,
     client_socket    :: port() | undefined,
     bridge_buf       :: binary(),
-    status           :: starting | ready | executing | stopping | stopped,
+    status           :: starting | ready | executing | stopping | stopped | failed,
     config           :: map(),
     tool_bridge_fn   :: function() | undefined,
-    pending_exec     :: {pid(), reference()} | undefined
+    pending_exec     :: {pid(), reference()} | undefined,
+    error_msg        :: binary() | undefined
 }).
 
 start_link(Config) ->
@@ -114,7 +115,8 @@ init(Config) ->
         status         = starting,
         config         = FullConfig,
         tool_bridge_fn = undefined,
-        pending_exec   = undefined
+        pending_exec   = undefined,
+        error_msg      = undefined
     },
 
     %% Start container asynchronously
@@ -170,6 +172,9 @@ handle_call({exec_script, Script, Language, ToolBridgeFn}, From,
     {noreply, State#sandbox_state{status = executing,
                                   tool_bridge_fn = ToolBridgeFn,
                                   pending_exec = From}};
+handle_call({exec_script, _Script, _Language, _Fn}, _From,
+            #sandbox_state{status = failed, error_msg = Err} = State) ->
+    {reply, {error, {sandbox_failed, Err}}, State};
 handle_call({exec_script, _Script, _Language, _Fn}, _From,
             #sandbox_state{status = Status} = State) ->
     {reply, {error, {not_ready, Status}}, State};
@@ -231,30 +236,30 @@ handle_info(start_container, #sandbox_state{config = Config,
             RunArgs = bc_sandbox_docker:run_args(Config),
             RunCmd = string:join(["docker" | RunArgs], " ") ++ " 2>&1",
             CmdOutput = os:cmd(RunCmd),
-            case string:trim(CmdOutput) of
-                "" ->
+            Trimmed = string:trim(CmdOutput),
+            case is_docker_success(Trimmed) of
+                true ->
                     bc_obs:emit(sandbox_start, #{
                         sandbox_id => State#sandbox_state.id,
                         session_id => State#sandbox_state.session_id
                     }),
-                    %% Accept connections async
                     self() ! accept_bridge,
                     State#sandbox_state{status = ready,
                                         listen_socket = ListenSock};
-                _ContainerId ->
-                    %% Docker run returns container ID on success
-                    bc_obs:emit(sandbox_start, #{
-                        sandbox_id => State#sandbox_state.id,
-                        session_id => State#sandbox_state.session_id
-                    }),
-                    self() ! accept_bridge,
-                    State#sandbox_state{status = ready,
-                                        listen_socket = ListenSock}
+                false ->
+                    ErrBin = list_to_binary(Trimmed),
+                    logger:warning("[sandbox] docker run failed for ~s: ~s",
+                                   [State#sandbox_state.container_name, ErrBin]),
+                    gen_tcp:close(ListenSock),
+                    State#sandbox_state{status = failed, error_msg = ErrBin}
             end;
         {error, Reason} ->
-            logger:error("[sandbox] Failed to create bridge socket ~s: ~p",
-                         [SocketPath, Reason]),
-            State#sandbox_state{status = ready}
+            logger:warning("[sandbox] Bridge socket listen failed ~s: ~p",
+                           [SocketPath, Reason]),
+            State#sandbox_state{status = failed,
+                                error_msg = iolist_to_binary(
+                                    io_lib:format("Bridge socket failed: ~p",
+                                                  [Reason]))}
     end,
     {noreply, NewState};
 
@@ -337,3 +342,10 @@ process_bridge_buffer(#sandbox_state{bridge_buf = Buf} = State) ->
         need_more ->
             State
     end.
+
+is_docker_success("") -> false;
+is_docker_success(Output) ->
+    %% docker run -d prints a hex container ID on success (12 or 64 chars)
+    lists:all(fun(C) ->
+        (C >= $0 andalso C =< $9) orelse (C >= $a andalso C =< $f)
+    end, Output).
