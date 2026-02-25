@@ -48,6 +48,7 @@ Output:     _build/default/bin/beamclaw
 
 -define(VERSION, "0.1.0").
 -define(DAEMON_SNAME, beamclaw).
+-define(DAEMON_COOKIE, beamclaw_dev).
 -define(GATEWAY_PORT, 18800).
 
 %%--------------------------------------------------------------------
@@ -854,12 +855,21 @@ try_connect_daemon() ->
             not_running
     end.
 
+%% Set the Erlang cookie to match the daemon (vm.args: -setcookie beamclaw_dev).
+%% BEAMCLAW_COOKIE env var overrides; used by both ctl node and spawn_daemon.
+set_daemon_cookie() ->
+    Cookie = case os:getenv("BEAMCLAW_COOKIE") of
+        false -> ?DAEMON_COOKIE;
+        Val   -> list_to_atom(Val)
+    end,
+    erlang:set_cookie(node(), Cookie).
+
 %% Like ensure_ctl_node/0 but returns ok | {error, Reason} instead of halt(1).
 ensure_ctl_node_soft() ->
     Id   = integer_to_list(erlang:unique_integer([positive])),
     Name = list_to_atom("beamclaw_ctl_" ++ Id),
     case net_kernel:start([Name, shortnames]) of
-        {ok, _}                       -> ok;
+        {ok, _}                       -> set_daemon_cookie(), ok;
         {error, {already_started, _}} -> ok;
         {error, Reason}               -> {error, Reason}
     end.
@@ -890,7 +900,7 @@ ensure_ctl_node() ->
     Id   = integer_to_list(erlang:unique_integer([positive])),
     Name = list_to_atom("beamclaw_ctl_" ++ Id),
     case net_kernel:start([Name, shortnames]) of
-        {ok, _}                       -> ok;
+        {ok, _}                       -> set_daemon_cookie(), ok;
         {error, {already_started, _}} -> ok;
         {error, Reason} ->
             io:format(standard_error,
@@ -925,7 +935,13 @@ spawn_daemon() ->
            "application:set_env(beamclaw_gateway, channels, Chs2, [{persistent, true}]),"
            "application:ensure_all_started(beamclaw_gateway),"
            "receive after infinity -> ok end.",
-    DaemonArgs = ["-detached", "-noshell", "-sname", atom_to_list(?DAEMON_SNAME)]
+    Cookie = case os:getenv("BEAMCLAW_COOKIE") of
+        false -> atom_to_list(?DAEMON_COOKIE);
+        Val   -> Val
+    end,
+    DaemonArgs = ["-detached", "-noshell",
+                  "-sname", atom_to_list(?DAEMON_SNAME),
+                  "-setcookie", Cookie]
                  ++ PaArgs
                  ++ ConfigArgs
                  ++ ["-eval", Eval],
