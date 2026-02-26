@@ -1,0 +1,10 @@
+{application, beamclaw_a2a,
+ [{description,  "BeamClaw A2A (Agent2Agent) protocol implementation"},
+  {vsn,          "0.1.0"},
+  {registered,   [beamclaw_a2a_sup]},
+  {mod,          {beamclaw_a2a_app, []}},
+  {applications, [kernel, stdlib, crypto, inets, ssl, jsx, cowboy,
+                  beamclaw_core]},
+  {env,          []},
+  {modules,      []}
+ ]}.
