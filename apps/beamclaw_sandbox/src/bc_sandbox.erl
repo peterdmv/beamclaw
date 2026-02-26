@@ -234,6 +234,8 @@ handle_info(start_container, #sandbox_state{config = Config,
                                       {ifaddr, {local, SocketPath}}]),
     NewState = case ListenResult of
         {ok, ListenSock} ->
+            %% Make socket world-writable so sandbox user (uid 1000) can connect
+            file:change_mode(SocketPath, 8#0777),
             %% Start Docker container
             RunArgs = bc_sandbox_docker:run_args(Config),
             RunCmd = string:join(["docker" | RunArgs], " ") ++ " 2>&1",

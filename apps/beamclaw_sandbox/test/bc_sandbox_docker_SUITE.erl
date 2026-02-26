@@ -370,6 +370,14 @@ bridge_socket_permissions(Config) ->
     BridgeDir = proplists:get_value(bridge_dir, Config),
     SocketPath = filename:join(BridgeDir, ContainerName ++ ".sock"),
 
+    %% Verify socket mode includes world-write (0o777)
+    {ok, FileInfo} = file:read_file_info(SocketPath),
+    Mode = element(8, FileInfo),  %% #file_info.mode
+    %% Check other-write bit (8#0002) is set
+    ?assertNotEqual(0, Mode band 8#0002),
+    %% Check other-read bit (8#0004) is set
+    ?assertNotEqual(0, Mode band 8#0004),
+
     %% Verify we can connect to the socket (proves read/write access)
     case gen_tcp:connect({local, SocketPath}, 0,
                          [binary, {packet, raw}, {active, false}], 2000) of
