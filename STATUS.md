@@ -12,7 +12,7 @@ Memory search with BM25 + vector hybrid (M21–M23) is complete.
 Telegram photo/vision support (M24) is complete.
 Docker sandbox code execution with MCP tool bridge (M25–M30) is complete.
 Docker sibling container support for sandbox in Docker deployments (Post-M30) is complete.
-407 EUnit tests pass.
+409 EUnit tests pass.
 
 ---
 
@@ -556,12 +556,22 @@ All six OTP apps created, supervision trees defined, behaviours declared,
 | Task | Status | Notes |
 |------|--------|-------|
 | `Dockerfile` update | ✅ | Install `docker-cli` in runtime stage; pre-create bridge socket dir |
-| `docker-compose.yml` update | ✅ | Mount Docker socket + bridge dir; `group_add` for socket permissions |
-| `.env.example` update | ✅ | `DOCKER_GID` variable |
+| `docker-compose.yml` update | ✅ | Mount Docker socket + bridge dir |
 | `docs/running.md` update | ✅ | Sandbox in Docker deployments subsection |
 | `docs/configuration.md` update | ✅ | Docker socket note in beamclaw_sandbox section |
 | `docs/building.md` update | ✅ | Docker deployment note for sandbox image build |
 | `CLAUDE.md` update | ✅ | Docker socket comment in Configuration section |
+
+### Post-M30 — Sandbox in Docker E2E Verification + Fixes ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Entrypoint Docker socket group fix | ✅ | Auto-detect socket GID, create group, add beamclaw user; replaces `group_add`/`DOCKER_GID` |
+| `docker cp` → `docker exec` base64 | ✅ | `docker cp` fails on `--read-only` containers; use `docker exec` + base64 for script injection |
+| Bash → sh in sandbox | ✅ | Alpine sandbox image has `sh` not `bash`; `bc_sandbox_docker:exec_args/3` updated |
+| `docker-compose.yml` cleanup | ✅ | Removed `group_add` (entrypoint handles it); removed `DOCKER_GID` from `.env.example` |
+| `docs/running.md` update | ✅ | Simplified sandbox-in-Docker setup (no manual GID config) |
+| 409 EUnit tests pass | ✅ | All tests green including updated `exec_args_bash_test` |
 
 ---
 
@@ -573,4 +583,4 @@ _None at this time._
 
 ## Last Updated
 
-2026-02-25 (Docker Sibling Container Support — Post-M30)
+2026-02-26 (Sandbox in Docker E2E Verification + Fixes — Post-M30)

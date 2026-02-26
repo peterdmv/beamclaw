@@ -132,7 +132,10 @@ handle_call({exec_script, Script, Language, ToolBridgeFn}, From,
     MaxOutput = maps:get(max_output_bytes, Config,
                          application:get_env(beamclaw_sandbox,
                                              max_output_bytes, 1048576)),
-    %% Write script to temp file in container's /tmp
+    %% Write script to temp file in container's /tmp via docker exec.
+    %% We use base64 encoding to safely transfer arbitrary script content,
+    %% because `docker cp` fails on --read-only containers (it writes to the
+    %% rootfs layer, not to tmpfs mounts).
     ScriptName = "script_" ++ integer_to_list(erlang:unique_integer([positive])),
     Extension = case binary_to_list(Language) of
         "python" -> ".py";
@@ -141,13 +144,12 @@ handle_call({exec_script, Script, Language, ToolBridgeFn}, From,
     end,
     ScriptPath = "/tmp/" ++ ScriptName ++ Extension,
 
-    %% Use docker cp to copy script into container
-    TmpLocal = "/tmp/bc_sbx_" ++ ScriptName ++ Extension,
-    ok = file:write_file(TmpLocal, Script),
-    CpCmd = "docker cp " ++ TmpLocal ++ " " ++ Name ++ ":" ++ ScriptPath
-            ++ " 2>&1",
-    _ = os:cmd(CpCmd),
-    _ = file:delete(TmpLocal),
+    %% Base64 is safe for shell embedding (only [A-Za-z0-9+/=]).
+    B64 = binary_to_list(base64:encode(Script)),
+    WriteCmd = "docker exec " ++ Name
+               ++ " sh -c 'echo " ++ B64 ++ " | base64 -d > "
+               ++ ScriptPath ++ "' 2>&1",
+    _ = os:cmd(WriteCmd),
 
     %% Execute script via docker exec with timeout
     LangStr = binary_to_list(Language),

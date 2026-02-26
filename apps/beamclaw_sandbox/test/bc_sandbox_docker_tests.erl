@@ -110,7 +110,7 @@ exec_args_python_test() ->
 
 exec_args_bash_test() ->
     Args = bc_sandbox_docker:exec_args("container-1", "/tmp/script.sh", "bash"),
-    ?assertEqual(["exec", "container-1", "bash", "/tmp/script.sh"], Args).
+    ?assertEqual(["exec", "container-1", "sh", "/tmp/script.sh"], Args).
 
 exec_args_default_python_test() ->
     Args = bc_sandbox_docker:exec_args("container-1", "/tmp/script.py", "other"),

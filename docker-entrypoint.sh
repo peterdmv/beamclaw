@@ -9,5 +9,18 @@ for dir in /tmp/beamclaw-bridges /home/beamclaw/.beamclaw; do
     fi
 done
 
+# Add beamclaw user to the Docker socket's group so sandbox containers can be
+# spawned after privilege drop. This is the standard pattern used by Jenkins,
+# GitLab Runner, etc. for sibling container access.
+if [ -S /var/run/docker.sock ]; then
+    DOCKER_SOCK_GID=$(stat -c '%g' /var/run/docker.sock)
+    # Create a group with the socket's GID if it doesn't exist, then add beamclaw
+    if ! getent group "$DOCKER_SOCK_GID" >/dev/null 2>&1; then
+        addgroup -S -g "$DOCKER_SOCK_GID" docker_host 2>/dev/null || true
+    fi
+    DOCKER_GROUP=$(getent group "$DOCKER_SOCK_GID" | cut -d: -f1)
+    addgroup beamclaw "$DOCKER_GROUP" 2>/dev/null || true
+fi
+
 # Drop to beamclaw user and exec the OTP release
 exec su-exec beamclaw /opt/beamclaw/bin/beamclaw "$@"

@@ -348,22 +348,11 @@ When BeamClaw itself runs in Docker, the sandbox uses the **sibling container** 
 the host's Docker socket is mounted into the BeamClaw container so it can spawn sandbox
 containers as peers on the host Docker daemon.
 
-The `docker-compose.yml` already includes the necessary mounts. To enable:
+The `docker-compose.yml` already includes the necessary mounts. The entrypoint
+script automatically detects the Docker socket's group and adds the `beamclaw`
+user to it, so no manual GID configuration is needed. To enable:
 
-1. Find your host's Docker socket GID:
-
-```bash
-stat -c '%g' /var/run/docker.sock
-# e.g. 999
-```
-
-2. Set `DOCKER_GID` in `.env`:
-
-```bash
-DOCKER_GID=999
-```
-
-3. Build the sandbox image on the host (sandbox containers run on the host daemon):
+1. Build the sandbox image on the host (sandbox containers run on the host daemon):
 
 ```bash
 docker build -t beamclaw-sandbox:latest \
@@ -371,16 +360,16 @@ docker build -t beamclaw-sandbox:latest \
   apps/beamclaw_sandbox/priv/docker/
 ```
 
-4. Enable sandbox in `config/sys.docker.config`: set `{enabled, true}` in the
+2. Enable sandbox in `config/sys.docker.config`: set `{enabled, true}` in the
    `beamclaw_sandbox` section.
 
-5. Rebuild and start:
+3. Rebuild and start:
 
 ```bash
 docker compose up -d --build
 ```
 
-6. Verify:
+4. Verify:
 
 ```bash
 docker exec beamclaw beamclaw-ctl sandbox status

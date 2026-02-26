@@ -61,7 +61,7 @@ run_args(Config) ->
 exec_args(ContainerName, ScriptPath, Language) ->
     Interpreter = case Language of
         "python" -> "python3";
-        "bash"   -> "bash";
+        "bash"   -> "sh";
         _        -> "python3"
     end,
     ["exec", ContainerName, Interpreter, ScriptPath].
