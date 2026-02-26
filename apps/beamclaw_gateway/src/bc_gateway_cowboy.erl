@@ -28,6 +28,8 @@ Routes:
   POST /v1/chat/completions    → bc_http_completions_h
   GET  /ws                     → bc_ws_h
   POST /webhook/telegram       → bc_webhook_telegram_h
+  GET  /.well-known/agent.json → bc_a2a_http_h  (A2A Agent Card)
+  POST /a2a                    → bc_a2a_http_h  (A2A JSON-RPC)
 """.
 
 -behaviour(gen_server).
@@ -46,11 +48,13 @@ init([]) ->
     end,
     Routes = cowboy_router:compile([
         {'_', [
-            {"/health",               bc_http_health_h,      []},
-            {"/metrics",              bc_http_metrics_h,     []},
-            {"/v1/chat/completions",  bc_http_completions_h, []},
-            {"/ws",                   bc_ws_h,               []},
-            {"/webhook/telegram",     bc_webhook_telegram_h, []}
+            {"/health",                    bc_http_health_h,      []},
+            {"/metrics",                   bc_http_metrics_h,     []},
+            {"/v1/chat/completions",       bc_http_completions_h, []},
+            {"/ws",                        bc_ws_h,               []},
+            {"/webhook/telegram",          bc_webhook_telegram_h, []},
+            {"/.well-known/agent.json",    bc_a2a_http_h,         []},
+            {"/a2a",                       bc_a2a_http_h,         []}
         ]}
     ]),
     case cowboy:start_clear(bc_http_listener,

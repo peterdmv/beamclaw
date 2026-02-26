@@ -4,7 +4,7 @@
   {registered,   [bc_rate_limiter, beamclaw_gateway_sup]},
   {mod,          {beamclaw_gateway_app, []}},
   {applications, [kernel, stdlib, crypto, inets, jsx, cowboy,
-                  beamclaw_core, beamclaw_obs]},
+                  beamclaw_core, beamclaw_a2a, beamclaw_obs]},
   {env,          []},
   {modules,      []}
  ]}.

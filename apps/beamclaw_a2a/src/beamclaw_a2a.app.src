@@ -1,0 +1,9 @@
+{application, beamclaw_a2a,
+ [{description,  "A2A (Agent2Agent) protocol support for BeamClaw"},
+  {vsn,          "0.1.0"},
+  {registered,   [bc_a2a_task_manager]},
+  {mod,          {beamclaw_a2a_app, []}},
+  {applications, [kernel, stdlib, jsx, beamclaw_obs, beamclaw_core]},
+  {env,          []},
+  {modules,      []}
+ ]}.
