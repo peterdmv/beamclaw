@@ -12,7 +12,8 @@ Memory search with BM25 + vector hybrid (M21–M23) is complete.
 Telegram photo/vision support (M24) is complete.
 Docker sandbox code execution with MCP tool bridge (M25–M30) is complete.
 Docker sibling container support for sandbox in Docker deployments (Post-M30) is complete.
-409 EUnit tests pass.
+Common Test E2E/integration suites added (Post-M30).
+407 EUnit tests + 19 CT tests pass (426 total).
 
 ---
 
@@ -573,6 +574,19 @@ All six OTP apps created, supervision trees defined, behaviours declared,
 | `docs/running.md` update | ✅ | Simplified sandbox-in-Docker setup (no manual GID config) |
 | 409 EUnit tests pass | ✅ | All tests green including updated `exec_args_bash_test` |
 
+### Post-M30 — Common Test E2E/Integration Suites ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| `rebar.config` CT config | ✅ | `ct_opts` with logdir and verbose |
+| `bc_sandbox_docker_SUITE` | ✅ | 11 tests: container lifecycle, script execution (python/sh/timeout/large), bridge socket; auto-skip when Docker absent |
+| `bc_http_integration_SUITE` | ✅ | 4 tests: health, completions sync, bad JSON, rate limiting; mock LLM provider |
+| `bc_agentic_loop_SUITE` | ✅ | 4 tests: smoke roundtrip, tool crash, tool call+result, session queue drains; replaces bc_smoke_tests |
+| `bc_smoke_tests.erl` deleted | ✅ | Tests migrated to bc_agentic_loop_SUITE with polling helpers (no timer:sleep) |
+| CLAUDE.md Testing Policy | ✅ | 3-tier testing table, CT commands, testing requirements per change type |
+| `docs/building.md` update | ✅ | CT suite documentation, testing tiers, testing policy |
+| 407 EUnit + 19 CT pass | ✅ | 426 total tests (2 EUnit removed: smoke tests migrated to CT) |
+
 ---
 
 ## Known Issues / Blockers
@@ -583,4 +597,4 @@ _None at this time._
 
 ## Last Updated
 
-2026-02-26 (Sandbox in Docker E2E Verification + Fixes — Post-M30)
+2026-02-26 (Common Test E2E/Integration Suites — Post-M30)

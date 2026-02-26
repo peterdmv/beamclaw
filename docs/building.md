@@ -69,12 +69,46 @@ beamclaw doctor
 
 ## Run Tests
 
+### Unit Tests (EUnit)
+
 ```bash
 rebar3 eunit                        # all apps
 rebar3 eunit --module=bc_scrubber   # single module
 ```
 
-Expected: 407+ tests passing, 0 failures.
+Expected: 407+ tests passing, 0 failures. Runs in < 5 seconds, no external deps.
+
+### Integration Tests (Common Test)
+
+```bash
+# Run all CT suites (Docker suites auto-skip if Docker unavailable)
+rebar3 ct --dir=apps/beamclaw_core/test --suite=bc_agentic_loop_SUITE
+rebar3 ct --dir=apps/beamclaw_gateway/test --suite=bc_http_integration_SUITE
+rebar3 ct --dir=apps/beamclaw_sandbox/test --suite=bc_sandbox_docker_SUITE
+```
+
+| Suite | Tier | Time | Requires |
+|---|---|---|---|
+| `bc_agentic_loop_SUITE` | Integration | < 10s | OTP apps only |
+| `bc_http_integration_SUITE` | Integration | < 15s | OTP apps only |
+| `bc_sandbox_docker_SUITE` | Docker E2E | 1–3 min | Docker + sandbox image |
+
+The Docker E2E suite self-skips with `{skip, "Docker not available"}` when Docker
+or the sandbox image is absent, so it is safe to run unconditionally.
+
+### Testing policy
+
+| Change type | Required tests |
+|---|---|
+| Pure-function module | `rebar3 eunit` |
+| Multi-module OTP interaction (session + loop + tools) | `rebar3 eunit` + CT integration suite |
+| HTTP/WebSocket handler | `rebar3 eunit` + `bc_http_integration_SUITE` |
+| Docker/sandbox/external process | `rebar3 eunit` + `bc_sandbox_docker_SUITE` |
+
+**When to run**:
+- Before every commit: `rebar3 eunit` (< 5s)
+- After gateway/core changes: `rebar3 eunit` + CT integration suites (< 30s)
+- After Docker/sandbox changes or before release: all tests including Docker E2E (1–3 min)
 
 ---
 

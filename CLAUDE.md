@@ -86,6 +86,36 @@ Before merging any PR, verify:
       (new commands → `running.md`; new config → `configuration.md`;
       architecture change → `architecture.md`; build change → `building.md`)
 
+## Testing Policy
+
+Three tiers of automated tests:
+
+| Tier | Framework | Speed | External deps | Command |
+|------|-----------|-------|---------------|---------|
+| 1 — Unit | EUnit | < 5s | None | `rebar3 eunit` |
+| 2 — Integration | CT | < 30s | OTP apps only | `rebar3 ct --dir=apps/<app>/test --suite=<suite>` |
+| 3 — Docker E2E | CT | 1–3 min | Docker + sandbox image | `rebar3 ct --dir=apps/beamclaw_sandbox/test --suite=bc_sandbox_docker_SUITE` |
+
+CT suites:
+
+| Suite | App | Tier | Tests |
+|---|---|---|---|
+| `bc_agentic_loop_SUITE` | `beamclaw_core` | 2 | Session + loop + provider round-trip |
+| `bc_http_integration_SUITE` | `beamclaw_gateway` | 2 | Cowboy HTTP handlers end-to-end |
+| `bc_sandbox_docker_SUITE` | `beamclaw_sandbox` | 3 | Docker container lifecycle, script execution, bridge |
+
+**When to run**:
+- Before every commit: `rebar3 eunit`
+- After gateway/core changes: `rebar3 eunit` + CT integration suites
+- After Docker/sandbox changes or before release: all tests including Docker E2E
+
+| Change type | Required tests |
+|---|---|
+| Pure-function module | EUnit |
+| Multi-module OTP interaction (session + loop + tools) | CT integration suite |
+| HTTP/WebSocket handler | CT integration suite |
+| Docker/sandbox/external process | CT Docker E2E suite |
+
 ## Technology Stack
 
 - **Language/Runtime**: Erlang/OTP 28
@@ -100,8 +130,9 @@ Before merging any PR, verify:
 
 ```bash
 rebar3 compile          # compile all apps
-rebar3 eunit            # run tests
+rebar3 eunit            # run unit tests (< 5s)
 rebar3 eunit --module=<mod>
+rebar3 ct --dir=apps/<app>/test --suite=<suite>  # run CT integration/E2E suite
 rebar3 shell            # start REPL with all apps
 rebar3 clean
 rebar3 release
