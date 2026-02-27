@@ -16,7 +16,7 @@
 
 -module(bc_embedding).
 -moduledoc """
-Embedding API client via httpc (OpenAI-compatible /v1/embeddings).
+Embedding API client via hackney (OpenAI-compatible /v1/embeddings).
 
 API key resolved at call time from environment variables — never stored or logged.
 Supports BEAMCLAW_EMBEDDING_API_KEY (fallback: OPENAI_API_KEY).
@@ -41,17 +41,17 @@ embed_batch(Texts) when is_list(Texts), length(Texts) > 0 ->
         ApiKey ->
             BaseUrl = resolve_base_url(),
             Model   = resolve_model(),
-            Url     = BaseUrl ++ "/embeddings",
+            Url     = list_to_binary(BaseUrl ++ "/embeddings"),
             Body    = jsx:encode(#{model => list_to_binary(Model),
                                    input => Texts}),
-            Headers = [{"Authorization", "Bearer " ++ ApiKey},
-                       {"Content-Type", "application/json"}],
-            case httpc:request(post, {Url, Headers, "application/json", Body},
-                               [{timeout, 30000}, {connect_timeout, 5000}],
-                               [{body_format, binary}]) of
-                {ok, {{_, 200, _}, _, RespBody}} ->
+            Headers = [{<<"Authorization">>, list_to_binary("Bearer " ++ ApiKey)},
+                       {<<"Content-Type">>, <<"application/json">>}],
+            case hackney:request(post, Url, Headers, Body,
+                                 [{recv_timeout, 30000}, {connect_timeout, 5000},
+                                  with_body]) of
+                {ok, 200, _RespHeaders, RespBody} ->
                     parse_embedding_response(RespBody);
-                {ok, {{_, Status, _}, _, RespBody}} ->
+                {ok, Status, _RespHeaders, RespBody} ->
                     {error, {http_error, Status, RespBody}};
                 {error, Reason} ->
                     {error, {request_failed, Reason}}

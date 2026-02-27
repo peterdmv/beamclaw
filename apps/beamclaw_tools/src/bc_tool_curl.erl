@@ -41,12 +41,12 @@ execute(#{<<"url">> := Url} = Args, _Session, _Context) ->
     Method  = maps:get(<<"method">>,  Args, <<"GET">>),
     Headers = maps:get(<<"headers">>, Args, #{}),
     Body    = maps:get(<<"body">>,    Args, <<>>),
-    HList   = maps:to_list(Headers),
-    Req     = {binary_to_list(Url), HList, "application/json", Body},
+    HList   = [{K, V} || {K, V} <- maps:to_list(Headers)],
     MethodAtom = list_to_atom(string:lowercase(binary_to_list(Method))),
-    case httpc:request(MethodAtom, Req,
-                       [{timeout, 30000}, {connect_timeout, 10000}], []) of
-        {ok, {{_, StatusCode, _}, _RespHeaders, RespBody}} ->
+    case hackney:request(MethodAtom, Url, HList, Body,
+                         [{recv_timeout, 30000}, {connect_timeout, 10000},
+                          with_body]) of
+        {ok, StatusCode, _RespHeaders, RespBody} ->
             Result = iolist_to_binary(io_lib:format("~p\n~s", [StatusCode, RespBody])),
             {ok, Result};
         {error, Reason} ->

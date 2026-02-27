@@ -3,7 +3,7 @@
   {vsn,          "0.1.0"},
   {registered,   [bc_rate_limiter, beamclaw_gateway_sup]},
   {mod,          {beamclaw_gateway_app, []}},
-  {applications, [kernel, stdlib, crypto, inets, jsx, cowboy,
+  {applications, [kernel, stdlib, crypto, jsx, cowboy, hackney,
                   beamclaw_core, beamclaw_obs]},
   {env,          []},
   {modules,      []}

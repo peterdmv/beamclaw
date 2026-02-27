@@ -3,7 +3,7 @@
   {vsn,          "0.1.0"},
   {registered,   [bc_tool_registry]},
   {mod,          {beamclaw_tools_app, []}},
-  {applications, [kernel, stdlib, inets, ssl, hackney, beamclaw_obs]},
+  {applications, [kernel, stdlib, hackney, beamclaw_obs]},
   {env,          []},
   {modules,      []}
  ]}.

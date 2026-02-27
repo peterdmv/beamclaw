@@ -122,12 +122,12 @@ code_change(_OldVsn, State, _) -> {ok, State}.
 %% Internal
 
 delete_webhook(#{token := Token}) ->
-    Url = "https://api.telegram.org/bot" ++ Token ++ "/deleteWebhook",
-    case httpc:request(post, {Url, [], "application/json", <<"{}">>},
-                       [{timeout, 10000}], []) of
-        {ok, {{_, 200, _}, _, _}} ->
+    Url = list_to_binary("https://api.telegram.org/bot" ++ Token ++ "/deleteWebhook"),
+    case hackney:request(post, Url, [{<<"content-type">>, <<"application/json">>}],
+                         <<"{}">> , [{recv_timeout, 10000}, with_body]) of
+        {ok, 200, _, _} ->
             logger:info("[telegram] webhook deleted (long_poll mode)");
-        {ok, {{_, Code, _}, _, RBody}} ->
+        {ok, Code, _, RBody} ->
             logger:warning("[telegram] deleteWebhook failed: ~p ~s",
                            [Code, RBody]);
         {error, Reason} ->
@@ -135,13 +135,14 @@ delete_webhook(#{token := Token}) ->
     end.
 
 get_updates(Offset, #{token := Token}) ->
-    Url = "https://api.telegram.org/bot" ++ Token ++
-          "/getUpdates?offset=" ++ integer_to_list(Offset) ++ "&timeout=30",
-    case httpc:request(get, {Url, []}, [{timeout, 35000}], []) of
-        {ok, {{_, 200, _}, _, Body}} ->
-            Decoded = jsx:decode(iolist_to_binary(Body), [return_maps]),
+    Url = list_to_binary("https://api.telegram.org/bot" ++ Token ++
+          "/getUpdates?offset=" ++ integer_to_list(Offset) ++ "&timeout=30"),
+    case hackney:request(get, Url, [], <<>>,
+                         [{recv_timeout, 35000}, with_body]) of
+        {ok, 200, _, Body} ->
+            Decoded = jsx:decode(Body, [return_maps]),
             maps:get(<<"result">>, Decoded, []);
-        {ok, {{_, Code, _}, _, RBody}} ->
+        {ok, Code, _, RBody} ->
             logger:warning("[telegram] getUpdates failed: ~p ~s", [Code, RBody]),
             [];
         {error, Reason} ->
@@ -319,33 +320,36 @@ resolve_token() ->
     bc_config:resolve(maps:get(token, TgConfig, {env, "TELEGRAM_BOT_TOKEN"})).
 
 send_message(ChatId, Text, #{token := Token}) ->
-    Url  = "https://api.telegram.org/bot" ++ Token ++ "/sendMessage",
+    Url  = list_to_binary("https://api.telegram.org/bot" ++ Token ++ "/sendMessage"),
     Body = jsx:encode(#{chat_id => ChatId, text => Text}),
-    case httpc:request(post, {Url, [], "application/json", Body}, [], []) of
-        {ok, {{_, 200, _}, _, _}} -> ok;
-        {ok, {{_, Code, _}, _, RBody}} ->
+    case hackney:request(post, Url, [{<<"content-type">>, <<"application/json">>}],
+                         Body, [with_body]) of
+        {ok, 200, _, _} -> ok;
+        {ok, Code, _, RBody} ->
             logger:warning("[telegram] sendMessage failed: ~p ~s", [Code, RBody]);
         {error, Reason} ->
             logger:warning("[telegram] sendMessage error: ~p", [Reason])
     end.
 
 send_action(ChatId, Action, #{token := Token}) ->
-    Url  = "https://api.telegram.org/bot" ++ Token ++ "/sendChatAction",
+    Url  = list_to_binary("https://api.telegram.org/bot" ++ Token ++ "/sendChatAction"),
     Body = jsx:encode(#{chat_id => ChatId, action => Action}),
-    case httpc:request(post, {Url, [], "application/json", Body}, [], []) of
-        {ok, {{_, 200, _}, _, _}} -> ok;
-        {ok, {{_, Code, _}, _, RBody}} ->
+    case hackney:request(post, Url, [{<<"content-type">>, <<"application/json">>}],
+                         Body, [with_body]) of
+        {ok, 200, _, _} -> ok;
+        {ok, Code, _, RBody} ->
             logger:warning("[telegram] sendChatAction failed: ~p ~s", [Code, RBody]);
         {error, Reason} ->
             logger:warning("[telegram] sendChatAction error: ~p", [Reason])
     end.
 
 edit_message(ChatId, MessageId, Text, #{token := Token}) ->
-    Url  = "https://api.telegram.org/bot" ++ Token ++ "/editMessageText",
+    Url  = list_to_binary("https://api.telegram.org/bot" ++ Token ++ "/editMessageText"),
     Body = jsx:encode(#{chat_id => ChatId, message_id => MessageId, text => Text}),
-    case httpc:request(post, {Url, [], "application/json", Body}, [], []) of
-        {ok, {{_, 200, _}, _, _}} -> ok;
-        {ok, {{_, Code, _}, _, RBody}} ->
+    case hackney:request(post, Url, [{<<"content-type">>, <<"application/json">>}],
+                         Body, [with_body]) of
+        {ok, 200, _, _} -> ok;
+        {ok, Code, _, RBody} ->
             logger:warning("[telegram] editMessageText failed: ~p ~s", [Code, RBody]);
         {error, Reason} ->
             logger:warning("[telegram] editMessageText error: ~p", [Reason])

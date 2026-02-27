@@ -88,31 +88,32 @@ mime_from_path(FilePath) ->
 %% Internal
 
 get_file_path(FileId, Token) ->
-    Url = "https://api.telegram.org/bot" ++ Token ++
-          "/getFile?file_id=" ++ binary_to_list(FileId),
-    case httpc:request(get, {Url, []}, [{timeout, 10000}], []) of
-        {ok, {{_, 200, _}, _, Body}} ->
-            Decoded = jsx:decode(iolist_to_binary(Body), [return_maps]),
+    Url = list_to_binary("https://api.telegram.org/bot" ++ Token ++
+          "/getFile?file_id=" ++ binary_to_list(FileId)),
+    case hackney:request(get, Url, [], <<>>,
+                         [{recv_timeout, 10000}, with_body]) of
+        {ok, 200, _, Body} ->
+            Decoded = jsx:decode(Body, [return_maps]),
             Result = maps:get(<<"result">>, Decoded, #{}),
             case maps:get(<<"file_path">>, Result, undefined) of
                 undefined -> {error, no_file_path};
                 Path      -> {ok, Path}
             end;
-        {ok, {{_, Code, _}, _, _}} ->
+        {ok, Code, _, _} ->
             {error, {http_status, Code}};
         {error, Reason} ->
             {error, Reason}
     end.
 
 download_file(FilePath, Token) ->
-    Url = "https://api.telegram.org/file/bot" ++ Token ++
-          "/" ++ binary_to_list(iolist_to_binary(FilePath)),
-    case httpc:request(get, {Url, []}, [{timeout, 10000}],
-                       [{body_format, binary}]) of
-        {ok, {{_, 200, _}, _, ImageBin}} ->
+    Url = list_to_binary("https://api.telegram.org/file/bot" ++ Token ++
+          "/" ++ binary_to_list(iolist_to_binary(FilePath))),
+    case hackney:request(get, Url, [], <<>>,
+                         [{recv_timeout, 10000}, with_body]) of
+        {ok, 200, _, ImageBin} ->
             MimeType = mime_from_path(iolist_to_binary(FilePath)),
             {ok, MimeType, ImageBin};
-        {ok, {{_, Code, _}, _, _}} ->
+        {ok, Code, _, _} ->
             {error, {download_failed, Code}};
         {error, Reason} ->
             {error, Reason}

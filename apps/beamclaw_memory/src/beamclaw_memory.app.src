@@ -3,7 +3,8 @@
   {vsn,          "0.1.0"},
   {registered,   []},
   {mod,          {beamclaw_memory_app, []}},
-  {applications, [kernel, stdlib, mnesia, inets, ssl, crypto, beamclaw_obs]},
+  {applications, [kernel, stdlib, mnesia, crypto, hackney,
+                  beamclaw_obs]},
   {env,          []},
   {modules,      []}
  ]}.
