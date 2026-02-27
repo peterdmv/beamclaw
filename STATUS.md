@@ -13,7 +13,8 @@ Telegram photo/vision support (M24) is complete.
 Docker sandbox code execution with MCP tool bridge (M25–M30) is complete.
 Docker sibling container support for sandbox in Docker deployments (Post-M30) is complete.
 Common Test E2E/integration suites added (Post-M30).
-407 EUnit tests + 19 CT tests pass (426 total).
+`delete_bootstrap` workspace_memory action + `delete_file` built-in tool added (Post-M30).
+415 EUnit tests + 19 CT tests pass (434 total).
 
 ---
 
@@ -587,6 +588,19 @@ All six OTP apps created, supervision trees defined, behaviours declared,
 | `docs/building.md` update | ✅ | CT suite documentation, testing tiers, testing policy |
 | 407 EUnit + 19 CT pass | ✅ | 426 total tests (2 EUnit removed: smoke tests migrated to CT) |
 
+### Post-M30 — `delete_bootstrap` Action + `delete_file` Tool ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| `bc_tool_workspace_memory` `delete_bootstrap` action | ✅ | Delete bootstrap files (IDENTITY/USER/SOUL/TOOLS/AGENTS/BOOTSTRAP.md) |
+| `validate_delete_bootstrap_file/1` helper | ✅ | Allowlist includes BOOTSTRAP.md (unlike update_bootstrap) |
+| `bc_tool_delete_file` | ✅ | New built-in tool; `requires_approval = true`, `min_autonomy = supervised` |
+| `bc_tool_registry` update | ✅ | 8 built-in tools (added delete_file) |
+| BOOTSTRAP.md template fix | ✅ | Instructions now use `delete_bootstrap` action instead of write_file |
+| TOOLS.md template update | ✅ | Added `delete_file` to built-in tools list |
+| EUnit tests | ✅ | 8 new tests (3 delete_file + 4 delete_bootstrap + 1 missing file); 415 EUnit + 19 CT = 434 total |
+| CLAUDE.md update | ✅ | File Layout, tool implementations list |
+
 ---
 
 ## Known Issues / Blockers
@@ -597,4 +611,4 @@ _None at this time._
 
 ## Last Updated
 
-2026-02-26 (Common Test E2E/Integration Suites — Post-M30)
+2026-02-27 (`delete_bootstrap` Action + `delete_file` Tool — Post-M30)

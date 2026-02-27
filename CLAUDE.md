@@ -307,7 +307,7 @@ Implementations: `bc_provider_openrouter`, `bc_provider_openai`.
 -callback min_autonomy() -> autonomy_level().
 ```
 
-Implementations: `bc_tool_terminal`, `bc_tool_bash`, `bc_tool_curl`, `bc_tool_jq`, `bc_tool_read_file`, `bc_tool_write_file`, `bc_tool_workspace_memory` (MEMORY.md + daily logs + bootstrap files), `bc_tool_exec` (sandboxed code execution — in `beamclaw_sandbox`, registered conditionally).
+Implementations: `bc_tool_terminal`, `bc_tool_bash`, `bc_tool_curl`, `bc_tool_jq`, `bc_tool_read_file`, `bc_tool_write_file`, `bc_tool_delete_file`, `bc_tool_workspace_memory` (MEMORY.md + daily logs + bootstrap files + delete), `bc_tool_exec` (sandboxed code execution — in `beamclaw_sandbox`, registered conditionally).
 
 ### `bc_channel` — Messaging channel abstraction (`beamclaw_core`)
 
@@ -717,6 +717,7 @@ beamclaw/
       bc_tool_jq.erl
       bc_tool_read_file.erl
       bc_tool_write_file.erl
+      bc_tool_delete_file.erl
       bc_tool_workspace_memory.erl  %% agent MEMORY.md + daily logs + bootstrap files + search
       bc_workspace_path.erl         %% pure path resolution + memory dir (avoids dep cycle)
     beamclaw_sandbox/

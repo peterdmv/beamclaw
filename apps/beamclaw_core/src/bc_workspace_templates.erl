@@ -85,6 +85,7 @@ template(<<"TOOLS.md">>) ->
       "- **terminal** — Interactive terminal for long-running processes.\n"
       "- **read_file** — Read file contents. No approval needed.\n"
       "- **write_file** — Write/overwrite files. Requires approval.\n"
+      "- **delete_file** — Delete a file. Requires approval.\n"
       "- **curl** — HTTP requests. Useful for APIs and web content.\n"
       "- **jq** — Process JSON data.\n"
       "- **workspace_memory** — Read/update your MEMORY.md and daily logs.\n"
@@ -241,8 +242,8 @@ template(<<"BOOTSTRAP.md">>) ->
       "Once you feel settled — you have a name, you know your user, and\n"
       "your identity files reflect who you are — delete this file.\n"
       "It's served its purpose. You're no longer bootstrapping.\n\n"
-      "Use the write_file tool to delete BOOTSTRAP.md, or ask your user\n"
-      "to remove it from your workspace directory.\n">>;
+      "Use the workspace_memory tool with the delete_bootstrap action\n"
+      "and file set to BOOTSTRAP.md to remove this file.\n">>;
 
 template(_) ->
     <<>>.
