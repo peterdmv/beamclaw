@@ -150,3 +150,41 @@ scrub_result_clean_content_test() ->
                         content = <<"some file content">>},
     Scrubbed = bc_scrubber:scrub_result(R),
     ?assertEqual(<<"some file content">>, Scrubbed#bc_tool_result.content).
+
+%% ---- scrub/1 — env var references preserved ----
+
+token_env_var_passthrough_test() ->
+    ?assertEqual(<<"token=$FINNHUB_TOKEN">>,
+                 bc_scrubber:scrub(<<"token=$FINNHUB_TOKEN">>)).
+
+api_key_env_var_passthrough_test() ->
+    ?assertEqual(<<"api_key=$MY_KEY">>,
+                 bc_scrubber:scrub(<<"api_key=$MY_KEY">>)).
+
+password_env_var_passthrough_test() ->
+    ?assertEqual(<<"password=$DB_PASS">>,
+                 bc_scrubber:scrub(<<"password=$DB_PASS">>)).
+
+secret_env_var_passthrough_test() ->
+    ?assertEqual(<<"secret=$MY_SECRET">>,
+                 bc_scrubber:scrub(<<"secret=$MY_SECRET">>)).
+
+token_real_value_still_scrubbed_test() ->
+    R = bc_scrubber:scrub(<<"token=abc123xyz">>),
+    ?assert(binary:match(R, <<"[REDACTED]">>) =/= nomatch),
+    ?assert(binary:match(R, <<"abc123xyz">>) =:= nomatch).
+
+%% ---- scrub_map/1 ----
+
+scrub_map_test() ->
+    M = #{<<"command">> => <<"curl -H 'token=real_secret' http://example.com">>},
+    R = bc_scrubber:scrub_map(M),
+    ?assert(binary:match(maps:get(<<"command">>, R), <<"real_secret">>) =:= nomatch).
+
+scrub_map_passthrough_test() ->
+    M = #{<<"command">> => <<"ls -la">>},
+    ?assertEqual(M, bc_scrubber:scrub_map(M)).
+
+scrub_map_non_binary_values_test() ->
+    M = #{<<"count">> => 42, <<"flag">> => true},
+    ?assertEqual(M, bc_scrubber:scrub_map(M)).

@@ -70,6 +70,10 @@ init(Config) ->
 listen(State) ->
     {ok, State}.
 
+send(_SessionId, #bc_message{content = <<>>}, State) ->
+    {ok, State};
+send(_SessionId, #bc_message{content = undefined}, State) ->
+    {ok, State};
 send(SessionId, #bc_message{content = Content}, State) ->
     ChatId = resolve_chat_id(SessionId, State),
     send_message(ChatId, Content, State),

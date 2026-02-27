@@ -401,7 +401,7 @@ maybe_await_approval(#loop_data{tool_calls = Calls} = Data) ->
 execute_tools_sync(ToolCalls, SessionRef, SessionId) ->
     Results = lists:map(fun(TC) ->
         bc_obs:emit(tool_call_start, #{tool_name  => TC#bc_tool_call.name,
-                                       args       => TC#bc_tool_call.args,
+                                       args       => bc_scrubber:scrub_map(TC#bc_tool_call.args),
                                        session_id => SessionId}),
         T0 = erlang:monotonic_time(millisecond),
         Result = run_tool(TC, SessionRef),

@@ -7,7 +7,7 @@ Core systems (M0–M10), workspaces (M11–M17), session persistence and sharing
 (M18–M19), Telegram pairing (M20), memory search (M21–M23), photo/vision (M24),
 Docker sandbox (M25–M30), scheduler/heartbeat (M31–M37), Brave Search, bundled
 skills, and on-demand skill loading (Post-M37) are all complete.
-495 EUnit tests + 31 CT tests pass (526 total).
+503 EUnit tests + 31 CT tests pass (534 total).
 
 ---
 
@@ -60,21 +60,21 @@ skills, and on-demand skill loading (Post-M37) are all complete.
 | Post-M30 | Docker Sibling Containers, CT Suites, delete_bootstrap/delete_file, Reaper, Typing Fix |
 | M31–M37 | Scheduler & Heartbeat (Data Model, Store, Runner, Executor, Tool, Templates, CLI) |
 | Post-M37 | Scheduler CT Suite, Brave Search Tool, Bundled Skills (finnhub, nano-banana-pro) |
+| Post-M37 | On-Demand Skill Loading (Token Optimization) |
+| Post-M37 | Scrubber env var fix, empty Telegram messages, obs args scrubbing |
 
 ---
 
 ## Recent Milestones
 
-### Post-M37 — On-Demand Skill Loading (Token Optimization) ✅
+### Post-M37 — Scrubber + Telegram + Obs Fixes ✅
 
 | Task | Status | Notes |
 |------|--------|-------|
-| `bc_system_prompt` two-tier loading | ✅ | `always: true` skills get full content; others get compact summary |
-| Summary message format | ✅ | `[skills:available]` with name, description, `[read: path]`, baseDir note |
-| `is_always_skill/1` | ✅ | Checks `metadata.beamclaw.always = true` |
-| `build_skill_summary/1` | ✅ | Single system message with `<available_skills>` XML block |
-| `format_skill_summary/1` | ✅ | Per-skill summary line with `(baseDir: ...)` annotation when needed |
-| EUnit tests | ✅ | 7 new: always full content, on-demand summary, baseDir note, mixed, no-summary |
+| Scrubber skips `$VAR` env references | ✅ | `(?!\$)` lookahead on 4 generic key=value patterns |
+| Skip empty Telegram messages | ✅ | Guard `send/3` for `<<>>` and `undefined` content |
+| Scrub tool call args before obs logging | ✅ | `scrub_map/1` on `tool_call_start` event args |
+| EUnit tests | ✅ | 8 new: 4 env var passthrough, 1 real-value-still-scrubbed, 3 scrub_map |
 
 ---
 
