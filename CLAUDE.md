@@ -850,7 +850,12 @@ beamclaw/
         bc_skill_installer.erl      %% install skill dependencies
         bc_pairing.erl              %% channel access control via pairing codes
       priv/
-        skills/                     %% bundled example skills
+        skills/                     %% bundled skills
+          example-skill/
+          finnhub/
+          nano-banana-pro/
+            scripts/
+              generate_image.py     %% Gemini image generation script
     beamclaw_gateway/src/
       beamclaw_gateway.app.src
       beamclaw_gateway_app.erl

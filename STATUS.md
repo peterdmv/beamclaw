@@ -6,7 +6,8 @@ Scaffolding is complete. All nine OTP apps compile clean with zero warnings.
 Core systems (M0–M10), workspaces (M11–M17), session persistence and sharing
 (M18–M19), Telegram pairing (M20), memory search (M21–M23), photo/vision (M24),
 Docker sandbox (M25–M30), scheduler/heartbeat (M31–M37), and Brave Search
-(Post-M37) are all complete. 476 EUnit tests + 31 CT tests pass (507 total).
+(Post-M37) are all complete. Bundled skills (finnhub, nano-banana-pro) added
+with `{baseDir}` template resolution. 482 EUnit tests + 31 CT tests pass (513 total).
 
 ---
 
@@ -87,6 +88,18 @@ Docker sandbox (M25–M30), scheduler/heartbeat (M31–M37), and Brave Search
 | CLAUDE.md update | ✅ | File Layout, tool implementations list, Configuration |
 | docs/configuration.md update | ✅ | BRAVE_API_KEY env var, beamclaw_tools config section |
 
+### Post-M37 — Bundled Skills (finnhub, nano-banana-pro) ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| `finnhub/SKILL.md` | ✅ | Bundled skill; requires FINNHUB_TOKEN, curl, jq |
+| `nano-banana-pro/SKILL.md` | ✅ | Bundled skill; requires GEMINI_API_KEY, uv; includes scripts/ |
+| `generate_image.py` | ✅ | Gemini image generation script (copied from OpenClaw) |
+| `bc_system_prompt` `{baseDir}` | ✅ | `resolve_base_dir/2` replaces `{baseDir}` with skill directory path |
+| `.env.example` | ✅ | FINNHUB_TOKEN, GEMINI_API_KEY, GEMINI_MODEL |
+| CLAUDE.md File Layout | ✅ | Updated priv/skills/ tree |
+| EUnit tests | ✅ | 6 new: bundled skill parsing (2) + resolve_base_dir (4) |
+
 ---
 
 ## Active Work
@@ -103,4 +116,4 @@ _None at this time._
 
 ## Last Updated
 
-2026-02-27 (STATUS.md trimmed; history moved to STATUS_ARCHIVE.md)
+2026-02-27

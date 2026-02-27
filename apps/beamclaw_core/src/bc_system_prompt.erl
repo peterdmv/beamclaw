@@ -27,7 +27,7 @@ and daily log updates mid-session are picked up immediately.
 
 -include_lib("beamclaw_core/include/bc_types.hrl").
 
--export([assemble/1, assemble/2]).
+-export([assemble/1, assemble/2, resolve_base_dir/2]).
 
 -doc """
 Assemble system messages from an agent's bootstrap files.
@@ -130,7 +130,8 @@ load_skills(AgentId, Config) ->
                 Filtered = filter_by_allowlist(Eligible, Config),
                 lists:map(fun(Skill) ->
                     Name = skill_name(Skill),
-                    Content = skill_content(Skill),
+                    RawContent = skill_content(Skill),
+                    Content = resolve_base_dir(RawContent, skill_path(Skill)),
                     MsgContent = <<"[skill:", Name/binary, "]\n", Content/binary>>,
                     #bc_message{
                         id      = generate_id(),
@@ -158,6 +159,19 @@ filter_by_allowlist(Skills, _Config) ->
 %% = {bc_skill, Name, Description, Homepage, Emoji, Content, Source, Metadata, Path}
 skill_name(Skill) -> element(2, Skill).
 skill_content(Skill) -> element(6, Skill).
+skill_path(Skill) -> element(9, Skill).
+
+-doc """
+Replace `{baseDir}` in skill content with the directory containing the SKILL.md file.
+This allows bundled skills to reference sibling files (e.g., scripts/) via a
+path that resolves correctly at runtime regardless of installation location.
+""".
+-spec resolve_base_dir(binary(), string()) -> binary().
+resolve_base_dir(Content, Path) when is_list(Path), Path =/= "" ->
+    BaseDir = list_to_binary(filename:dirname(Path)),
+    binary:replace(Content, <<"{baseDir}">>, BaseDir, [global]);
+resolve_base_dir(Content, _) ->
+    Content.
 
 today_date() ->
     {Y, M, D} = date(),

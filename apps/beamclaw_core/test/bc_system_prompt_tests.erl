@@ -155,6 +155,28 @@ daily_logs_t(_TmpDir) ->
      ?_assert(lists:any(fun(C) ->
          binary:match(C, <<"Worked on testing">>) =/= nomatch end, Contents))].
 
+%% ---- resolve_base_dir ----
+
+resolve_base_dir_replaces_test() ->
+    Content = <<"uv run {baseDir}/scripts/gen.py --prompt \"hello\"">>,
+    Result = bc_system_prompt:resolve_base_dir(Content, "/opt/skills/banana/SKILL.md"),
+    ?assertEqual(<<"uv run /opt/skills/banana/scripts/gen.py --prompt \"hello\"">>, Result).
+
+resolve_base_dir_multiple_test() ->
+    Content = <<"{baseDir}/a and {baseDir}/b">>,
+    Result = bc_system_prompt:resolve_base_dir(Content, "/tmp/skills/foo/SKILL.md"),
+    ?assertEqual(<<"/tmp/skills/foo/a and /tmp/skills/foo/b">>, Result).
+
+resolve_base_dir_no_template_test() ->
+    Content = <<"No template here.">>,
+    Result = bc_system_prompt:resolve_base_dir(Content, "/tmp/skills/bar/SKILL.md"),
+    ?assertEqual(<<"No template here.">>, Result).
+
+resolve_base_dir_empty_path_test() ->
+    Content = <<"{baseDir}/scripts/run.py">>,
+    Result = bc_system_prompt:resolve_base_dir(Content, ""),
+    ?assertEqual(<<"{baseDir}/scripts/run.py">>, Result).
+
 %% ---- Helpers ----
 
 find_index(Pred, List) ->
