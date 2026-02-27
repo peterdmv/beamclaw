@@ -14,7 +14,8 @@ Docker sandbox code execution with MCP tool bridge (M25–M30) is complete.
 Docker sibling container support for sandbox in Docker deployments (Post-M30) is complete.
 Common Test E2E/integration suites added (Post-M30).
 `delete_bootstrap` workspace_memory action + `delete_file` built-in tool added (Post-M30).
-415 EUnit tests + 19 CT tests pass (434 total).
+Sandbox orphan container reaper + registry immediate cleanup added (Post-M30).
+421 EUnit tests + 19 CT tests pass (440 total).
 
 ---
 
@@ -601,6 +602,17 @@ All six OTP apps created, supervision trees defined, behaviours declared,
 | EUnit tests | ✅ | 8 new tests (3 delete_file + 4 delete_bootstrap + 1 missing file); 415 EUnit + 19 CT = 434 total |
 | CLAUDE.md update | ✅ | File Layout, tool implementations list |
 
+### Post-M30 — Sandbox Orphan Container Reaper ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| `bc_sandbox_reaper` | ✅ | New gen_server; periodic sweep for orphan `beamclaw-sbx-*` containers; 60s default interval, 30s initial delay |
+| `bc_sandbox_registry` immediate cleanup | ✅ | Store container name in monitor map; fire-and-forget `docker kill`+`rm` on DOWN |
+| `beamclaw_sandbox_sup` update | ✅ | `bc_sandbox_reaper` as permanent child after registry |
+| `sys.config` + `sys.docker.config` | ✅ | `reaper_interval_ms` config key (default 60000) |
+| CLAUDE.md update | ✅ | File Layout, Supervision Trees, Configuration, Observability Events |
+| EUnit tests | ✅ | 6 new tests (5 reaper + 1 registry DOWN cleanup); 421 EUnit + 19 CT = 440 total |
+
 ---
 
 ## Known Issues / Blockers
@@ -611,4 +623,4 @@ _None at this time._
 
 ## Last Updated
 
-2026-02-27 (`delete_bootstrap` Action + `delete_file` Tool — Post-M30)
+2026-02-27 (Sandbox Orphan Container Reaper — Post-M30)

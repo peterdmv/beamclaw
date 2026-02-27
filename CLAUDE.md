@@ -245,6 +245,7 @@ beamclaw_gateway_sup  (one_for_one)
 ```
 beamclaw_sandbox_sup  (one_for_one)
   ├── bc_sandbox_registry     (gen_server, permanent — ETS: {session_id, scope} → pid)
+  ├── bc_sandbox_reaper       (gen_server, permanent — periodic orphan container cleanup)
   └── bc_sandbox_sup          (simple_one_for_one)
         └── [per sandbox] bc_sandbox (gen_server, transient — Docker container lifecycle)
 ```
@@ -522,6 +523,7 @@ Non-blocking cast; backends receive events asynchronously via `pg` process group
 | `session_start` | `session_id` |
 | `session_end` | `session_id` |
 | `session_restored` | `session_id`, `message_count` |
+| `sandbox_reaped` | `container_name` |
 
 Usage: `bc_obs:emit(tool_call_start, #{tool_name => Name, args => Args, session_id => SId})`.
 
@@ -591,6 +593,7 @@ as the user_id, enabling cross-channel session sharing for single-user deploymen
     {docker_image, "beamclaw-sandbox:latest"},
     {scope, session},                          %% session | agent | shared
     {timeout_seconds, 60},
+    {reaper_interval_ms, 60000},               %% orphan container sweep interval
     {memory_limit, "512m"},
     {cpu_limit, "1.0"},
     {network, none},                           %% none | bridge | host
@@ -725,7 +728,8 @@ beamclaw/
         beamclaw_sandbox.app.src
         beamclaw_sandbox_app.erl
         beamclaw_sandbox_sup.erl
-        bc_sandbox_registry.erl    %% ETS: {session_id, scope} → pid
+        bc_sandbox_registry.erl    %% ETS: {session_id, scope} → pid; immediate cleanup on DOWN
+        bc_sandbox_reaper.erl      %% gen_server: periodic orphan container cleanup
         bc_sandbox_sup.erl         %% simple_one_for_one for bc_sandbox
         bc_sandbox.erl             %% per-sandbox Docker lifecycle gen_server
         bc_sandbox_docker.erl      %% pure: Docker command arg building

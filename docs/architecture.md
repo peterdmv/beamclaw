@@ -74,6 +74,7 @@ processes.
 ```
 beamclaw_sandbox_sup  (one_for_one)
   ├── bc_sandbox_registry     (gen_server, permanent — ETS: {session_id, scope} → pid)
+  ├── bc_sandbox_reaper       (gen_server, permanent — periodic orphan container cleanup)
   └── bc_sandbox_sup          (simple_one_for_one)
         └── [per sandbox] bc_sandbox (gen_server, transient — Docker container lifecycle)
 ```

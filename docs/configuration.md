@@ -242,6 +242,11 @@ backend automatically falls back to `ram_copies`.
     %% Script execution timeout (seconds).
     {timeout_seconds, 60},
 
+    %% Orphan container reaper sweep interval (milliseconds).
+    %% The reaper periodically scans for beamclaw-sbx-* containers
+    %% not tracked in the registry and kills/removes them.
+    {reaper_interval_ms, 60000},
+
     %% Docker resource limits.
     {memory_limit, "512m"},
     {cpu_limit, "1.0"},
