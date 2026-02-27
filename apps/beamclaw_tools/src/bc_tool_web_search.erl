@@ -54,21 +54,20 @@ execute(#{<<"query">> := Query} = Args, _Session, _Context) ->
             Count = clamp_count(maps:get(<<"count">>, Args, 5)),
             Freshness = maps:get(<<"freshness">>, Args, undefined),
             Country = maps:get(<<"country">>, Args, undefined),
-            Url = build_url(Query, Count, Freshness, Country),
-            Headers = [{"Accept", "application/json"},
-                       {"Accept-Encoding", "gzip"},
-                       {"X-Subscription-Token", ApiKey}],
-            case httpc:request(get, {Url, Headers},
-                               [{timeout, 30000}, {connect_timeout, 10000}],
-                               [{body_format, binary}]) of
-                {ok, {{_, 200, _}, _RespHeaders, RespBody}} ->
+            Url = list_to_binary(build_url(Query, Count, Freshness, Country)),
+            Headers = [{<<"Accept">>, <<"application/json">>},
+                       {<<"X-Subscription-Token">>, list_to_binary(ApiKey)}],
+            case hackney:request(get, Url, Headers, <<>>,
+                                 [{recv_timeout, 30000}, {connect_timeout, 10000},
+                                  with_body]) of
+                {ok, 200, _RespHeaders, RespBody} ->
                     case jsx:decode(RespBody, [return_maps]) of
                         #{<<"web">> := #{<<"results">> := Results}} ->
                             {ok, format_results(Query, Results)};
                         _ ->
                             {ok, format_results(Query, [])}
                     end;
-                {ok, {{_, StatusCode, _}, _RespHeaders, RespBody}} ->
+                {ok, StatusCode, _RespHeaders, RespBody} ->
                     {error, iolist_to_binary(
                         io_lib:format("Brave Search API returned HTTP ~p: ~s",
                                       [StatusCode, truncate(RespBody, 500)]))};
