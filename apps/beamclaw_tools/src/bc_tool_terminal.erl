@@ -38,7 +38,7 @@ execute(#{<<"command">> := Cmd}, _Session, _Context) ->
         {'EXIT', Reason} ->
             {error, iolist_to_binary(io_lib:format("exit: ~p", [Reason]))};
         Output ->
-            {ok, iolist_to_binary(Output)}
+            {ok, unicode:characters_to_binary(Output)}
     end.
 
 requires_approval() -> true.

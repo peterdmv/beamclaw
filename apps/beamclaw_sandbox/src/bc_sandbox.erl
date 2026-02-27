@@ -162,11 +162,10 @@ handle_call({exec_script, Script, Language, ToolBridgeFn}, From,
     _WorkerPid = spawn_link(fun() ->
         Output = os:cmd("timeout " ++ integer_to_list(TimeoutSec) ++ " "
                          ++ ExecCmd),
-        Truncated = case byte_size(iolist_to_binary(Output)) > MaxOutput of
-            true  ->
-                binary:part(iolist_to_binary(Output), 0, MaxOutput);
-            false ->
-                iolist_to_binary(Output)
+        Bin = unicode:characters_to_binary(Output),
+        Truncated = case byte_size(Bin) > MaxOutput of
+            true  -> binary:part(Bin, 0, MaxOutput);
+            false -> Bin
         end,
         Parent ! {exec_complete, Truncated}
     end),

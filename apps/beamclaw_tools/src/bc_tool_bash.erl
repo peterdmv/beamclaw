@@ -38,7 +38,7 @@ execute(#{<<"script">> := Script}, _Session, _Context) ->
     ok = file:write_file(TmpFile, Script),
     Output = os:cmd("bash " ++ TmpFile ++ " 2>&1"),
     _ = file:delete(TmpFile),
-    {ok, iolist_to_binary(Output)}.
+    {ok, unicode:characters_to_binary(Output)}.
 
 requires_approval() -> true.
 
