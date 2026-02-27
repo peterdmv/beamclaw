@@ -216,8 +216,26 @@ executing_tools(cast, do_execute, Data) ->
             logger:warning("[loop] max tool iterations (~p) reached", [MaxIter]),
             {next_state, finalizing, Data#loop_data{typing_tick_ref = undefined}};
         false ->
-            execute_tool_calls(Data)
+            %% Spawn tool execution so the gen_statem stays responsive to
+            %% typing_tick messages during long-running tools (e.g. bash, curl).
+            Self = self(),
+            SessionRef = make_session_ref(Data),
+            ToolCalls = Data#loop_data.tool_calls,
+            SId = Data#loop_data.session_id,
+            spawn_link(fun() ->
+                ToolMsgs = execute_tools_sync(ToolCalls, SessionRef, SId),
+                gen_statem:cast(Self, {tool_results, ToolMsgs})
+            end),
+            {keep_state, Data}
     end;
+executing_tools(cast, {tool_results, ToolMsgs}, Data) ->
+    cancel_typing_tick(Data#loop_data.typing_tick_ref),
+    lists:foreach(fun(M) ->
+        bc_session:append_message(Data#loop_data.session_pid, M)
+    end, ToolMsgs),
+    NewData = Data#loop_data{tool_calls = [], iteration = Data#loop_data.iteration + 1,
+                             typing_tick_ref = undefined},
+    {next_state, streaming, NewData};
 executing_tools(info, typing_tick, Data) ->
     emit_typing(Data),
     TickRef = schedule_typing_tick(),
@@ -286,13 +304,17 @@ receive_stream(Data, T0, TickRef) ->
             end,
             receive_stream(Data, T0, TickRef);
         {stream_done, _Pid, FullMsg} ->
-            cancel_typing_tick(TickRef),
             Duration = erlang:monotonic_time(millisecond) - T0,
             bc_obs:emit(llm_response, #{session_id  => Data#loop_data.session_id,
                                         duration_ms => Duration, success => true}),
             ScrubbedMsg = bc_scrubber:scrub_message(FullMsg),
             bc_session:append_message(Data#loop_data.session_pid, ScrubbedMsg),
+            %% Emit a fresh typing indicator before sending the message so the
+            %% user sees "typing..." right until the message arrives. Telegram
+            %% auto-clears typing when the message is delivered.
+            emit_typing(Data),
             route_response(Data, ScrubbedMsg),
+            cancel_typing_tick(TickRef),
             ToolCalls = bc_tool_parser:parse(ScrubbedMsg),
             NewData = Data#loop_data{tool_calls = ToolCalls},
             case ToolCalls of
@@ -354,7 +376,7 @@ emit_typing(Data) ->
     end.
 
 schedule_typing_tick() ->
-    erlang:send_after(4000, self(), typing_tick).
+    erlang:send_after(3000, self(), typing_tick).
 
 cancel_typing_tick(undefined) -> ok;
 cancel_typing_tick(Ref) ->
@@ -374,35 +396,29 @@ maybe_await_approval(#loop_data{tool_calls = Calls} = Data) ->
         false -> {next_state, executing_tools, Data}
     end.
 
-execute_tool_calls(Data) ->
-    cancel_typing_tick(Data#loop_data.typing_tick_ref),
-    SessionRef = make_session_ref(Data),
+%% Execute tool calls synchronously. Designed to run in a spawned process so
+%% the gen_statem mailbox remains responsive to typing_tick messages.
+execute_tools_sync(ToolCalls, SessionRef, SessionId) ->
     Results = lists:map(fun(TC) ->
         bc_obs:emit(tool_call_start, #{tool_name  => TC#bc_tool_call.name,
                                        args       => TC#bc_tool_call.args,
-                                       session_id => Data#loop_data.session_id}),
+                                       session_id => SessionId}),
         T0 = erlang:monotonic_time(millisecond),
         Result = run_tool(TC, SessionRef),
         Duration = erlang:monotonic_time(millisecond) - T0,
         bc_obs:emit(tool_call_result, #{tool_name  => TC#bc_tool_call.name,
                                         duration_ms => Duration,
                                         success    => element(1, Result) =:= ok,
-                                        session_id => Data#loop_data.session_id}),
+                                        session_id => SessionId}),
         #bc_tool_result{
             tool_call_id = TC#bc_tool_call.id,
             name         = TC#bc_tool_call.name,
             content      = element(2, Result),
             is_error     = element(1, Result) =:= error
         }
-    end, Data#loop_data.tool_calls),
+    end, ToolCalls),
     Scrubbed = [bc_scrubber:scrub_result(R) || R <- Results],
-    ToolMsgs = [result_to_message(R) || R <- Scrubbed],
-    lists:foreach(fun(M) ->
-        bc_session:append_message(Data#loop_data.session_pid, M)
-    end, ToolMsgs),
-    NewData = Data#loop_data{tool_calls = [], iteration = Data#loop_data.iteration + 1,
-                             typing_tick_ref = undefined},
-    {next_state, streaming, NewData}.
+    [result_to_message(R) || R <- Scrubbed].
 
 run_tool(#bc_tool_call{name = Name, args = Args}, SessionRef) ->
     Context = #{tool_bridge_fn => make_tool_bridge_fn(SessionRef)},
