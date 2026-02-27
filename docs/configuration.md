@@ -296,6 +296,32 @@ backend automatically falls back to `ram_copies`.
 ]}
 ```
 
+### beamclaw_scheduler
+
+```erlang
+{beamclaw_scheduler, [
+    {enabled, false},                      %% opt-in; creates bc_tool_scheduler when true
+    {max_jobs_per_agent, 50},              %% max active/paused jobs per agent
+    {default_autonomy, supervised},        %% autonomy level for scheduled sessions
+    {max_errors, 3},                       %% consecutive failures → auto-pause
+    {heartbeat, #{
+        default_interval_ms => 1800000,    %% 30 min default heartbeat interval
+        suppress_ok => true,               %% suppress HEARTBEAT_OK output
+        active_hours => {8, 22}            %% UTC hour range (skip outside)
+    }}
+]}
+```
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | boolean | `false` | Enable the scheduler and register the `scheduler` tool |
+| `max_jobs_per_agent` | integer | `50` | Maximum number of active/paused jobs per agent |
+| `default_autonomy` | atom | `supervised` | Autonomy level for scheduled sessions |
+| `max_errors` | integer | `3` | Consecutive failures before auto-pausing a job |
+| `heartbeat.default_interval_ms` | integer | `1800000` | Default heartbeat interval (30 minutes) |
+| `heartbeat.suppress_ok` | boolean | `true` | Suppress delivery when LLM responds `HEARTBEAT_OK` |
+| `heartbeat.active_hours` | tuple | `{8, 22}` | UTC hour range for heartbeat delivery |
+
 ### beamclaw_obs
 
 ```erlang

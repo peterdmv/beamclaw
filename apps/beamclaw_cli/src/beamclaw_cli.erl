@@ -18,7 +18,7 @@
 -moduledoc """
 BeamClaw CLI entry point (escript).
 
-Usage: beamclaw [tui|start|stop|restart|remote_console|agent|skills|pair|doctor|status|version|help]
+Usage: beamclaw [tui|start|stop|restart|remote_console|agent|skills|pair|sandbox|scheduler|doctor|status|version|help]
 
 Built with: rebar3 escriptize
 Output:     _build/default/bin/beamclaw
@@ -42,6 +42,8 @@ Output:     _build/default/bin/beamclaw
                              cmd_pair_revoke/2,
                              cmd_sandbox_status/0, cmd_sandbox_list/0,
                              cmd_sandbox_kill/1, cmd_sandbox_build/0,
+                             cmd_scheduler_list/0, cmd_scheduler_cancel/1,
+                             cmd_scheduler_pause/1, cmd_scheduler_resume/1,
                              spawn_daemon/0, check_openrouter_network/0]}).
 
 -include_lib("beamclaw_core/include/bc_types.hrl").
@@ -82,6 +84,11 @@ main(["sandbox", "list"         | _])     -> cmd_sandbox_list();
 main(["sandbox", "kill", Id     | _])     -> cmd_sandbox_kill(list_to_binary(Id));
 main(["sandbox", "build"        | _])     -> cmd_sandbox_build();
 main(["sandbox"                 | _])     -> cmd_sandbox_status();
+main(["scheduler", "list"       | _])     -> cmd_scheduler_list();
+main(["scheduler", "cancel", Id | _])     -> cmd_scheduler_cancel(list_to_binary(Id));
+main(["scheduler", "pause", Id  | _])     -> cmd_scheduler_pause(list_to_binary(Id));
+main(["scheduler", "resume", Id | _])     -> cmd_scheduler_resume(list_to_binary(Id));
+main(["scheduler"               | _])     -> cmd_scheduler_list();
 main(["doctor"                  | _])     -> cmd_doctor();
 main(["status"                  | _])     -> cmd_status();
 main(["version"                 | _])     -> cmd_version();
@@ -713,6 +720,131 @@ cmd_sandbox_build() ->
             halt(0)
     end.
 
+%% ---------------------------------------------------------------------------
+%% Scheduler commands
+%% ---------------------------------------------------------------------------
+
+-doc "List all scheduled jobs.".
+cmd_scheduler_list() ->
+    case try_connect_daemon() of
+        connected ->
+            case rpc:call(daemon_node(), bc_sched_store, list_active, []) of
+                {badrpc, Reason} ->
+                    io:format(standard_error,
+                              "beamclaw: failed to list jobs: ~p~n", [Reason]),
+                    halt(1);
+                [] ->
+                    io:format("No active scheduled jobs.~n"),
+                    halt(0);
+                Jobs ->
+                    io:format("Scheduled jobs:~n~n"),
+                    lists:foreach(fun(J) ->
+                        JobId = element(2, J),
+                        AgentId = element(3, J),
+                        Type = element(6, J),
+                        Prompt = element(8, J),
+                        Status = element(12, J),
+                        Heartbeat = element(19, J),
+                        FireCount = element(16, J),
+                        ShortPrompt = case byte_size(Prompt) > 50 of
+                            true -> <<(binary:part(Prompt, 0, 50))/binary, "...">>;
+                            false -> Prompt
+                        end,
+                        io:format("  ~s~n", [JobId]),
+                        io:format("    Agent: ~s | Type: ~p | Status: ~p~n",
+                                  [AgentId, Type, Status]),
+                        io:format("    Heartbeat: ~p | Fires: ~B~n",
+                                  [Heartbeat, FireCount]),
+                        io:format("    Prompt: ~s~n~n", [ShortPrompt])
+                    end, Jobs),
+                    halt(0)
+            end;
+        not_running ->
+            io:format(standard_error,
+                      "beamclaw: daemon not running. Start with: beamclaw start~n", []),
+            halt(1)
+    end.
+
+-doc "Cancel a scheduled job by ID.".
+cmd_scheduler_cancel(JobId) ->
+    case try_connect_daemon() of
+        connected ->
+            %% Cancel timers first
+            rpc:call(daemon_node(), bc_sched_runner, cancel, [JobId]),
+            case rpc:call(daemon_node(), bc_sched_store, update_status,
+                          [JobId, completed]) of
+                ok ->
+                    io:format("Job ~s cancelled.~n", [JobId]),
+                    halt(0);
+                {error, not_found} ->
+                    io:format(standard_error,
+                              "beamclaw: job not found: ~s~n", [JobId]),
+                    halt(1);
+                {badrpc, Reason} ->
+                    io:format(standard_error,
+                              "beamclaw: RPC failed: ~p~n", [Reason]),
+                    halt(1)
+            end;
+        not_running ->
+            io:format(standard_error,
+                      "beamclaw: daemon not running. Start with: beamclaw start~n", []),
+            halt(1)
+    end.
+
+-doc "Pause a scheduled job by ID.".
+cmd_scheduler_pause(JobId) ->
+    case try_connect_daemon() of
+        connected ->
+            case rpc:call(daemon_node(), bc_sched_runner, pause, [JobId]) of
+                ok ->
+                    io:format("Job ~s paused.~n", [JobId]),
+                    halt(0);
+                {error, not_found} ->
+                    io:format(standard_error,
+                              "beamclaw: job not found: ~s~n", [JobId]),
+                    halt(1);
+                {error, _} ->
+                    io:format(standard_error,
+                              "beamclaw: job ~s is not active~n", [JobId]),
+                    halt(1);
+                {badrpc, Reason} ->
+                    io:format(standard_error,
+                              "beamclaw: RPC failed: ~p~n", [Reason]),
+                    halt(1)
+            end;
+        not_running ->
+            io:format(standard_error,
+                      "beamclaw: daemon not running. Start with: beamclaw start~n", []),
+            halt(1)
+    end.
+
+-doc "Resume a paused scheduled job by ID.".
+cmd_scheduler_resume(JobId) ->
+    case try_connect_daemon() of
+        connected ->
+            case rpc:call(daemon_node(), bc_sched_runner, resume, [JobId]) of
+                ok ->
+                    io:format("Job ~s resumed.~n", [JobId]),
+                    halt(0);
+                {error, not_found} ->
+                    io:format(standard_error,
+                              "beamclaw: job not found: ~s~n", [JobId]),
+                    halt(1);
+                {error, _} ->
+                    io:format(standard_error,
+                              "beamclaw: job ~s is not paused~n", [JobId]),
+                    halt(1);
+                {badrpc, Reason} ->
+                    io:format(standard_error,
+                              "beamclaw: RPC failed: ~p~n", [Reason]),
+                    halt(1)
+            end;
+        not_running ->
+            io:format(standard_error,
+                      "beamclaw: daemon not running. Start with: beamclaw start~n", []),
+            halt(1)
+    end.
+
 cmd_help() ->
     io:format(
         "Usage: beamclaw <command>~n~n"
@@ -739,6 +871,10 @@ cmd_help() ->
         "  sandbox list         List active sandbox containers~n"
         "  sandbox kill ID      Force-kill a sandbox container~n"
         "  sandbox build        Build the sandbox Docker image~n"
+        "  scheduler [list]     List active scheduled jobs~n"
+        "  scheduler cancel ID  Cancel a scheduled job~n"
+        "  scheduler pause ID   Pause a scheduled job~n"
+        "  scheduler resume ID  Resume a paused scheduled job~n"
         "  doctor               Check environment and connectivity~n"
         "  status               Ping running gateway HTTP health endpoint~n"
         "  version              Print version~n"

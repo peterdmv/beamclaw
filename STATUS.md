@@ -2,7 +2,7 @@
 
 ## Current Phase: Implementation
 
-Scaffolding is complete. All eight OTP apps compile clean with zero warnings.
+Scaffolding is complete. All nine OTP apps compile clean with zero warnings.
 Multi-agent workspaces (M11–M13), rich templates (M14), daily logs (M15),
 skill system (M16–M17), session persistence (M18), cross-channel session
 sharing (M19), Telegram pairing access control (M20), and typing indicators
@@ -16,7 +16,8 @@ Common Test E2E/integration suites added (Post-M30).
 `delete_bootstrap` workspace_memory action + `delete_file` built-in tool added (Post-M30).
 Sandbox orphan container reaper + registry immediate cleanup added (Post-M30).
 Telegram typing indicator fix: async long-poll prevents mailbox blocking (Post-M30).
-421 EUnit tests + 19 CT tests pass (440 total).
+Scheduler & heartbeat system (M31–M37) is complete.
+466 EUnit tests + 19 CT tests pass (485 total).
 
 ---
 
@@ -620,6 +621,70 @@ All six OTP apps created, supervision trees defined, behaviours declared,
 |------|--------|-------|
 | `bc_channel_telegram` async long-poll | ✅ | `spawn_link` for `get_updates`; gen_server mailbox stays responsive to typing/send casts |
 
+### M31 — Scheduler Foundation (Data Model + Pure Modules) ✅
+
+| Module | Status | Notes |
+|--------|--------|-------|
+| `bc_sched_job.hrl` | ✅ | Mnesia record: 20 fields (job_id, schedule, execution, delivery, state, heartbeat) |
+| `bc_sched_interval` | ✅ | Pure: parse human-friendly intervals ("30m" → 1800000ms); suffixes s/m/h/d |
+| `bc_sched_random` | ✅ | Pure: slot-based random scheduling; 10% boundary padding; next_slot_delay |
+| EUnit tests | ✅ | 23 tests: interval (13) + random (10) |
+
+### M32 — Scheduler Store + App Scaffold ✅
+
+| Module/Task | Status | Notes |
+|-------------|--------|-------|
+| `beamclaw_scheduler.app.src` | ✅ | OTP app descriptor; deps: kernel, stdlib, mnesia, obs, tools, core |
+| `beamclaw_scheduler_app` | ✅ | init_table on start; conditional bc_tool_scheduler registration |
+| `beamclaw_scheduler_sup` | ✅ | one_for_one: store → runner → executor |
+| `bc_sched_store` | ✅ | gen_server: Mnesia CRUD (disc/ram fallback); {record_name, bc_sched_job} |
+| `rebar.config` update | ✅ | Added beamclaw_scheduler to escript_incl_apps, shell.apps, relx.release |
+| `sys.config` + `sys.docker.config` | ✅ | beamclaw_scheduler config section |
+| EUnit tests | ✅ | 9 tests: save/load/delete/list/update/auto-pause |
+
+### M33 — Runner (Timer Management) ✅
+
+| Module/Task | Status | Notes |
+|-------------|--------|-------|
+| `bc_sched_runner` | ✅ | gen_server: erlang:send_after timers; at/every/random_in; active hours; #{job_id => timer_ref} + #{job_id => random_state} |
+| EUnit tests | ✅ | 5 tests: active_hours, at/every/random_in schedule specs |
+
+### M34 — Executor (Session Dispatch + Delivery) ✅
+
+| Module/Task | Status | Notes |
+|-------------|--------|-------|
+| `bc_sched_executor` | ✅ | gen_server: session create/reuse, dispatch via bc_session, delivery routing (telegram/tui/webhook/silent), heartbeat suppression, auto-pause on max_errors |
+
+### M35 — Agent Tool (`bc_tool_scheduler`) ✅
+
+| Module/Task | Status | Notes |
+|-------------|--------|-------|
+| `bc_tool_scheduler` | ✅ | bc_tool behaviour: 5 actions (create/list/cancel/pause/resume); ISO 8601 parser; interval parsing; channel inference; requires_approval=true |
+| EUnit tests | ✅ | 7 tests: definition, approval, autonomy, disabled, interval, missing/unknown action |
+
+### M36 — HEARTBEAT.md Template + Workspace Integration ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| `bc_workspace_templates` update | ✅ | HEARTBEAT.md as 8th template; check-in guidance, HEARTBEAT_OK, anti-patterns |
+| `all_templates/0` update | ✅ | 8 templates (was 7) |
+| `bc_system_prompt` update | ✅ | HEARTBEAT.md in assembly order (after AGENTS.md, before BOOTSTRAP.md) |
+| `bc_tool_workspace_memory` update | ✅ | HEARTBEAT.md in read/update/delete bootstrap allowlists |
+
+### M37 — CLI Commands + Documentation ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| `beamclaw scheduler list` | ✅ | CLI command via daemon RPC |
+| `beamclaw scheduler cancel JOB_ID` | ✅ | CLI command via daemon RPC |
+| `beamclaw scheduler pause JOB_ID` | ✅ | CLI command via daemon RPC |
+| `beamclaw scheduler resume JOB_ID` | ✅ | CLI command via daemon RPC |
+| CLAUDE.md update | ✅ | File Layout, Dep Graph (9 apps), Supervision Trees, Config, Commands, Obs Events |
+| STATUS.md update | ✅ | M31–M37 milestones |
+| docs/architecture.md update | ✅ | Nine-app graph, scheduler supervision tree |
+| docs/configuration.md update | ✅ | beamclaw_scheduler config keys |
+| docs/running.md update | ✅ | Scheduler CLI commands, heartbeat setup guide |
+
 ---
 
 ## Known Issues / Blockers
@@ -630,4 +695,4 @@ _None at this time._
 
 ## Last Updated
 
-2026-02-27 (Telegram Typing Indicator Fix — Post-M30)
+2026-02-27 (Scheduler & Heartbeat — M31–M37)

@@ -332,20 +332,20 @@ min_autonomy() -> read_only.
 
 -define(ALLOWED_BOOTSTRAP_FILES,
     [<<"IDENTITY.md">>, <<"USER.md">>, <<"SOUL.md">>,
-     <<"TOOLS.md">>, <<"AGENTS.md">>]).
+     <<"TOOLS.md">>, <<"AGENTS.md">>, <<"HEARTBEAT.md">>]).
 
 validate_bootstrap_file(File) when is_binary(File) ->
     case lists:member(File, ?ALLOWED_BOOTSTRAP_FILES) of
         true  -> {ok, File};
         false -> {error, <<"Invalid bootstrap file '", File/binary, "'. "
-                           "Allowed: IDENTITY.md, USER.md, SOUL.md, TOOLS.md, AGENTS.md">>}
+                           "Allowed: IDENTITY.md, USER.md, SOUL.md, TOOLS.md, AGENTS.md, HEARTBEAT.md">>}
     end;
 validate_bootstrap_file(_) ->
     {error, <<"'file' must be a string">>}.
 
 -define(DELETABLE_BOOTSTRAP_FILES,
     [<<"IDENTITY.md">>, <<"USER.md">>, <<"SOUL.md">>,
-     <<"TOOLS.md">>, <<"AGENTS.md">>, <<"BOOTSTRAP.md">>]).
+     <<"TOOLS.md">>, <<"AGENTS.md">>, <<"HEARTBEAT.md">>, <<"BOOTSTRAP.md">>]).
 
 validate_delete_bootstrap_file(File) when is_binary(File) ->
     case lists:member(File, ?DELETABLE_BOOTSTRAP_FILES) of

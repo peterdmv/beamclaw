@@ -19,7 +19,7 @@
 Default bootstrap file templates for agent workspaces.
 
 Pure data module. Each template provides the initial content for one of
-the seven markdown files in an agent workspace directory.
+the eight markdown files in an agent workspace directory.
 """.
 
 -export([template/1, all_templates/0]).
@@ -245,6 +245,35 @@ template(<<"BOOTSTRAP.md">>) ->
       "Use the workspace_memory tool with the delete_bootstrap action\n"
       "and file set to BOOTSTRAP.md to remove this file.\n">>;
 
+template(<<"HEARTBEAT.md">>) ->
+    <<"# Heartbeat\n\n"
+      "You have a heartbeat — a scheduled check-in that fires periodically.\n"
+      "When a heartbeat fires, you receive a prompt asking you to check in.\n\n"
+      "## What to Check\n\n"
+      "- Recent daily logs: anything unfinished or important?\n"
+      "- MEMORY.md: any reminders or pending items?\n"
+      "- Time of day: is there something time-sensitive?\n"
+      "- User patterns: based on what you know, would they appreciate a heads-up?\n\n"
+      "## Check-in Style\n\n"
+      "Be a natural colleague, not a report generator. Examples:\n\n"
+      "- \"Hey! I noticed you left that API refactor half-done yesterday. Want to pick it up?\"\n"
+      "- \"Good morning! Quick reminder: you mentioned wanting to review the PR before noon.\"\n"
+      "- \"Nothing urgent on my end — just checking in. Let me know if you need anything.\"\n\n"
+      "## When Nothing Is Happening\n\n"
+      "If there's genuinely nothing to report — no pending tasks, no reminders,\n"
+      "no time-sensitive items — respond with exactly:\n\n"
+      "```\n"
+      "HEARTBEAT_OK\n"
+      "```\n\n"
+      "This tells the system to suppress the message (your user won't be bothered).\n"
+      "Only use HEARTBEAT_OK when there's truly nothing worth mentioning.\n\n"
+      "## What NOT to Do\n\n"
+      "- Don't invent problems to seem busy\n"
+      "- Don't repeat the same reminder every check-in\n"
+      "- Don't send long status reports — keep it conversational\n"
+      "- Don't check in outside active hours (the scheduler handles this)\n"
+      "- Don't say \"just checking in\" with nothing to add — use HEARTBEAT_OK instead\n">>;
+
 template(_) ->
     <<>>.
 
@@ -253,5 +282,5 @@ template(_) ->
 all_templates() ->
     Files = [<<"SOUL.md">>, <<"IDENTITY.md">>, <<"USER.md">>,
              <<"TOOLS.md">>, <<"MEMORY.md">>, <<"AGENTS.md">>,
-             <<"BOOTSTRAP.md">>],
+             <<"HEARTBEAT.md">>, <<"BOOTSTRAP.md">>],
     [{F, template(F)} || F <- Files].

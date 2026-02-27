@@ -120,7 +120,7 @@ CT suites:
 
 - **Language/Runtime**: Erlang/OTP 28
 - **Build Tool**: rebar3
-- **Project Structure**: Umbrella project — eight OTP apps under `apps/`
+- **Project Structure**: Umbrella project — nine OTP apps under `apps/`
 - **HTTP server**: Cowboy 2.x
 - **HTTP client**: Hackney
 - **JSON**: jsx
@@ -160,6 +160,12 @@ beamclaw sandbox list        # active sandbox containers
 beamclaw sandbox kill ID     # force-kill a sandbox container
 beamclaw sandbox build       # build sandbox Docker image
 
+# Scheduler management (via CLI escript)
+beamclaw scheduler list              # list active/paused scheduled jobs
+beamclaw scheduler cancel JOB_ID     # cancel a scheduled job
+beamclaw scheduler pause JOB_ID      # pause a scheduled job
+beamclaw scheduler resume JOB_ID     # resume a paused job
+
 # Pairing / access control (via CLI escript)
 beamclaw pair                       # list pending + approved
 beamclaw pair list                  # same as above
@@ -171,12 +177,14 @@ beamclaw pair revoke telegram <ID>  # revoke user from allowlist
 
 ## Application Dependency Graph
 
-Eight OTP apps under `apps/`. Dependency direction (arrow = "depends on"):
+Nine OTP apps under `apps/`. Dependency direction (arrow = "depends on"):
 
 ```
-beamclaw_gateway → beamclaw_core → beamclaw_sandbox → beamclaw_tools → beamclaw_obs
-                                 → beamclaw_mcp      → beamclaw_tools
-                                 → beamclaw_memory   → beamclaw_obs
+beamclaw_gateway → beamclaw_core → beamclaw_sandbox    → beamclaw_tools → beamclaw_obs
+                                 → beamclaw_scheduler  → beamclaw_tools
+                                                        → beamclaw_obs
+                                 → beamclaw_mcp        → beamclaw_tools
+                                 → beamclaw_memory     → beamclaw_obs
                                  → beamclaw_tools
                                  → beamclaw_obs
                  → beamclaw_obs
@@ -188,6 +196,7 @@ beamclaw_gateway → beamclaw_core → beamclaw_sandbox → beamclaw_tools → b
 | `beamclaw_memory` | Memory behaviour + backends | obs |
 | `beamclaw_tools` | Built-in tools + tool registry | obs |
 | `beamclaw_sandbox` | Docker sandboxed code execution, PII tokenization, tool policy | obs, tools |
+| `beamclaw_scheduler` | Scheduled tasks, heartbeat, cron-like jobs | obs, tools, core |
 | `beamclaw_mcp` | MCP server connections (stdio/HTTP), tool discovery | obs, tools |
 | `beamclaw_core` | Sessions, agentic loop, LLM providers, approval, compaction | obs, memory, tools, mcp, sandbox |
 | `beamclaw_gateway` | Channels (Telegram, TUI), HTTP gateway, rate limiter | core, obs |
@@ -255,6 +264,17 @@ Each `bc_sandbox` manages a Docker container with `--network none`, `--cap-drop 
 to call back to BeamClaw tools via JSON-RPC 2.0. The sandbox is opt-in (`{enabled, false}`
 by default) and requires Docker.
 
+### `beamclaw_scheduler`
+
+```
+beamclaw_scheduler_sup  (one_for_one)
+  ├── bc_sched_store       (gen_server, permanent — Mnesia job CRUD)
+  ├── bc_sched_runner      (gen_server, permanent — timer management, fire events)
+  └── bc_sched_executor    (gen_server, permanent — session creation, dispatch, delivery)
+```
+
+Runner manages timers (lightweight, never blocks). Executor does heavy work (session creation, LLM dispatch, HTTP delivery). A crash in execution doesn't lose timer state.
+
 ### `beamclaw_obs`
 
 ```
@@ -308,7 +328,7 @@ Implementations: `bc_provider_openrouter`, `bc_provider_openai`.
 -callback min_autonomy() -> autonomy_level().
 ```
 
-Implementations: `bc_tool_terminal`, `bc_tool_bash`, `bc_tool_curl`, `bc_tool_jq`, `bc_tool_read_file`, `bc_tool_write_file`, `bc_tool_delete_file`, `bc_tool_workspace_memory` (MEMORY.md + daily logs + bootstrap files + delete), `bc_tool_exec` (sandboxed code execution — in `beamclaw_sandbox`, registered conditionally).
+Implementations: `bc_tool_terminal`, `bc_tool_bash`, `bc_tool_curl`, `bc_tool_jq`, `bc_tool_read_file`, `bc_tool_write_file`, `bc_tool_delete_file`, `bc_tool_workspace_memory` (MEMORY.md + daily logs + bootstrap files + delete), `bc_tool_exec` (sandboxed code execution — in `beamclaw_sandbox`, registered conditionally), `bc_tool_scheduler` (scheduled tasks + heartbeat — in `beamclaw_scheduler`, registered conditionally).
 
 ### `bc_channel` — Messaging channel abstraction (`beamclaw_core`)
 
@@ -524,6 +544,12 @@ Non-blocking cast; backends receive events asynchronously via `pg` process group
 | `session_end` | `session_id` |
 | `session_restored` | `session_id`, `message_count` |
 | `sandbox_reaped` | `container_name` |
+| `sched_job_created` | `job_id`, `schedule_type`, `agent_id` |
+| `sched_job_fired` | `job_id`, `session_id`, `heartbeat` |
+| `sched_job_completed` | `job_id`, `fire_count` |
+| `sched_job_failed` | `job_id`, `error`, `error_count` |
+| `sched_job_paused` | `job_id`, `reason` (manual \| auto) |
+| `sched_suppressed` | `job_id`, `session_id` |
 
 Usage: `bc_obs:emit(tool_call_start, #{tool_name => Name, args => Args, session_id => SId})`.
 
@@ -608,6 +634,17 @@ as the user_id, enabling cross-channel session sharing for single-user deploymen
     {env_allowlist, [<<"PATH">>, <<"HOME">>, <<"LANG">>, <<"TERM">>]},
     {env_blocklist, [<<"OPENROUTER_API_KEY">>, <<"OPENAI_API_KEY">>,
                      <<"TELEGRAM_BOT_TOKEN">>, <<"AWS_SECRET_ACCESS_KEY">>]}
+]},
+{beamclaw_scheduler, [
+    {enabled, false},                      %% opt-in; creates bc_tool_scheduler when true
+    {max_jobs_per_agent, 50},
+    {default_autonomy, supervised},
+    {max_errors, 3},                       %% consecutive failures → auto-pause
+    {heartbeat, #{
+        default_interval_ms => 1800000,    %% 30 min default heartbeat interval
+        suppress_ok => true,               %% suppress HEARTBEAT_OK output
+        active_hours => {8, 22}            %% UTC hour range (skip outside)
+    }}
 ]},
 {beamclaw_obs, []},
 {beamclaw_memory, [
@@ -746,6 +783,19 @@ beamclaw/
           bridge/
             __init__.py
             beamclaw_bridge.py     %% Python bridge: search_tools, call_tool
+    beamclaw_scheduler/
+      include/
+        bc_sched_job.hrl          %% Mnesia record for scheduled jobs
+      src/
+        beamclaw_scheduler.app.src
+        beamclaw_scheduler_app.erl
+        beamclaw_scheduler_sup.erl
+        bc_sched_store.erl        %% Mnesia persistence (init_table, CRUD)
+        bc_sched_runner.erl       %% Timer management gen_server
+        bc_sched_executor.erl     %% Session dispatch + delivery gen_server
+        bc_sched_random.erl       %% Random slot algorithm (pure)
+        bc_sched_interval.erl     %% Interval string parsing (pure)
+        bc_tool_scheduler.erl     %% bc_tool behaviour: scheduled tasks + heartbeat
     beamclaw_mcp/src/
       beamclaw_mcp.app.src
       beamclaw_mcp_app.erl
@@ -778,7 +828,7 @@ beamclaw/
         bc_thinking.erl       %% strip LLM thinking/reasoning tags
         bc_tool_parser.erl
         bc_config.erl
-        bc_workspace_templates.erl  %% seven default bootstrap file templates
+        bc_workspace_templates.erl  %% eight default bootstrap file templates
         bc_workspace.erl            %% agent workspace filesystem ops
         bc_system_prompt.erl        %% assemble bootstrap files into system messages
         bc_skill_parser.erl         %% parse SKILLS.md front-matter
@@ -806,5 +856,5 @@ beamclaw/
       bc_webhook_telegram_h.erl
     beamclaw_cli/src/
       beamclaw_cli.app.src
-      beamclaw_cli.erl        %% escript main; 26 commands (tui/start/stop/restart/remote_console/agent create/list/show/delete/rehatch/skills list/status/show/install/pair/pair list/pair approve/pair revoke/sandbox status/list/kill/build/doctor/status/version/help)
+      beamclaw_cli.erl        %% escript main; 30 commands (tui/start/stop/restart/remote_console/agent create/list/show/delete/rehatch/skills list/status/show/install/scheduler list/cancel/pause/resume/pair/pair list/pair approve/pair revoke/sandbox status/list/kill/build/doctor/status/version/help)
 ```

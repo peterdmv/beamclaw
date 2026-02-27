@@ -18,7 +18,7 @@
 -moduledoc """
 System prompt assembly from agent workspace bootstrap files.
 
-Reads the seven markdown files from the agent's workspace directory and
+Reads the eight markdown files from the agent's workspace directory and
 converts them into system-role messages prepended to the conversation
 history before each LLM call. Also loads daily logs (today + yesterday)
 and eligible skill files. Assembled fresh every call so that MEMORY.md
@@ -32,7 +32,7 @@ and daily log updates mid-session are picked up immediately.
 -doc """
 Assemble system messages from an agent's bootstrap files.
 Returns messages in order:
-  IDENTITY → SOUL → USER → TOOLS → AGENTS → BOOTSTRAP → MEMORY
+  IDENTITY → SOUL → USER → TOOLS → AGENTS → HEARTBEAT → BOOTSTRAP → MEMORY
   → memory/yesterday.md → memory/today.md
   → skill messages (if skills config provided via assemble/2)
 Files that are missing or empty/whitespace-only are skipped.
@@ -49,10 +49,10 @@ assemble(AgentId, Config) ->
             [fallback_message()];
         true ->
             Files = bc_workspace:read_all_bootstrap_files(AgentId),
-            %% Ordered: IDENTITY → SOUL → USER → TOOLS → AGENTS → BOOTSTRAP → MEMORY
+            %% Ordered: IDENTITY → SOUL → USER → TOOLS → AGENTS → HEARTBEAT → BOOTSTRAP → MEMORY
             Order = [<<"IDENTITY.md">>, <<"SOUL.md">>, <<"USER.md">>,
-                     <<"TOOLS.md">>, <<"AGENTS.md">>, <<"BOOTSTRAP.md">>,
-                     <<"MEMORY.md">>],
+                     <<"TOOLS.md">>, <<"AGENTS.md">>, <<"HEARTBEAT.md">>,
+                     <<"BOOTSTRAP.md">>, <<"MEMORY.md">>],
             BootstrapMsgs = lists:filtermap(fun(Filename) ->
                 case maps:get(Filename, Files, undefined) of
                     undefined -> false;
