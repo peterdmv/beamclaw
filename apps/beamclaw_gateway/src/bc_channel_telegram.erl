@@ -100,8 +100,14 @@ handle_cast(_Msg, State) ->
     {noreply, State}.
 
 handle_info(poll, State) ->
-    Offset  = maps:get(offset, State, 0),
-    Updates = get_updates(Offset, State),
+    Self   = self(),
+    Offset = maps:get(offset, State, 0),
+    spawn_link(fun() ->
+        Updates = get_updates(Offset, State),
+        Self ! {poll_result, Updates}
+    end),
+    {noreply, State};
+handle_info({poll_result, Updates}, State) ->
     {NewOffset, Seen} = process_updates(Updates, State),
     erlang:send_after(1000, self(), poll),
     {noreply, State#{offset => NewOffset, seen_ids => Seen}};

@@ -15,6 +15,7 @@ Docker sibling container support for sandbox in Docker deployments (Post-M30) is
 Common Test E2E/integration suites added (Post-M30).
 `delete_bootstrap` workspace_memory action + `delete_file` built-in tool added (Post-M30).
 Sandbox orphan container reaper + registry immediate cleanup added (Post-M30).
+Telegram typing indicator fix: async long-poll prevents mailbox blocking (Post-M30).
 421 EUnit tests + 19 CT tests pass (440 total).
 
 ---
@@ -613,6 +614,12 @@ All six OTP apps created, supervision trees defined, behaviours declared,
 | CLAUDE.md update | ✅ | File Layout, Supervision Trees, Configuration, Observability Events |
 | EUnit tests | ✅ | 6 new tests (5 reaper + 1 registry DOWN cleanup); 421 EUnit + 19 CT = 440 total |
 
+### Post-M30 — Fix Telegram Typing Indicator During LLM Response ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| `bc_channel_telegram` async long-poll | ✅ | `spawn_link` for `get_updates`; gen_server mailbox stays responsive to typing/send casts |
+
 ---
 
 ## Known Issues / Blockers
@@ -623,4 +630,4 @@ _None at this time._
 
 ## Last Updated
 
-2026-02-27 (Sandbox Orphan Container Reaper — Post-M30)
+2026-02-27 (Telegram Typing Indicator Fix — Post-M30)
