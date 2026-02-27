@@ -2,7 +2,7 @@
 name: nano-banana-pro
 description: Generate or edit images via Gemini 3 Pro Image (Nano Banana Pro).
 homepage: https://ai.google.dev/
-metadata: {"beamclaw": {"emoji": "\ud83c\udf4c", "requires": {"bins": ["uv"], "env": ["GEMINI_API_KEY"]}, "install": [{"kind": "brew", "formula": "uv"}]}}
+metadata: {"beamclaw": {"emoji": "🍌", "requires": {"bins": ["uv"], "env": ["GEMINI_API_KEY"]}, "install": [{"kind": "brew", "formula": "uv"}]}}
 ---
 
 # Nano Banana Pro (Gemini 3 Pro Image)
