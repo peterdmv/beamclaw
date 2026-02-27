@@ -103,6 +103,7 @@ CT suites:
 | `bc_agentic_loop_SUITE` | `beamclaw_core` | 2 | Session + loop + provider round-trip |
 | `bc_http_integration_SUITE` | `beamclaw_gateway` | 2 | Cowboy HTTP handlers end-to-end |
 | `bc_sandbox_docker_SUITE` | `beamclaw_sandbox` | 3 | Docker container lifecycle, script execution, bridge |
+| `bc_scheduler_SUITE` | `beamclaw_scheduler` | 2 | Scheduler timer fire, delivery, heartbeat, tool actions |
 
 **When to run**:
 - Before every commit: `rebar3 eunit`
@@ -114,6 +115,7 @@ CT suites:
 | Pure-function module | EUnit |
 | Multi-module OTP interaction (session + loop + tools) | CT integration suite |
 | HTTP/WebSocket handler | CT integration suite |
+| Scheduler/heartbeat/cron changes | CT `bc_scheduler_SUITE` |
 | Docker/sandbox/external process | CT Docker E2E suite |
 
 ## Technology Stack

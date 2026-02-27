@@ -17,7 +17,7 @@ Common Test E2E/integration suites added (Post-M30).
 Sandbox orphan container reaper + registry immediate cleanup added (Post-M30).
 Telegram typing indicator fix: async long-poll prevents mailbox blocking (Post-M30).
 Scheduler & heartbeat system (M31–M37) is complete.
-466 EUnit tests + 19 CT tests pass (485 total).
+466 EUnit tests + 30 CT tests pass (496 total).
 
 ---
 
@@ -685,6 +685,16 @@ All six OTP apps created, supervision trees defined, behaviours declared,
 | docs/configuration.md update | ✅ | beamclaw_scheduler config keys |
 | docs/running.md update | ✅ | Scheduler CLI commands, heartbeat setup guide |
 
+### Post-M37 — Scheduler CT Integration Suite ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| `bc_scheduler_SUITE` | ✅ | 11 tests: tool actions, timer fire, heartbeat, error handling, concurrency |
+| `bc_provider_heartbeat_ok_mock` | ✅ | Mock returning "HEARTBEAT_OK" |
+| `bc_provider_heartbeat_alert_mock` | ✅ | Mock returning alert text |
+| CLAUDE.md update | ✅ | CT suites table, testing policy |
+| docs/building.md update | ✅ | CT suite table, testing policy |
+
 ---
 
 ## Known Issues / Blockers
@@ -695,4 +705,4 @@ _None at this time._
 
 ## Last Updated
 
-2026-02-27 (Scheduler & Heartbeat — M31–M37)
+2026-02-27 (Scheduler CT Integration Suite — Post-M37)
