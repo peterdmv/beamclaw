@@ -17,7 +17,8 @@ Common Test E2E/integration suites added (Post-M30).
 Sandbox orphan container reaper + registry immediate cleanup added (Post-M30).
 Telegram typing indicator fix: async long-poll prevents mailbox blocking (Post-M30).
 Scheduler & heartbeat system (M31–M37) is complete.
-466 EUnit tests + 30 CT tests pass (496 total).
+Brave Search built-in tool (`web_search`) added (Post-M37).
+476 EUnit tests + 31 CT tests pass (507 total).
 
 ---
 
@@ -697,6 +698,22 @@ All six OTP apps created, supervision trees defined, behaviours declared,
 
 ---
 
+### Post-M37 — Brave Search Built-in Tool ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| `bc_tool_web_search` | ✅ | Built-in tool; Brave Search API; read_only autonomy, no approval |
+| `bc_tool_registry` update | ✅ | 9 built-in tools (added web_search) |
+| `bc_workspace_templates` update | ✅ | TOOLS.md template lists web_search |
+| `sys.config` + `sys.docker.config` | ✅ | `beamclaw_tools` config section with `web_search` key |
+| `bc_provider_websearch_mock` | ✅ | Mock provider for CT |
+| `bc_agentic_loop_SUITE` update | ✅ | `web_search_tool_call` test case (no-API-key error path) |
+| EUnit tests | ✅ | 10 tests: definition, approval, autonomy, no-key, missing-query, format_results |
+| CLAUDE.md update | ✅ | File Layout, tool implementations list, Configuration |
+| docs/configuration.md update | ✅ | BRAVE_API_KEY env var, beamclaw_tools config section |
+
+---
+
 ## Known Issues / Blockers
 
 _None at this time._
@@ -705,4 +722,4 @@ _None at this time._
 
 ## Last Updated
 
-2026-02-27 (Scheduler CT Integration Suite — Post-M37)
+2026-02-27 (Brave Search Built-in Tool — Post-M37)

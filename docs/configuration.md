@@ -22,6 +22,7 @@ resolved at runtime by `bc_config:get/2` via `os:getenv/1`.
 | `BEAMCLAW_HOME` | No | Override workspace base directory (default: `~/.beamclaw`) |
 | `BEAMCLAW_AGENT` | No | Default agent name for TUI sessions (default: `default`) |
 | `BEAMCLAW_USER` | No | Canonical user identity for cross-channel session sharing. When set, all channels (TUI, Telegram, HTTP, WebSocket) use this value as-is (no prefix), enabling a single shared session across channels. When unset, each channel prefixes user IDs independently. |
+| `BRAVE_API_KEY` | No | Brave Search API key for the `web_search` built-in tool. Get one at [brave.com/search/api](https://brave.com/search/api/). When unset, the tool returns a configuration error. |
 | `BEAMCLAW_EMBEDDING_API_KEY` | No | API key for the embedding service (OpenAI-compatible). When unset, semantic/hybrid search degrades to BM25 keyword-only. |
 | `BEAMCLAW_EMBEDDING_URL` | No | Base URL for the embedding API (default: `https://api.openai.com/v1`). Supports OpenAI, Azure OpenAI, Ollama, or any OpenAI-compatible endpoint. |
 | `BEAMCLAW_EMBEDDING_MODEL` | No | Embedding model name (default: `text-embedding-3-small`). |
@@ -128,6 +129,25 @@ them to a file — `.env` and `*.secret` files are excluded by `.gitignore`.
 Each configured server is started as a `bc_mcp_server` gen_server that owns a stdio port.
 Tools discovered via `tools/list` are registered in `bc_mcp_registry` and made available
 to the agentic loop.
+
+### beamclaw_tools
+
+```erlang
+{beamclaw_tools, [
+    %% Brave Search API configuration for the web_search built-in tool.
+    %% The tool is always registered but returns a helpful error at execute
+    %% time if the API key is not configured.
+    {web_search, #{
+        api_key     => {env, "BRAVE_API_KEY"},   %% required for web search
+        max_results => 10                         %% upper bound for count parameter
+    }}
+]}
+```
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `web_search.api_key` | `{env, Var}` | — | Brave Search API key. Get one at [brave.com/search/api](https://brave.com/search/api/) |
+| `web_search.max_results` | integer | `10` | Maximum number of results the tool can return |
 
 ### beamclaw_gateway
 

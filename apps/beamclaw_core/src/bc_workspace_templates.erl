@@ -88,6 +88,7 @@ template(<<"TOOLS.md">>) ->
       "- **delete_file** — Delete a file. Requires approval.\n"
       "- **curl** — HTTP requests. Useful for APIs and web content.\n"
       "- **jq** — Process JSON data.\n"
+      "- **web_search** — Search the web via Brave Search (when BRAVE_API_KEY is set).\n"
       "- **workspace_memory** — Read/update your MEMORY.md and daily logs.\n"
       "- **exec** — Run scripts in a Docker sandbox with tool bridge access (when sandbox enabled).\n\n"
       "## Sandbox Code Execution\n\n"
