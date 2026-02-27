@@ -115,10 +115,14 @@ load_daily_logs(AgentId) ->
     end, Dates).
 
 -doc """
-Load eligible skills as system messages.
-Skills are represented as maps with keys: name, content, description, etc.
-This avoids a compile-time dependency on the #bc_skill{} record which lives
-in bc_types.hrl and may not be defined until M16.
+Load eligible skills as system messages using a two-tier strategy:
+
+- **Always skills** (`metadata.beamclaw.always = true`): full content injected
+  as individual system messages (same as before). These contain reference
+  instructions the agent should always have available.
+- **On-demand skills**: a single compact summary message listing skill names,
+  descriptions, and read_file paths. The agent reads the full SKILL.md only
+  when it decides to use a skill, saving tokens on every turn.
 """.
 load_skills(AgentId, Config) ->
     case code:ensure_loaded(bc_skill_discovery) of
@@ -128,7 +132,8 @@ load_skills(AgentId, Config) ->
                 Eligible = [S || S <- Skills,
                             bc_skill_eligibility:is_eligible(S)],
                 Filtered = filter_by_allowlist(Eligible, Config),
-                lists:map(fun(Skill) ->
+                {Always, OnDemand} = lists:partition(fun is_always_skill/1, Filtered),
+                AlwaysMsgs = lists:map(fun(Skill) ->
                     Name = skill_name(Skill),
                     RawContent = skill_content(Skill),
                     Content = resolve_base_dir(RawContent, skill_path(Skill)),
@@ -139,11 +144,67 @@ load_skills(AgentId, Config) ->
                         content = MsgContent,
                         ts      = 0
                     }
-                end, Filtered)
+                end, Always),
+                SummaryMsgs = build_skill_summary(OnDemand),
+                AlwaysMsgs ++ SummaryMsgs
             catch _:_ -> []
             end;
         _ -> []
     end.
+
+is_always_skill(Skill) ->
+    Meta = skill_metadata(Skill),
+    case Meta of
+        #{<<"beamclaw">> := #{<<"always">> := true}} -> true;
+        _ -> false
+    end.
+
+build_skill_summary([]) -> [];
+build_skill_summary(Skills) ->
+    Lines = [format_skill_summary(S) || S <- Skills],
+    SkillList = iolist_to_binary(lists:join(<<"\n">>, Lines)),
+    Content = <<"[skills:available]\n"
+                "## Available Skills\n\n"
+                "Before replying, scan the skills below. If one clearly applies to the user's\n"
+                "request, read its full content with the read_file tool, then follow its\n"
+                "instructions.\n\n"
+                "<available_skills>\n",
+                SkillList/binary, "\n"
+                "</available_skills>\n\n"
+                "Rules:\n"
+                "- Select at most ONE skill per turn.\n"
+                "- Do NOT read a skill unless it clearly matches the user's request.\n"
+                "- After reading, follow the skill's instructions exactly.">>,
+    [#bc_message{
+        id      = generate_id(),
+        role    = system,
+        content = Content,
+        ts      = 0
+    }].
+
+format_skill_summary(Skill) ->
+    Name = skill_name(Skill),
+    Desc = case skill_description(Skill) of
+               undefined -> <<"(no description)">>;
+               D -> D
+           end,
+    Path = skill_path(Skill),
+    PathBin = case Path of
+                  P when is_list(P), P =/= "" -> list_to_binary(P);
+                  _ -> <<"unknown">>
+              end,
+    BaseDirNote = case has_base_dir(Skill) of
+                      true ->
+                          Dir = list_to_binary(filename:dirname(Path)),
+                          <<" (baseDir: ", Dir/binary, ")">>;
+                      false -> <<>>
+                  end,
+    <<"- ", Name/binary, ": ", Desc/binary, " [read: ", PathBin/binary, "]",
+      BaseDirNote/binary>>.
+
+has_base_dir(Skill) ->
+    Content = skill_content(Skill),
+    binary:match(Content, <<"{baseDir}">>) =/= nomatch.
 
 filter_by_allowlist(Skills, #{skills := #{entries := Entries}}) ->
     [S || S <- Skills,
@@ -158,7 +219,9 @@ filter_by_allowlist(Skills, _Config) ->
 %% #bc_skill{name, description, homepage, emoji, content, source, metadata, path}
 %% = {bc_skill, Name, Description, Homepage, Emoji, Content, Source, Metadata, Path}
 skill_name(Skill) -> element(2, Skill).
+skill_description(Skill) -> element(3, Skill).
 skill_content(Skill) -> element(6, Skill).
+skill_metadata(Skill) -> element(8, Skill).
 skill_path(Skill) -> element(9, Skill).
 
 -doc """

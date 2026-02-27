@@ -5,9 +5,9 @@
 Scaffolding is complete. All nine OTP apps compile clean with zero warnings.
 Core systems (M0–M10), workspaces (M11–M17), session persistence and sharing
 (M18–M19), Telegram pairing (M20), memory search (M21–M23), photo/vision (M24),
-Docker sandbox (M25–M30), scheduler/heartbeat (M31–M37), and Brave Search
-(Post-M37) are all complete. Bundled skills (finnhub, nano-banana-pro) added
-with `{baseDir}` template resolution. 482 EUnit tests + 31 CT tests pass (513 total).
+Docker sandbox (M25–M30), scheduler/heartbeat (M31–M37), Brave Search, bundled
+skills, and on-demand skill loading (Post-M37) are all complete.
+495 EUnit tests + 31 CT tests pass (526 total).
 
 ---
 
@@ -59,46 +59,22 @@ with `{baseDir}` template resolution. 482 EUnit tests + 31 CT tests pass (513 to
 | M25–M30 | Docker Sandbox (Lifecycle, Bridge, Tool Exec, PII, Policy, Skills, CLI) |
 | Post-M30 | Docker Sibling Containers, CT Suites, delete_bootstrap/delete_file, Reaper, Typing Fix |
 | M31–M37 | Scheduler & Heartbeat (Data Model, Store, Runner, Executor, Tool, Templates, CLI) |
+| Post-M37 | Scheduler CT Suite, Brave Search Tool, Bundled Skills (finnhub, nano-banana-pro) |
 
 ---
 
 ## Recent Milestones
 
-### Post-M37 — Scheduler CT Integration Suite ✅
+### Post-M37 — On-Demand Skill Loading (Token Optimization) ✅
 
 | Task | Status | Notes |
 |------|--------|-------|
-| `bc_scheduler_SUITE` | ✅ | 11 tests: tool actions, timer fire, heartbeat, error handling, concurrency |
-| `bc_provider_heartbeat_ok_mock` | ✅ | Mock returning "HEARTBEAT_OK" |
-| `bc_provider_heartbeat_alert_mock` | ✅ | Mock returning alert text |
-| CLAUDE.md update | ✅ | CT suites table, testing policy |
-| docs/building.md update | ✅ | CT suite table, testing policy |
-
-### Post-M37 — Brave Search Built-in Tool ✅
-
-| Task | Status | Notes |
-|------|--------|-------|
-| `bc_tool_web_search` | ✅ | Built-in tool; Brave Search API; read_only autonomy, no approval |
-| `bc_tool_registry` update | ✅ | 9 built-in tools (added web_search) |
-| `bc_workspace_templates` update | ✅ | TOOLS.md template lists web_search |
-| `sys.config` + `sys.docker.config` | ✅ | `beamclaw_tools` config section with `web_search` key |
-| `bc_provider_websearch_mock` | ✅ | Mock provider for CT |
-| `bc_agentic_loop_SUITE` update | ✅ | `web_search_tool_call` test case (no-API-key error path) |
-| EUnit tests | ✅ | 10 tests: definition, approval, autonomy, no-key, missing-query, format_results |
-| CLAUDE.md update | ✅ | File Layout, tool implementations list, Configuration |
-| docs/configuration.md update | ✅ | BRAVE_API_KEY env var, beamclaw_tools config section |
-
-### Post-M37 — Bundled Skills (finnhub, nano-banana-pro) ✅
-
-| Task | Status | Notes |
-|------|--------|-------|
-| `finnhub/SKILL.md` | ✅ | Bundled skill; requires FINNHUB_TOKEN, curl, jq |
-| `nano-banana-pro/SKILL.md` | ✅ | Bundled skill; requires GEMINI_API_KEY, uv; includes scripts/ |
-| `generate_image.py` | ✅ | Gemini image generation script (copied from OpenClaw) |
-| `bc_system_prompt` `{baseDir}` | ✅ | `resolve_base_dir/2` replaces `{baseDir}` with skill directory path |
-| `.env.example` | ✅ | FINNHUB_TOKEN, GEMINI_API_KEY, GEMINI_MODEL |
-| CLAUDE.md File Layout | ✅ | Updated priv/skills/ tree |
-| EUnit tests | ✅ | 6 new: bundled skill parsing (2) + resolve_base_dir (4) |
+| `bc_system_prompt` two-tier loading | ✅ | `always: true` skills get full content; others get compact summary |
+| Summary message format | ✅ | `[skills:available]` with name, description, `[read: path]`, baseDir note |
+| `is_always_skill/1` | ✅ | Checks `metadata.beamclaw.always = true` |
+| `build_skill_summary/1` | ✅ | Single system message with `<available_skills>` XML block |
+| `format_skill_summary/1` | ✅ | Per-skill summary line with `(baseDir: ...)` annotation when needed |
+| EUnit tests | ✅ | 7 new: always full content, on-demand summary, baseDir note, mixed, no-summary |
 
 ---
 
