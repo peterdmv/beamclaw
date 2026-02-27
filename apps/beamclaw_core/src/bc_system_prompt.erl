@@ -129,8 +129,15 @@ load_skills(AgentId, Config) ->
         {module, _} ->
             try
                 Skills = bc_skill_discovery:discover(AgentId),
-                Eligible = [S || S <- Skills,
-                            bc_skill_eligibility:is_eligible(S)],
+                Eligible = lists:filter(fun(S) ->
+                    case bc_skill_eligibility:check(S) of
+                        ok -> true;
+                        {missing, Details} ->
+                            logger:debug("Skill ~s ineligible: ~p",
+                                         [skill_name(S), Details]),
+                            false
+                    end
+                end, Skills),
                 Filtered = filter_by_allowlist(Eligible, Config),
                 {Always, OnDemand} = lists:partition(fun is_always_skill/1, Filtered),
                 AlwaysMsgs = lists:map(fun(Skill) ->
