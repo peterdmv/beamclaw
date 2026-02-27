@@ -4,6 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## State Management
 - **Task List**: Always read and update @STATUS.md before and after every task.
+  - When a milestone is fully complete (all ✅), collapse it into the
+    "Completed Milestones" summary table and move its detail to
+    `STATUS_ARCHIVE.md`. Keep only the last 2–3 completed milestones
+    with full detail in STATUS.md.
+  - STATUS.md should stay under ~150 lines. If it exceeds this, archive
+    older completed milestones.
 - **Decision Log**: Consult @DECISIONS.md before suggesting architectural changes.
 - **Documentation Sync**: When adding or removing a module, app, CLI command,
   config option, HTTP route, or behaviour — or when making an architectural
