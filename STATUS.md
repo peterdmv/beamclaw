@@ -8,7 +8,7 @@ Core systems (M0–M10), workspaces (M11–M17), session persistence and sharing
 Docker sandbox (M25–M30), scheduler/heartbeat (M31–M37), Brave Search, bundled
 skills, on-demand skill loading, Telegram markdown-to-HTML formatting,
 BM25-based skill auto-injection, and `/context` command (Post-M37) are all complete.
-573 EUnit tests + 31 CT tests pass (604 total).
+573 EUnit tests + 37 CT tests pass (610 total).
 
 ---
 

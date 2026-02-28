@@ -110,6 +110,7 @@ CT suites:
 | `bc_http_integration_SUITE` | `beamclaw_gateway` | 2 | Cowboy HTTP handlers end-to-end |
 | `bc_sandbox_docker_SUITE` | `beamclaw_sandbox` | 3 | Docker container lifecycle, script execution, bridge |
 | `bc_scheduler_SUITE` | `beamclaw_scheduler` | 2 | Scheduler timer fire, delivery, heartbeat, tool actions |
+| `bc_context_integration_SUITE` | `beamclaw_gateway` | 2 | /context command dispatch (TUI + Telegram) |
 
 **When to run**:
 - Before every commit: `rebar3 eunit`
