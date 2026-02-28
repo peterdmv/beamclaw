@@ -513,6 +513,7 @@ Patterns to redact:
 - `secret\s*[:=]\s*\S+`
 - `Bearer\s+\S+`
 - `sk-[A-Za-z0-9]+` (OpenAI keys)
+- `gsk_[A-Za-z0-9]+` (Groq API keys)
 - `ghp_[A-Za-z0-9]+` (GitHub PATs)
 
 Replace matched values with `[REDACTED]`. Use `re:replace/4` with `global` option.
@@ -618,7 +619,12 @@ as the user_id, enabling cross-channel session sharing for single-user deploymen
         {telegram, #{token => {env, "TELEGRAM_BOT_TOKEN"}, mode => long_poll,
                      dm_policy => pairing, allow_from => [],
                      photo => #{enabled => true,
-                                max_size_bytes => 5242880}}},  %% 5 MB
+                                max_size_bytes => 5242880},   %% 5 MB
+                     voice => #{enabled => true,
+                                max_duration_seconds => 120,
+                                stt_base_url => "https://api.groq.com/openai/v1",
+                                stt_api_key => {env, "GROQ_API_KEY"},
+                                stt_model => "whisper-large-v3-turbo"}}},
         {tui,      #{enabled => true}}
     ]}
 ]},
@@ -643,7 +649,8 @@ as the user_id, enabling cross-channel session sharing for single-user deploymen
                           {deny, <<"bash">>}, {deny, <<"terminal">>}]}},
     {env_allowlist, [<<"PATH">>, <<"HOME">>, <<"LANG">>, <<"TERM">>]},
     {env_blocklist, [<<"OPENROUTER_API_KEY">>, <<"OPENAI_API_KEY">>,
-                     <<"TELEGRAM_BOT_TOKEN">>, <<"AWS_SECRET_ACCESS_KEY">>]}
+                     <<"TELEGRAM_BOT_TOKEN">>, <<"AWS_SECRET_ACCESS_KEY">>,
+                     <<"GROQ_API_KEY">>]}
 ]},
 {beamclaw_tools, [
     {web_search, #{api_key => {env, "BRAVE_API_KEY"},
@@ -870,6 +877,8 @@ beamclaw/
       bc_channel_telegram.erl
       bc_telegram_format.erl    %% pure-function markdown→Telegram HTML converter
       bc_telegram_photo.erl     %% photo extraction, download, base64 encoding
+      bc_telegram_audio.erl    %% voice/audio extraction and download
+      bc_stt.erl               %% speech-to-text client (Groq Whisper / OpenAI-compatible)
       bc_channel_tui.erl
       bc_http_health_h.erl
       bc_http_metrics_h.erl

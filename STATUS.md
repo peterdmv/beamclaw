@@ -7,9 +7,9 @@ Core systems (M0–M10), workspaces (M11–M17), session persistence and sharing
 (M18–M19), Telegram pairing (M20), memory search (M21–M23), photo/vision (M24),
 Docker sandbox (M25–M30), scheduler/heartbeat (M31–M37), Brave Search, bundled
 skills, on-demand skill loading, Telegram markdown-to-HTML formatting,
-BM25-based skill auto-injection, `/context` command, and outgoing photo
-delivery, and per-user agent mapping (Post-M37) are all complete.
-618 EUnit tests + 37 CT tests pass (655 total).
+BM25-based skill auto-injection, `/context` command, outgoing photo delivery,
+per-user agent mapping, and voice message transcription (Post-M37) are all complete.
+642 EUnit tests + 37 CT tests pass (679 total).
 
 ---
 
@@ -69,10 +69,25 @@ delivery, and per-user agent mapping (Post-M37) are all complete.
 | Post-M37 | `/context` Command (TUI + Telegram) |
 | Post-M37 | Outgoing Photo Delivery (Telegram + TUI) |
 | Post-M37 | Per-User Agent Mapping (Telegram Pairing) |
+| Post-M37 | Voice Message Transcription (Telegram → Groq Whisper) |
 
 ---
 
 ## Recent Milestones
+
+### Post-M37 — Voice Message Transcription ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Create `bc_telegram_audio.erl` | ✅ | Pure-function: `extract_voice/1` (voice → audio fallback), `download/2` (delegates to `bc_telegram_photo:download/2`) |
+| Create `bc_stt.erl` | ✅ | Pure-function STT client: hackney multipart POST to OpenAI-compatible `/audio/transcriptions`, `transcribe/2,3` |
+| Voice branch in `extract_content_and_attachments/2` | ✅ | Falls through to `maybe_extract_voice/2` when no photo; works even if photo disabled |
+| `try_transcribe_voice/4` in `bc_channel_telegram.erl` | ✅ | Duration check → download → transcribe → `[Voice] ` prefix; graceful fallback on errors |
+| Voice config helpers | ✅ | `voice_enabled/0` (default false), `voice_max_duration/0` (120s), `voice_stt_config/0` |
+| Config: `voice` block in `sys.config` + `sys.docker.config` | ✅ | `{env, "GROQ_API_KEY"}`, `whisper-large-v3-turbo`, Groq base URL |
+| `gsk_` pattern in `bc_scrubber` | ✅ | Groq API keys scrubbed; `GROQ_API_KEY` added to sandbox `env_blocklist` |
+| EUnit tests | ✅ | 24 new: 11 audio extraction + 13 STT (multipart body, filenames, config, opts) |
+| Update CLAUDE.md + STATUS.md + docs | ✅ | File Layout, Configuration, Credential Scrubbing, milestone |
 
 ### Post-M37 — Per-User Agent Mapping ✅
 
@@ -98,29 +113,6 @@ delivery, and per-user agent mapping (Post-M37) are all complete.
 | TUI attachment display in `bc_channel_tui.erl` | ✅ | `[Attachment: image/png]` indicator for terminal users |
 | EUnit tests | ✅ | 32 new: 18 media extraction (tokens, mime types, file I/O) + 14 Telegram photo (mime check, caption, multipart) |
 | Update CLAUDE.md + STATUS.md | ✅ | Obs events, file layout, milestone |
-
-### Post-M37 — `/context` Command ✅
-
-| Task | Status | Notes |
-|------|--------|-------|
-| Create `bc_context.erl` in `beamclaw_core` | ✅ | Pure-function module: gather/1, format_text/1,2, render_svg/1, render_png/1 |
-| Token estimation + context window lookup | ✅ | `byte_size/4` approximation, hardcoded model→window map |
-| 10x10 Unicode grid with category colors | ✅ | ANSI colors for TUI, plain chars for Telegram fallback |
-| SVG rendering (dark theme) | ✅ | Grid + legend + bootstrap listing; PNG via `rsvg-convert` |
-| Intercept `/context` in `bc_channel_tui.erl` | ✅ | ANSI-colored output with model name + category breakdown |
-| Intercept `/context` in `bc_channel_telegram.erl` | ✅ | Emoji grid via `format_telegram/1`, plain-text fallback |
-| EUnit tests | ✅ | 17 total: tokens, context windows, format_size, gather, text/ANSI/SVG/PNG, telegram (emoji/legend/bootstrap/grid) |
-| Update CLAUDE.md + STATUS.md | ✅ | File Layout, milestone |
-
-### Post-M37 — BM25 Skill Auto-Injection ✅
-
-| Task | Status | Notes |
-|------|--------|-------|
-| Add `assemble/3` overload to `bc_system_prompt.erl` | ✅ | Accepts user message, passes to `load_skills/3` |
-| BM25-based skill promotion in `load_skills/3` | ✅ | `maybe_promote_skill/2`: rank on-demand skills by name+desc, promote top if score ≥ 0.5 |
-| Pass user message from `bc_loop.erl` | ✅ | `last_user_content(History)` → `assemble/3` in streaming `do_stream` |
-| EUnit tests | ✅ | 5 new test generators (11 assertions): promotes, no-match, best-of-multiple, threshold, always-unaffected |
-| Update STATUS.md | ✅ | Milestone |
 
 ---
 

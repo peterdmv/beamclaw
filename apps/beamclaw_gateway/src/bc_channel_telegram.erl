@@ -277,7 +277,7 @@ handle_context_command(SessionId, AgentId, ChatId) ->
 extract_content_and_attachments(Msg, Text) ->
     case photo_enabled() of
         false ->
-            {Text, []};
+            maybe_extract_voice(Msg, Text);
         true ->
             case bc_telegram_photo:extract_photo(Msg) of
                 {ok, FileId} ->
@@ -290,7 +290,7 @@ extract_content_and_attachments(Msg, Text) ->
                     Attachments = try_download_photo(FileId),
                     {Content, Attachments};
                 no_photo ->
-                    {Text, []}
+                    maybe_extract_voice(Msg, Text)
             end
     end.
 
@@ -315,6 +315,60 @@ try_download_photo(FileId) ->
             []
     end.
 
+maybe_extract_voice(Msg, Text) ->
+    case voice_enabled() of
+        false -> {Text, []};
+        true ->
+            case bc_telegram_audio:extract_voice(Msg) of
+                {ok, FileId, Duration, MimeType} ->
+                    try_transcribe_voice(FileId, Duration, MimeType, Text);
+                no_voice ->
+                    {Text, []}
+            end
+    end.
+
+try_transcribe_voice(FileId, Duration, MimeType, Text) ->
+    MaxDuration = voice_max_duration(),
+    case Duration > MaxDuration of
+        true ->
+            logger:warning("[telegram] voice too long: duration=~Bs max=~Bs",
+                           [Duration, MaxDuration]),
+            FallbackText = <<"[Voice message too long for transcription]">>,
+            Content = case Text of
+                <<>> -> FallbackText;
+                _    -> <<Text/binary, "\n", FallbackText/binary>>
+            end,
+            {Content, []};
+        false ->
+            Token = resolve_token(),
+            case bc_telegram_audio:download(FileId, Token) of
+                {ok, _DownloadMime, AudioBin} ->
+                    SttConfig = voice_stt_config(),
+                    case bc_stt:transcribe(AudioBin, SttConfig, #{mime_type => MimeType}) of
+                        {ok, Transcript} ->
+                            logger:info("[telegram] voice transcribed: duration=~Bs chars=~B",
+                                        [Duration, byte_size(Transcript)]),
+                            Content = case Text of
+                                <<>> -> <<"[Voice] ", Transcript/binary>>;
+                                _    -> <<Text/binary, "\n[Voice] ", Transcript/binary>>
+                            end,
+                            {Content, []};
+                        {error, Reason} ->
+                            logger:warning("[telegram] voice transcription failed: ~p", [Reason]),
+                            FallbackText = <<"[Voice message — transcription failed]">>,
+                            Content = case Text of
+                                <<>> -> FallbackText;
+                                _    -> <<Text/binary, "\n", FallbackText/binary>>
+                            end,
+                            {Content, []}
+                    end;
+                {error, Reason} ->
+                    logger:warning("[telegram] voice download failed: file_id=~s reason=~p",
+                                   [FileId, Reason]),
+                    {Text, []}
+            end
+    end.
+
 photo_enabled() ->
     Channels = bc_config:get(beamclaw_gateway, channels, []),
     TgConfig = proplists:get_value(telegram, Channels, #{}),
@@ -326,6 +380,26 @@ photo_max_size() ->
     TgConfig = proplists:get_value(telegram, Channels, #{}),
     PhotoCfg = maps:get(photo, TgConfig, #{}),
     maps:get(max_size_bytes, PhotoCfg, 5242880).  %% 5 MB default
+
+voice_enabled() ->
+    Channels = bc_config:get(beamclaw_gateway, channels, []),
+    TgConfig = proplists:get_value(telegram, Channels, #{}),
+    VoiceCfg = maps:get(voice, TgConfig, #{}),
+    maps:get(enabled, VoiceCfg, false).  %% opt-in: disabled by default
+
+voice_max_duration() ->
+    Channels = bc_config:get(beamclaw_gateway, channels, []),
+    TgConfig = proplists:get_value(telegram, Channels, #{}),
+    VoiceCfg = maps:get(voice, TgConfig, #{}),
+    maps:get(max_duration_seconds, VoiceCfg, 120).  %% 2 min default
+
+voice_stt_config() ->
+    Channels = bc_config:get(beamclaw_gateway, channels, []),
+    TgConfig = proplists:get_value(telegram, Channels, #{}),
+    VoiceCfg = maps:get(voice, TgConfig, #{}),
+    #{api_key  => bc_config:resolve(maps:get(stt_api_key, VoiceCfg, {env, "GROQ_API_KEY"})),
+      base_url => maps:get(stt_base_url, VoiceCfg, "https://api.groq.com/openai/v1"),
+      model    => maps:get(stt_model, VoiceCfg, "whisper-large-v3-turbo")}.
 
 get_dm_policy() ->
     Channels = bc_config:get(beamclaw_gateway, channels, []),

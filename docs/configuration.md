@@ -175,6 +175,15 @@ to the agentic loop.
             photo => #{
                 enabled        => true,       %% set false to ignore photos
                 max_size_bytes => 5242880     %% 5 MB; photos over this are skipped
+            },
+            %% Voice message transcription (speech-to-text).
+            %% Uses Groq Whisper (OpenAI-compatible /audio/transcriptions API).
+            voice => #{
+                enabled              => true,
+                max_duration_seconds => 120,          %% skip voice > 2 min
+                stt_base_url => "https://api.groq.com/openai/v1",
+                stt_api_key  => {env, "GROQ_API_KEY"},
+                stt_model    => "whisper-large-v3-turbo"
             }
         }},
         {tui, #{

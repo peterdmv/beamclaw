@@ -697,3 +697,24 @@ All six OTP apps created, supervision trees defined, behaviours declared,
 | Skip empty Telegram messages | ✅ | Guard `send/3` for `<<>>` and `undefined` content |
 | Scrub tool call args before obs logging | ✅ | `scrub_map/1` on `tool_call_start` event args |
 | EUnit tests | ✅ | 8 new: 4 env var passthrough, 1 real-value-still-scrubbed, 3 scrub_map |
+
+## Post-M37 — BM25 Skill Auto-Injection ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Add `assemble/3` overload to `bc_system_prompt.erl` | ✅ | Accepts user message, passes to `load_skills/3` |
+| BM25-based skill promotion in `load_skills/3` | ✅ | `maybe_promote_skill/2`: rank on-demand skills by name+desc, promote top if score ≥ 0.5 |
+| Pass user message from `bc_loop.erl` | ✅ | `last_user_content(History)` → `assemble/3` in streaming `do_stream` |
+| EUnit tests | ✅ | 5 new test generators (11 assertions): promotes, no-match, best-of-multiple, threshold, always-unaffected |
+
+## Post-M37 — `/context` Command ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Create `bc_context.erl` in `beamclaw_core` | ✅ | Pure-function module: gather/1, format_text/1,2, render_svg/1, render_png/1 |
+| Token estimation + context window lookup | ✅ | `byte_size/4` approximation, hardcoded model→window map |
+| 10x10 Unicode grid with category colors | ✅ | ANSI colors for TUI, plain chars for Telegram fallback |
+| SVG rendering (dark theme) | ✅ | Grid + legend + bootstrap listing; PNG via `rsvg-convert` |
+| Intercept `/context` in `bc_channel_tui.erl` | ✅ | ANSI-colored output with model name + category breakdown |
+| Intercept `/context` in `bc_channel_telegram.erl` | ✅ | Emoji grid via `format_telegram/1`, plain-text fallback |
+| EUnit tests | ✅ | 17 total: tokens, context windows, format_size, gather, text/ANSI/SVG/PNG, telegram (emoji/legend/bootstrap/grid) |

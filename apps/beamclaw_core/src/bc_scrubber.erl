@@ -39,6 +39,8 @@ Uses regex patterns to redact known credential formats.
     %% GitHub PATs
     "ghp_[A-Za-z0-9]{36}",
     "ghs_[A-Za-z0-9]{36}",
+    %% Groq API keys
+    "gsk_[A-Za-z0-9]{20,}",
     %% AWS keys (rough pattern)
     "AKIA[0-9A-Z]{16}"
 ]).
