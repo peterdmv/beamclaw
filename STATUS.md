@@ -7,7 +7,7 @@ Core systems (M0–M10), workspaces (M11–M17), session persistence and sharing
 (M18–M19), Telegram pairing (M20), memory search (M21–M23), photo/vision (M24),
 Docker sandbox (M25–M30), scheduler/heartbeat (M31–M37), Brave Search, bundled
 skills, and on-demand skill loading (Post-M37) are all complete.
-503 EUnit tests + 31 CT tests pass (534 total).
+506 EUnit tests + 31 CT tests pass (537 total).
 
 ---
 
@@ -76,6 +76,17 @@ skills, and on-demand skill loading (Post-M37) are all complete.
 | Scrub tool call args before obs logging | ✅ | `scrub_map/1` on `tool_call_start` event args |
 | EUnit tests | ✅ | 8 new: 4 env var passthrough, 1 real-value-still-scrubbed, 3 scrub_map |
 
+### Post-M37 — Empty Final LLM Response Fix ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| `bc_thinking:strip` preserves content on full-strip | ✅ | Fallback to `do_strip_tags_only` when `do_strip` returns `<<>>` |
+| `bc_thinking:strip(null)` clause | ✅ | Prevents `function_clause` crash when provider returns JSON null |
+| `bc_provider_openrouter` null content normalization | ✅ | `null` atom → `<<>>` before `bc_thinking:strip` |
+| `bc_channel_telegram` debug logging on empty skip | ✅ | `logger:debug` in empty-content guards for observability |
+| `bc_loop` fallback for empty final response | ✅ | Warning + fallback message when final LLM content is empty |
+| EUnit tests | ✅ | 3 new: null, all-thinking-preserves, all-think-preserves; 1 updated: unclosed |
+
 ---
 
 ## Active Work
@@ -92,4 +103,4 @@ _None at this time._
 
 ## Last Updated
 
-2026-02-27
+2026-02-28

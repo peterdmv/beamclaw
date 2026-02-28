@@ -318,7 +318,20 @@ receive_stream(Data, T0, TickRef) ->
             ToolCalls = bc_tool_parser:parse(ScrubbedMsg),
             NewData = Data#loop_data{tool_calls = ToolCalls},
             case ToolCalls of
-                [] -> {next_state, finalizing, NewData};
+                [] ->
+                    %% Final message — if content is empty, warn and send fallback
+                    case ScrubbedMsg#bc_message.content of
+                        Empty when Empty =:= <<>> orelse Empty =:= undefined ->
+                            logger:warning("[loop] final LLM response has empty content: session=~s",
+                                           [Data#loop_data.session_id]),
+                            Fallback = ScrubbedMsg#bc_message{
+                                content = <<"[I processed the request but couldn't generate a visible response. Please try again.]">>
+                            },
+                            route_response(Data, Fallback);
+                        _ ->
+                            ok
+                    end,
+                    {next_state, finalizing, NewData};
                 _  -> maybe_await_approval(NewData)
             end;
         {stream_error, _Pid, Reason} ->

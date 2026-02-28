@@ -70,9 +70,11 @@ init(Config) ->
 listen(State) ->
     {ok, State}.
 
-send(_SessionId, #bc_message{content = <<>>}, State) ->
+send(SessionId, #bc_message{content = <<>>}, State) ->
+    logger:debug("[telegram] skipping empty content: session=~s", [SessionId]),
     {ok, State};
-send(_SessionId, #bc_message{content = undefined}, State) ->
+send(SessionId, #bc_message{content = undefined}, State) ->
+    logger:debug("[telegram] skipping undefined content: session=~s", [SessionId]),
     {ok, State};
 send(SessionId, #bc_message{content = Content}, State) ->
     ChatId = resolve_chat_id(SessionId, State),
