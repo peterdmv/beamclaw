@@ -36,6 +36,11 @@ Multi-pass algorithm:
 %% Placeholder sentinel byte — won't appear in normal text
 -define(PH, 0).
 
+%% Unicode characters for block-level rendering
+-define(BULLET, <<16#2022/utf8>>).   %% • U+2022 BULLET
+-define(HR_LINE, <<16#2500/utf8, 16#2500/utf8, 16#2500/utf8, 16#2500/utf8,
+                   16#2500/utf8, 16#2500/utf8, 16#2500/utf8, 16#2500/utf8>>).  %% ────────
+
 %%----------------------------------------------------------------------
 %% Public API
 %%----------------------------------------------------------------------
@@ -246,22 +251,22 @@ convert_line(Line, Rest) ->
             Merged = iolist_to_binary(lists:join(<<"\n">>, QuoteLines)),
             {<<"<blockquote>", Merged/binary, "</blockquote>">>, Remaining};
         <<"- ", ItemText/binary>> ->
-            {<<"\u2022 ", ItemText/binary>>, Rest};
+            {<<?BULLET/binary, " ", ItemText/binary>>, Rest};
         <<"* ", ItemText/binary>> ->
             %% Check this isn't a horizontal rule (*** or * * *)
             case is_hr_line(Trimmed) of
-                true  -> {<<"\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500">>, Rest};
-                false -> {<<"\u2022 ", ItemText/binary>>, Rest}
+                true  -> {?HR_LINE, Rest};
+                false -> {<<?BULLET/binary, " ", ItemText/binary>>, Rest}
             end;
         <<"---">> ->
-            {<<"\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500">>, Rest};
+            {?HR_LINE, Rest};
         <<"***">> ->
-            {<<"\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500">>, Rest};
+            {?HR_LINE, Rest};
         <<"___">> ->
-            {<<"\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500">>, Rest};
+            {?HR_LINE, Rest};
         _ ->
             case is_hr_line(Trimmed) of
-                true  -> {<<"\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500">>, Rest};
+                true  -> {?HR_LINE, Rest};
                 false -> {Line, Rest}
             end
     end.

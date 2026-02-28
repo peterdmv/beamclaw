@@ -119,14 +119,14 @@ multiline_blockquote_test() ->
 unordered_list_dash_test() ->
     Input = <<"- First\n- Second">>,
     Result = bc_telegram_format:format(Input),
-    ?assertMatch({match, _}, re:run(Result, <<"\u2022 First">>)),
-    ?assertMatch({match, _}, re:run(Result, <<"\u2022 Second">>)).
+    ?assertMatch({match, _}, re:run(Result, <<16#2022/utf8, " First">>)),
+    ?assertMatch({match, _}, re:run(Result, <<16#2022/utf8, " Second">>)).
 
 unordered_list_star_test() ->
     Input = <<"* First\n* Second">>,
     Result = bc_telegram_format:format(Input),
-    ?assertMatch({match, _}, re:run(Result, <<"\u2022 First">>)),
-    ?assertMatch({match, _}, re:run(Result, <<"\u2022 Second">>)).
+    ?assertMatch({match, _}, re:run(Result, <<16#2022/utf8, " First">>)),
+    ?assertMatch({match, _}, re:run(Result, <<16#2022/utf8, " Second">>)).
 
 ordered_list_test() ->
     Input = <<"1. First\n2. Second">>,
@@ -137,7 +137,7 @@ ordered_list_test() ->
 
 horizontal_rule_test() ->
     Result = bc_telegram_format:format(<<"---">>),
-    ?assertMatch({match, _}, re:run(Result, <<"\u2500">>)).
+    ?assertMatch({match, _}, re:run(Result, <<16#2500/utf8>>)).
 
 %%----------------------------------------------------------------------
 %% Edge Cases
@@ -160,7 +160,7 @@ mixed_realistic_test() ->
     ?assertMatch({match, _}, re:run(Result, <<"<b>Summary</b>">>)),
     ?assertMatch({match, _}, re:run(Result, <<"<b>important</b>">>)),
     ?assertMatch({match, _}, re:run(Result, <<"<pre><code>">>)),
-    ?assertMatch({match, _}, re:run(Result, <<"\u2022 Item one">>)),
+    ?assertMatch({match, _}, re:run(Result, <<16#2022/utf8, " Item one">>)),
     ?assertMatch({match, _}, re:run(Result, <<"<a href=">>)).
 
 unclosed_bold_test() ->
