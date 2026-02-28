@@ -20,7 +20,7 @@ confirm the version is OTP 28 (`erl -version`).
 The `/context` command renders context usage as a PNG image (Telegram) or ANSI text (TUI).
 PNG rendering requires `rsvg-convert`:
 
-- **Alpine/Docker**: `apk add librsvg` (included in Dockerfile)
+- **Alpine/Docker**: `apk add rsvg-convert` (included in Dockerfile)
 - **Ubuntu/Debian**: `apt install librsvg2-bin`
 - **macOS**: `brew install librsvg`
 

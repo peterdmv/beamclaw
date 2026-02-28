@@ -166,11 +166,26 @@ remote_tui_loop(SessionId, AgentId, UserId) ->
                 "" ->
                     io:format("> "),
                     remote_tui_loop(SessionId, AgentId, UserId);
+                "/context" ++ _ ->
+                    handle_remote_context(SessionId, AgentId),
+                    remote_tui_loop(SessionId, AgentId, UserId);
                 _ ->
                     dispatch_remote(SessionId, iolist_to_binary(Text), AgentId, UserId),
                     receive_remote_response(SessionId),
                     remote_tui_loop(SessionId, AgentId, UserId)
             end
+    end.
+
+handle_remote_context(SessionId, AgentId) ->
+    Node = daemon_node(),
+    case rpc:call(Node, bc_session_registry, lookup, [SessionId]) of
+        {ok, Pid} ->
+            History = rpc:call(Node, bc_session, get_history, [Pid]),
+            Info = bc_context:gather(#{agent_id => AgentId, history => History}),
+            Output = bc_context:format_text(Info, #{ansi => true}),
+            io:format("~n~s~n> ", [Output]);
+        _ ->
+            io:format("No active session.~n> ")
     end.
 
 dispatch_remote(SessionId, Text, AgentId, UserId) ->
