@@ -31,7 +31,7 @@ FROM alpine:3.23
 # bash/curl/jq: required by bc_tool_bash, bc_tool_curl, bc_tool_jq, finnhub skill.
 # python3: required by uv for nano-banana-pro skill scripts.
 RUN apk add --no-cache ncurses-libs openssl libstdc++ libgcc docker-cli su-exec \
-    bash curl jq python3 rsvg-convert
+    bash curl jq python3 rsvg-convert font-dejavu
 
 # uv: Python package runner for nano-banana-pro skill (no Alpine package exists).
 COPY --from=uv /uv /usr/local/bin/uv
