@@ -78,7 +78,7 @@ send(SessionId, #bc_message{content = undefined}, State) ->
     {ok, State};
 send(SessionId, #bc_message{content = Content}, State) ->
     ChatId = resolve_chat_id(SessionId, State),
-    send_message(ChatId, Content, State),
+    send_formatted(ChatId, Content, State),
     {ok, State}.
 
 send_typing(SessionId, State) ->
@@ -88,7 +88,7 @@ send_typing(SessionId, State) ->
 
 update_draft(SessionId, DraftId, Content, State) ->
     ChatId = resolve_chat_id(SessionId, State),
-    edit_message(ChatId, DraftId, Content, State),
+    edit_message_html(ChatId, DraftId, Content, State),
     {ok, State}.
 
 finalize_draft(_SessionId, _DraftId, State) ->
@@ -128,7 +128,7 @@ code_change(_OldVsn, State, _) -> {ok, State}.
 %% Internal
 
 delete_webhook(#{token := Token}) ->
-    Url = list_to_binary("https://api.telegram.org/bot" ++ Token ++ "/deleteWebhook"),
+    Url = make_api_url(Token, "/deleteWebhook"),
     case hackney:request(post, Url, [{<<"content-type">>, <<"application/json">>}],
                          <<"{}">> , [{recv_timeout, 10000}, with_body]) of
         {ok, 200, _, _} ->
@@ -141,8 +141,9 @@ delete_webhook(#{token := Token}) ->
     end.
 
 get_updates(Offset, #{token := Token}) ->
-    Url = list_to_binary("https://api.telegram.org/bot" ++ Token ++
-          "/getUpdates?offset=" ++ integer_to_list(Offset) ++ "&timeout=30"),
+    Base = make_api_url(Token, "/getUpdates"),
+    Url = iolist_to_binary([Base, <<"?offset=">>,
+                            integer_to_binary(Offset), <<"&timeout=30">>]),
     case hackney:request(get, Url, [], <<>>,
                          [{recv_timeout, 35000}, with_body]) of
         {ok, 200, _, Body} ->
@@ -318,27 +319,50 @@ send_pairing_reply(ChatId, TgUserId, Code) ->
         <<"Run: beamclaw pair telegram ">>, Code
     ]),
     Token = resolve_token(),
-    send_message(binary_to_integer(ChatId), Text, #{token => Token}).
+    send_message_plain(binary_to_integer(ChatId), Text, #{token => Token}).
 
 resolve_token() ->
     Channels = bc_config:get(beamclaw_gateway, channels, []),
     TgConfig = proplists:get_value(telegram, Channels, #{}),
     bc_config:resolve(maps:get(token, TgConfig, {env, "TELEGRAM_BOT_TOKEN"})).
 
-send_message(ChatId, Text, #{token := Token}) ->
-    Url  = list_to_binary("https://api.telegram.org/bot" ++ Token ++ "/sendMessage"),
-    Body = jsx:encode(#{chat_id => ChatId, text => Text}),
+send_formatted(ChatId, Content, State) ->
+    Formatted = bc_telegram_format:format(Content),
+    Chunks = bc_telegram_format:chunk(Formatted, 4096),
+    lists:foreach(fun(Chunk) ->
+        send_message_html(ChatId, Chunk, Content, State)
+    end, Chunks).
+
+send_message_html(ChatId, Html, OriginalText, State = #{token := Token}) ->
+    Url  = make_api_url(Token, "/sendMessage"),
+    Body = jsx:encode(#{chat_id => ChatId, text => Html,
+                        parse_mode => <<"HTML">>}),
     case hackney:request(post, Url, [{<<"content-type">>, <<"application/json">>}],
                          Body, [with_body]) of
         {ok, 200, _, _} -> ok;
+        {ok, 400, _, _} ->
+            logger:warning("[telegram] HTML parse error, falling back to plain text"),
+            send_message_plain(ChatId, OriginalText, State);
         {ok, Code, _, RBody} ->
             logger:warning("[telegram] sendMessage failed: ~p ~s", [Code, RBody]);
         {error, Reason} ->
             logger:warning("[telegram] sendMessage error: ~p", [Reason])
     end.
 
+send_message_plain(ChatId, Text, #{token := Token}) ->
+    Url  = make_api_url(Token, "/sendMessage"),
+    Body = jsx:encode(#{chat_id => ChatId, text => Text}),
+    case hackney:request(post, Url, [{<<"content-type">>, <<"application/json">>}],
+                         Body, [with_body]) of
+        {ok, 200, _, _} -> ok;
+        {ok, Code, _, RBody} ->
+            logger:warning("[telegram] sendMessage(plain) failed: ~p ~s", [Code, RBody]);
+        {error, Reason} ->
+            logger:warning("[telegram] sendMessage(plain) error: ~p", [Reason])
+    end.
+
 send_action(ChatId, Action, #{token := Token}) ->
-    Url  = list_to_binary("https://api.telegram.org/bot" ++ Token ++ "/sendChatAction"),
+    Url  = make_api_url(Token, "/sendChatAction"),
     Body = jsx:encode(#{chat_id => ChatId, action => Action}),
     case hackney:request(post, Url, [{<<"content-type">>, <<"application/json">>}],
                          Body, [with_body]) of
@@ -349,17 +373,37 @@ send_action(ChatId, Action, #{token := Token}) ->
             logger:warning("[telegram] sendChatAction error: ~p", [Reason])
     end.
 
-edit_message(ChatId, MessageId, Text, #{token := Token}) ->
-    Url  = list_to_binary("https://api.telegram.org/bot" ++ Token ++ "/editMessageText"),
-    Body = jsx:encode(#{chat_id => ChatId, message_id => MessageId, text => Text}),
+edit_message_html(ChatId, MessageId, Content, State = #{token := Token}) ->
+    Formatted = bc_telegram_format:format(Content),
+    Url  = make_api_url(Token, "/editMessageText"),
+    Body = jsx:encode(#{chat_id => ChatId, message_id => MessageId,
+                        text => Formatted, parse_mode => <<"HTML">>}),
     case hackney:request(post, Url, [{<<"content-type">>, <<"application/json">>}],
                          Body, [with_body]) of
         {ok, 200, _, _} -> ok;
+        {ok, 400, _, _} ->
+            logger:warning("[telegram] editMessage HTML parse error, falling back to plain"),
+            edit_message_plain(ChatId, MessageId, Content, State);
         {ok, Code, _, RBody} ->
             logger:warning("[telegram] editMessageText failed: ~p ~s", [Code, RBody]);
         {error, Reason} ->
             logger:warning("[telegram] editMessageText error: ~p", [Reason])
     end.
+
+edit_message_plain(ChatId, MessageId, Text, #{token := Token}) ->
+    Url  = make_api_url(Token, "/editMessageText"),
+    Body = jsx:encode(#{chat_id => ChatId, message_id => MessageId, text => Text}),
+    case hackney:request(post, Url, [{<<"content-type">>, <<"application/json">>}],
+                         Body, [with_body]) of
+        {ok, 200, _, _} -> ok;
+        {ok, Code, _, RBody} ->
+            logger:warning("[telegram] editMessageText(plain) failed: ~p ~s", [Code, RBody]);
+        {error, Reason} ->
+            logger:warning("[telegram] editMessageText(plain) error: ~p", [Reason])
+    end.
+
+make_api_url(Token, Path) ->
+    list_to_binary("https://api.telegram.org/bot" ++ Token ++ Path).
 
 resolve_chat_id(SessionId, _State) ->
     case ets:lookup(bc_telegram_chat_map, SessionId) of

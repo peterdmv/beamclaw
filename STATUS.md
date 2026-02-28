@@ -6,8 +6,9 @@ Scaffolding is complete. All nine OTP apps compile clean with zero warnings.
 Core systems (M0–M10), workspaces (M11–M17), session persistence and sharing
 (M18–M19), Telegram pairing (M20), memory search (M21–M23), photo/vision (M24),
 Docker sandbox (M25–M30), scheduler/heartbeat (M31–M37), Brave Search, bundled
-skills, and on-demand skill loading (Post-M37) are all complete.
-506 EUnit tests + 31 CT tests pass (537 total).
+skills, on-demand skill loading, and Telegram markdown-to-HTML formatting
+(Post-M37) are all complete.
+539 EUnit tests + 31 CT tests pass (570 total).
 
 ---
 
@@ -62,10 +63,20 @@ skills, and on-demand skill loading (Post-M37) are all complete.
 | Post-M37 | Scheduler CT Suite, Brave Search Tool, Bundled Skills (finnhub, nano-banana-pro) |
 | Post-M37 | On-Demand Skill Loading (Token Optimization) |
 | Post-M37 | Scrubber env var fix, empty Telegram messages, obs args scrubbing |
+| Post-M37 | Telegram Markdown-to-HTML Formatting |
 
 ---
 
 ## Recent Milestones
+
+### Post-M37 — Telegram Markdown-to-HTML Formatting ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Create `bc_telegram_format.erl` | ✅ | Pure-function markdown→HTML: format/1, chunk/2, escape_html/1 |
+| Integrate formatter in `bc_channel_telegram.erl` | ✅ | `parse_mode: HTML`, plain-text fallback on 400, `make_api_url/2` helper |
+| EUnit tests | ✅ | 33 new: escaping, code blocks, inline, block-level, edge cases, chunking |
+| Update CLAUDE.md + STATUS.md | ✅ | File Layout, milestone |
 
 ### Post-M37 — Scrubber + Telegram + Obs Fixes ✅
 

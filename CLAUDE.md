@@ -865,6 +865,7 @@ beamclaw/
       bc_gateway_cowboy.erl
       bc_gateway_channels_sup.erl
       bc_channel_telegram.erl
+      bc_telegram_format.erl    %% pure-function markdown→Telegram HTML converter
       bc_telegram_photo.erl     %% photo extraction, download, base64 encoding
       bc_channel_tui.erl
       bc_http_health_h.erl
