@@ -677,3 +677,23 @@ All six OTP apps created, supervision trees defined, behaviours declared,
 | EUnit tests | ✅ | 10 tests: definition, approval, autonomy, no-key, missing-query, format_results |
 | CLAUDE.md update | ✅ | File Layout, tool implementations list, Configuration |
 | docs/configuration.md update | ✅ | BRAVE_API_KEY env var, beamclaw_tools config section |
+
+---
+
+### Post-M37 — Telegram Markdown-to-HTML Formatting ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Create `bc_telegram_format.erl` | ✅ | Pure-function markdown→HTML: format/1, chunk/2, escape_html/1 |
+| Integrate formatter in `bc_channel_telegram.erl` | ✅ | `parse_mode: HTML`, plain-text fallback on 400, `make_api_url/2` helper |
+| EUnit tests | ✅ | 33 new: escaping, code blocks, inline, block-level, edge cases, chunking |
+| Update CLAUDE.md + STATUS.md | ✅ | File Layout, milestone |
+
+### Post-M37 — Scrubber + Telegram + Obs Fixes ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Scrubber skips `$VAR` env references | ✅ | `(?!\$)` lookahead on 4 generic key=value patterns |
+| Skip empty Telegram messages | ✅ | Guard `send/3` for `<<>>` and `undefined` content |
+| Scrub tool call args before obs logging | ✅ | `scrub_map/1` on `tool_call_start` event args |
+| EUnit tests | ✅ | 8 new: 4 env var passthrough, 1 real-value-still-scrubbed, 3 scrub_map |

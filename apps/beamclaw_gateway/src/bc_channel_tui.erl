@@ -65,8 +65,13 @@ init(Config) ->
 listen(State) ->
     {ok, State}.
 
-send(_, #bc_message{content = Content}, State) when is_binary(Content) ->
-    io:format("~n[assistant] ~s~n> ", [Content]),
+send(_, #bc_message{content = Content, attachments = Attachments}, State)
+  when is_binary(Content) ->
+    io:format("~n[assistant] ~s~n", [Content]),
+    lists:foreach(fun({Mime, _B64}) ->
+        io:format("[Attachment: ~s]~n", [Mime])
+    end, Attachments),
+    io:format("> "),
     {ok, State};
 send(_, _, State) ->
     {ok, State}.

@@ -29,6 +29,8 @@ handles {send_response, ...} casts and sends the reply via Telegram API.
 
 -export([start_link/1, handle_webhook/1, send_response/2, notify_typing/1]).
 -export([listen/1, send/3, send_typing/2, update_draft/4, finalize_draft/3]).
+%% Exported for testing
+-export([is_image_mime/1, truncate_caption/1, multipart_field/3, multipart_file/5]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
@@ -76,9 +78,18 @@ send(SessionId, #bc_message{content = <<>>}, State) ->
 send(SessionId, #bc_message{content = undefined}, State) ->
     logger:debug("[telegram] skipping undefined content: session=~s", [SessionId]),
     {ok, State};
-send(SessionId, #bc_message{content = Content}, State) ->
+send(SessionId, #bc_message{content = Content, attachments = Attachments}, State) ->
     ChatId = resolve_chat_id(SessionId, State),
-    send_formatted(ChatId, Content, State),
+    ImageAttachments = [A || {Mime, _} = A <- Attachments, is_image_mime(Mime)],
+    case ImageAttachments of
+        [] ->
+            send_formatted(ChatId, Content, State);
+        _ ->
+            Caption = truncate_caption(Content),
+            lists:foreach(fun({_Mime, B64Data}) ->
+                send_photo(ChatId, B64Data, Caption, State)
+            end, ImageAttachments)
+    end,
     {ok, State}.
 
 send_typing(SessionId, State) ->
@@ -380,6 +391,58 @@ send_message_plain(ChatId, Text, #{token := Token}) ->
         {error, Reason} ->
             logger:warning("[telegram] sendMessage(plain) error: ~p", [Reason])
     end.
+
+send_photo(ChatId, B64Data, Caption, State = #{token := Token}) ->
+    PhotoBin = base64:decode(B64Data),
+    Url = make_api_url(Token, "/sendPhoto"),
+    Boundary = <<"----BeamClawBoundary">>,
+    CType = <<"multipart/form-data; boundary=", Boundary/binary>>,
+    %% Build multipart body
+    Parts = [
+        multipart_field(Boundary, <<"chat_id">>, integer_to_binary(ChatId)),
+        multipart_file(Boundary, <<"photo">>, <<"image.png">>, <<"image/png">>, PhotoBin)
+    ] ++ case Caption of
+        <<>> -> [];
+        _    -> [multipart_field(Boundary, <<"caption">>, Caption)]
+    end,
+    Body = iolist_to_binary(Parts ++ [<<"--", Boundary/binary, "--\r\n">>]),
+    case hackney:request(post, Url, [{<<"content-type">>, CType}],
+                         Body, [with_body]) of
+        {ok, 200, _, _} ->
+            logger:info("[telegram] photo sent to chat_id=~B", [ChatId]);
+        {ok, Code, _, RBody} ->
+            logger:warning("[telegram] sendPhoto failed: ~p ~s, falling back to text",
+                           [Code, RBody]),
+            %% Fall back to sending text description
+            FallbackText = case Caption of
+                <<>> -> <<"[Image could not be delivered]">>;
+                _    -> Caption
+            end,
+            send_formatted(ChatId, FallbackText, State);
+        {error, Reason} ->
+            logger:warning("[telegram] sendPhoto error: ~p", [Reason])
+    end.
+
+multipart_field(Boundary, Name, Value) ->
+    [<<"--", Boundary/binary, "\r\n">>,
+     <<"Content-Disposition: form-data; name=\"", Name/binary, "\"\r\n\r\n">>,
+     Value, <<"\r\n">>].
+
+multipart_file(Boundary, FieldName, FileName, ContentType, Data) ->
+    [<<"--", Boundary/binary, "\r\n">>,
+     <<"Content-Disposition: form-data; name=\"", FieldName/binary,
+       "\"; filename=\"", FileName/binary, "\"\r\n">>,
+     <<"Content-Type: ", ContentType/binary, "\r\n\r\n">>,
+     Data, <<"\r\n">>].
+
+is_image_mime(<<"image/", _/binary>>) -> true;
+is_image_mime(_) -> false.
+
+truncate_caption(Content) when byte_size(Content) > 1024 ->
+    Truncated = binary:part(Content, 0, 1021),
+    <<Truncated/binary, "...">>;
+truncate_caption(Content) ->
+    Content.
 
 send_action(ChatId, Action, #{token := Token}) ->
     Url  = make_api_url(Token, "/sendChatAction"),

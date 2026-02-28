@@ -7,8 +7,9 @@ Core systems (M0–M10), workspaces (M11–M17), session persistence and sharing
 (M18–M19), Telegram pairing (M20), memory search (M21–M23), photo/vision (M24),
 Docker sandbox (M25–M30), scheduler/heartbeat (M31–M37), Brave Search, bundled
 skills, on-demand skill loading, Telegram markdown-to-HTML formatting,
-BM25-based skill auto-injection, and `/context` command (Post-M37) are all complete.
-578 EUnit tests + 37 CT tests pass (615 total).
+BM25-based skill auto-injection, `/context` command, and outgoing photo
+delivery (Post-M37) are all complete.
+610 EUnit tests + 37 CT tests pass (647 total).
 
 ---
 
@@ -66,10 +67,23 @@ BM25-based skill auto-injection, and `/context` command (Post-M37) are all compl
 | Post-M37 | Telegram Markdown-to-HTML Formatting |
 | Post-M37 | BM25 Skill Auto-Injection |
 | Post-M37 | `/context` Command (TUI + Telegram) |
+| Post-M37 | Outgoing Photo Delivery (Telegram + TUI) |
 
 ---
 
 ## Recent Milestones
+
+### Post-M37 — Outgoing Photo Delivery ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| `MEDIA:` token extraction in `bc_loop.erl` | ✅ | `extract_media/1`: parse `MEDIA: /path` from tool results, read file, base64-encode, attach to message |
+| `pending_media` field in loop state | ✅ | Accumulated across tool iterations, attached to final assistant message |
+| `sendPhoto` in `bc_channel_telegram.erl` | ✅ | Multipart form-data upload via `/sendPhoto` API, caption truncation (1024 char limit), text fallback on failure |
+| `is_image_mime/1` + `truncate_caption/1` | ✅ | Pure helpers for attachment routing and Telegram caption limits |
+| TUI attachment display in `bc_channel_tui.erl` | ✅ | `[Attachment: image/png]` indicator for terminal users |
+| EUnit tests | ✅ | 32 new: 18 media extraction (tokens, mime types, file I/O) + 14 Telegram photo (mime check, caption, multipart) |
+| Update CLAUDE.md + STATUS.md | ✅ | Obs events, file layout, milestone |
 
 ### Post-M37 — `/context` Command ✅
 
@@ -93,24 +107,6 @@ BM25-based skill auto-injection, and `/context` command (Post-M37) are all compl
 | Pass user message from `bc_loop.erl` | ✅ | `last_user_content(History)` → `assemble/3` in streaming `do_stream` |
 | EUnit tests | ✅ | 5 new test generators (11 assertions): promotes, no-match, best-of-multiple, threshold, always-unaffected |
 | Update STATUS.md | ✅ | Milestone |
-
-### Post-M37 — Telegram Markdown-to-HTML Formatting ✅
-
-| Task | Status | Notes |
-|------|--------|-------|
-| Create `bc_telegram_format.erl` | ✅ | Pure-function markdown→HTML: format/1, chunk/2, escape_html/1 |
-| Integrate formatter in `bc_channel_telegram.erl` | ✅ | `parse_mode: HTML`, plain-text fallback on 400, `make_api_url/2` helper |
-| EUnit tests | ✅ | 33 new: escaping, code blocks, inline, block-level, edge cases, chunking |
-| Update CLAUDE.md + STATUS.md | ✅ | File Layout, milestone |
-
-### Post-M37 — Scrubber + Telegram + Obs Fixes ✅
-
-| Task | Status | Notes |
-|------|--------|-------|
-| Scrubber skips `$VAR` env references | ✅ | `(?!\$)` lookahead on 4 generic key=value patterns |
-| Skip empty Telegram messages | ✅ | Guard `send/3` for `<<>>` and `undefined` content |
-| Scrub tool call args before obs logging | ✅ | `scrub_map/1` on `tool_call_start` event args |
-| EUnit tests | ✅ | 8 new: 4 env var passthrough, 1 real-value-still-scrubbed, 3 scrub_map |
 
 ---
 

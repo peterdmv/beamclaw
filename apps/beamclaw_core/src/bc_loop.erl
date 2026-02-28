@@ -39,6 +39,8 @@ Response routing (route_response/2):
 -export([callback_mode/0, init/1, terminate/3, code_change/4, format_status/1]).
 -export([idle/3, compacting/3, streaming/3,
          awaiting_approval/3, executing_tools/3, finalizing/3]).
+%% Exported for testing
+-export([extract_media/1, mime_from_path/1]).
 
 -record(loop_data, {
     session_pid    :: pid(),
@@ -53,7 +55,8 @@ Response routing (route_response/2):
     current_run    :: term() | undefined,
     tool_calls     :: [#bc_tool_call{}],
     iteration      :: non_neg_integer(),
-    typing_tick_ref = undefined :: reference() | undefined
+    typing_tick_ref = undefined :: reference() | undefined,
+    pending_media  = [] :: [{binary(), binary()}]  %% [{MimeType, Base64Data}] from MEDIA: tokens
 }).
 
 start_link(Config) ->
@@ -120,7 +123,8 @@ idle(cast, {run, Message}, Data) ->
     end,
     {next_state, NextState,
      Data#loop_data{current_run = Message, iteration = 0,
-                    reply_pid = ReplyPid, reply_channel = ReplyChannel}};
+                    reply_pid = ReplyPid, reply_channel = ReplyChannel,
+                    pending_media = []}};
 idle(EventType, EventContent, Data) ->
     handle_common(idle, EventType, EventContent, Data).
 
@@ -224,18 +228,19 @@ executing_tools(cast, do_execute, Data) ->
             ToolCalls = Data#loop_data.tool_calls,
             SId = Data#loop_data.session_id,
             spawn_link(fun() ->
-                ToolMsgs = execute_tools_sync(ToolCalls, SessionRef, SId),
-                gen_statem:cast(Self, {tool_results, ToolMsgs})
+                {ToolMsgs, Media} = execute_tools_sync(ToolCalls, SessionRef, SId),
+                gen_statem:cast(Self, {tool_results, ToolMsgs, Media})
             end),
             {keep_state, Data}
     end;
-executing_tools(cast, {tool_results, ToolMsgs}, Data) ->
+executing_tools(cast, {tool_results, ToolMsgs, Media}, Data) ->
     cancel_typing_tick(Data#loop_data.typing_tick_ref),
     lists:foreach(fun(M) ->
         bc_session:append_message(Data#loop_data.session_pid, M)
     end, ToolMsgs),
     NewData = Data#loop_data{tool_calls = [], iteration = Data#loop_data.iteration + 1,
-                             typing_tick_ref = undefined},
+                             typing_tick_ref = undefined,
+                             pending_media = Data#loop_data.pending_media ++ Media},
     {next_state, streaming, NewData};
 executing_tools(info, typing_tick, Data) ->
     emit_typing(Data),
@@ -314,26 +319,29 @@ receive_stream(Data, T0, TickRef) ->
             %% user sees "typing..." right until the message arrives. Telegram
             %% auto-clears typing when the message is delivered.
             emit_typing(Data),
-            route_response(Data, ScrubbedMsg),
             cancel_typing_tick(TickRef),
             ToolCalls = bc_tool_parser:parse(ScrubbedMsg),
             NewData = Data#loop_data{tool_calls = ToolCalls},
             case ToolCalls of
                 [] ->
-                    %% Final message — if content is empty, warn and send fallback
-                    case ScrubbedMsg#bc_message.content of
+                    %% Final message — attach any pending media from tool results
+                    FinalMsg = attach_pending_media(ScrubbedMsg, Data#loop_data.pending_media),
+                    case FinalMsg#bc_message.content of
                         Empty when Empty =:= <<>> orelse Empty =:= undefined ->
                             logger:warning("[loop] final LLM response has empty content: session=~s",
                                            [Data#loop_data.session_id]),
-                            Fallback = ScrubbedMsg#bc_message{
+                            Fallback = FinalMsg#bc_message{
                                 content = <<"[I processed the request but couldn't generate a visible response. Please try again.]">>
                             },
                             route_response(Data, Fallback);
                         _ ->
-                            ok
+                            route_response(Data, FinalMsg)
                     end,
-                    {next_state, finalizing, NewData};
-                _  -> maybe_await_approval(NewData)
+                    {next_state, finalizing, NewData#loop_data{pending_media = []}};
+                _ ->
+                    %% Intermediate response (has tool calls) — route without media
+                    route_response(Data, ScrubbedMsg),
+                    maybe_await_approval(NewData)
             end;
         {stream_error, _Pid, Reason} ->
             cancel_typing_tick(TickRef),
@@ -412,6 +420,7 @@ maybe_await_approval(#loop_data{tool_calls = Calls} = Data) ->
 
 %% Execute tool calls synchronously. Designed to run in a spawned process so
 %% the gen_statem mailbox remains responsive to typing_tick messages.
+%% Returns {ToolMessages, MediaAttachments}.
 execute_tools_sync(ToolCalls, SessionRef, SessionId) ->
     Results = lists:map(fun(TC) ->
         bc_obs:emit(tool_call_start, #{tool_name  => TC#bc_tool_call.name,
@@ -432,7 +441,9 @@ execute_tools_sync(ToolCalls, SessionRef, SessionId) ->
         }
     end, ToolCalls),
     Scrubbed = [bc_scrubber:scrub_result(R) || R <- Results],
-    [result_to_message(R) || R <- Scrubbed].
+    Media = lists:flatmap(fun(R) -> extract_media(R#bc_tool_result.content) end, Scrubbed),
+    ToolMsgs = [result_to_message(R) || R <- Scrubbed],
+    {ToolMsgs, Media}.
 
 run_tool(#bc_tool_call{name = Name, args = Args}, SessionRef) ->
     Context = #{tool_bridge_fn => make_tool_bridge_fn(SessionRef)},
@@ -473,6 +484,59 @@ make_tool_bridge_fn(SessionRef) ->
                 end
         end
     end.
+
+%% Extract MEDIA: tokens from tool result content.
+%% Format: "MEDIA: /path/to/file.ext" (one per line).
+%% Returns [{MimeType, Base64Data}] for files that exist and are readable.
+extract_media(Content) when is_binary(Content) ->
+    Lines = binary:split(Content, <<"\n">>, [global]),
+    lists:filtermap(fun(Line) ->
+        Trimmed = string:trim(Line),
+        case Trimmed of
+            <<"MEDIA: ", Path/binary>> ->
+                read_media_file(string:trim(Path));
+            <<"MEDIA:", Path/binary>> ->
+                read_media_file(string:trim(Path));
+            _ ->
+                false
+        end
+    end, Lines);
+extract_media(_) ->
+    [].
+
+read_media_file(Path) when byte_size(Path) > 0 ->
+    case file:read_file(Path) of
+        {ok, Bin} ->
+            Mime = mime_from_path(Path),
+            logger:info("[loop] extracted media: path=~s size=~B mime=~s",
+                        [Path, byte_size(Bin), Mime]),
+            {true, {Mime, base64:encode(Bin)}};
+        {error, Reason} ->
+            logger:warning("[loop] failed to read media file: path=~s reason=~p",
+                           [Path, Reason]),
+            false
+    end;
+read_media_file(_) ->
+    false.
+
+mime_from_path(Path) ->
+    Lower = string:lowercase(Path),
+    case filename:extension(Lower) of
+        <<".png">>  -> <<"image/png">>;
+        <<".jpg">>  -> <<"image/jpeg">>;
+        <<".jpeg">> -> <<"image/jpeg">>;
+        <<".gif">>  -> <<"image/gif">>;
+        <<".webp">> -> <<"image/webp">>;
+        <<".svg">>  -> <<"image/svg+xml">>;
+        <<".bmp">>  -> <<"image/bmp">>;
+        _           -> <<"application/octet-stream">>
+    end.
+
+%% Attach pending media to the final assistant message.
+attach_pending_media(Msg, []) -> Msg;
+attach_pending_media(Msg, Media) ->
+    Existing = Msg#bc_message.attachments,
+    Msg#bc_message{attachments = Existing ++ Media}.
 
 result_to_message(#bc_tool_result{tool_call_id = Id, name = Name,
                                    content = Content, is_error = IsErr}) ->
