@@ -242,6 +242,101 @@ exit_code_parsing_test() ->
     %% Only newlines
     ?assertEqual("unknown", Parse("\n\n")).
 
+%% ---- Telegram format ----
+
+format_telegram_output_test_() ->
+    {setup,
+     fun setup_gather/0,
+     fun teardown_gather/1,
+     fun(_) ->
+         [fun() ->
+             Info = bc_context:gather(#{agent_id => <<"default">>,
+                                        history => []}),
+             Output = bc_context:format_telegram(Info),
+             %% Should contain bold header with emoji
+             ?assertNotEqual(nomatch, binary:match(Output, <<"<b>">>)),
+             ?assertNotEqual(nomatch, binary:match(Output, <<"Context Usage">>)),
+             %% Should contain emoji circles (not ANSI codes)
+             ?assertNotEqual(nomatch, binary:match(Output, <<"\xe2\xac\x9c">>)),  %% ⬜
+             %% Should NOT contain ANSI escape codes
+             ?assertEqual(nomatch, binary:match(Output, <<"\e[">>)),
+             %% Should NOT contain <pre> tags
+             ?assertEqual(nomatch, binary:match(Output, <<"<pre>">>))
+         end]
+     end}.
+
+format_telegram_legend_test_() ->
+    {setup,
+     fun setup_gather/0,
+     fun teardown_gather/1,
+     fun(_) ->
+         [fun() ->
+             Info = bc_context:gather(#{agent_id => <<"default">>,
+                                        history => []}),
+             Output = bc_context:format_telegram(Info),
+             %% Legend should contain category names with emoji prefixes
+             ?assertNotEqual(nomatch, binary:match(Output, <<"Bootstrap files">>)),
+             ?assertNotEqual(nomatch, binary:match(Output, <<"Daily logs">>)),
+             ?assertNotEqual(nomatch, binary:match(Output, <<"Skills">>)),
+             ?assertNotEqual(nomatch, binary:match(Output, <<"Tool definitions">>)),
+             ?assertNotEqual(nomatch, binary:match(Output, <<"Messages">>)),
+             ?assertNotEqual(nomatch, binary:match(Output, <<"Free space">>)),
+             ?assertNotEqual(nomatch, binary:match(Output, <<"Compaction buffer">>)),
+             %% Should contain percentage markers
+             ?assertNotEqual(nomatch, binary:match(Output, <<"%)">>))
+         end]
+     end}.
+
+format_telegram_bootstrap_test_() ->
+    {setup,
+     fun setup_gather/0,
+     fun teardown_gather/1,
+     fun(_) ->
+         [fun() ->
+             Info = bc_context:gather(#{agent_id => <<"default">>,
+                                        history => []}),
+             Output = bc_context:format_telegram(Info),
+             %% Should contain bootstrap section header
+             ?assertNotEqual(nomatch, binary:match(Output, <<"<b>Bootstrap files</b>">>)),
+             %% Bootstrap file lines should use <code> tags
+             ?assertNotEqual(nomatch, binary:match(Output, <<"<code>">>)),
+             ?assertNotEqual(nomatch, binary:match(Output, <<"tokens</code>">>))
+         end]
+     end}.
+
+format_telegram_emoji_grid_test() ->
+    %% Verify emoji mapping covers all cell types
+    Info = #{model => "test-model", context_window => 1000,
+             total => 500, bootstrap_tokens => 100,
+             daily_tokens => 50, skill_tokens => 50, tool_tokens => 100,
+             message_tokens => 200, compaction_buffer => 200,
+             free_space => 300, message_count => 10,
+             bootstrap_files => [{<<"TEST.md">>, 100}],
+             categories => [
+                 {<<"Bootstrap files">>, 100},
+                 {<<"Daily logs">>, 50},
+                 {<<"Skills">>, 50},
+                 {<<"Tool definitions">>, 100},
+                 {<<"Messages">>, 200},
+                 {<<"Free space">>, 300},
+                 {<<"Compaction buffer">>, 200}
+             ]},
+    Output = bc_context:format_telegram(Info),
+    %% Brown circle (bootstrap)
+    ?assertNotEqual(nomatch, binary:match(Output, <<"\xf0\x9f\x9f\xa4">>)),
+    %% Red circle (daily)
+    ?assertNotEqual(nomatch, binary:match(Output, <<"\xf0\x9f\x94\xb4">>)),
+    %% Yellow circle (skills)
+    ?assertNotEqual(nomatch, binary:match(Output, <<"\xf0\x9f\x9f\xa1">>)),
+    %% Purple circle (tools)
+    ?assertNotEqual(nomatch, binary:match(Output, <<"\xf0\x9f\x9f\xa3">>)),
+    %% Blue circle (messages)
+    ?assertNotEqual(nomatch, binary:match(Output, <<"\xf0\x9f\x94\xb5">>)),
+    %% White square (free)
+    ?assertNotEqual(nomatch, binary:match(Output, <<"\xe2\xac\x9c">>)),
+    %% Black circle (compaction)
+    ?assertNotEqual(nomatch, binary:match(Output, <<"\xe2\x9a\xab">>)).
+
 %% ---- Test setup/teardown ----
 
 setup_gather() ->

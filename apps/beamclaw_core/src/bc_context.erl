@@ -27,7 +27,8 @@ Token estimation: byte_size(Content) div 4 (~4 chars/token approximation).
 
 -include_lib("beamclaw_core/include/bc_types.hrl").
 
--export([gather/1, format_text/1, format_text/2, render_svg/1, render_png/1]).
+-export([gather/1, format_text/1, format_text/2, format_telegram/1,
+         render_svg/1, render_png/1]).
 
 %% Exported for testing
 -export([estimate_tokens/1, context_window/1, format_size/1]).
@@ -175,7 +176,82 @@ format_text(Info, Opts) ->
 
     iolist_to_binary(lists:join(<<"\n">>, FullLines2 ++ BootstrapSection)).
 
-%% ---- Layer 2b: Format as SVG ----
+%% ---- Layer 2b: Format as Telegram HTML (emoji grid) ----
+
+-spec format_telegram(map()) -> binary().
+format_telegram(Info) ->
+    #{model := Model, context_window := Window, total := Total,
+      categories := Categories, bootstrap_files := BootstrapFiles,
+      compaction_buffer := CompBuffer} = Info,
+
+    Pct = case Window of 0 -> 0; _ -> (Total * 100) div Window end,
+    UsedWithBuffer = Total + CompBuffer,
+
+    Grid = build_grid(Info),
+
+    %% Header
+    ModelBin = case Model of
+        M when is_list(M) -> list_to_binary(M);
+        M when is_binary(M) -> M
+    end,
+    Header = iolist_to_binary([
+        <<"<b>">>, <<"\xf0\x9f\x93\x8a">>, <<" Context Usage</b>\n">>,
+        bc_telegram_format:escape_html(ModelBin), <<"\n">>,
+        format_size(UsedWithBuffer), <<"/">>, format_size(Window),
+        <<" tokens (">>, integer_to_list(Pct), <<"%)">>
+    ]),
+
+    %% Grid: 10×10 emoji, no spaces between cells
+    GridRows = build_telegram_grid_rows(Grid),
+    GridBlock = iolist_to_binary(lists:join(<<"\n">>, GridRows)),
+
+    %% Legend
+    Legend = telegram_legend(Categories, Window),
+    LegendBlock = iolist_to_binary(lists:join(<<"\n">>, Legend)),
+
+    %% Bootstrap files
+    BootstrapBlock = case BootstrapFiles of
+        [] -> <<>>;
+        _ ->
+            BootLines = [iolist_to_binary([
+                <<"<code>">>, <<"\xe2\x94\x94 ">>,
+                bc_telegram_format:escape_html(Name),
+                <<": ">>, format_size(Tokens), <<" tokens</code>">>
+            ]) || {Name, Tokens} <- BootstrapFiles],
+            iolist_to_binary([
+                <<"\n\n<b>Bootstrap files</b>\n">>,
+                iolist_to_binary(lists:join(<<"\n">>, BootLines))
+            ])
+    end,
+
+    iolist_to_binary([Header, <<"\n\n">>, GridBlock, <<"\n\n">>,
+                      LegendBlock, BootstrapBlock]).
+
+build_telegram_grid_rows(Grid) ->
+    Rows = chunk_list(Grid, 10),
+    lists:map(fun(Row) ->
+        iolist_to_binary([telegram_cell_emoji(C) || C <- Row])
+    end, Rows).
+
+telegram_cell_emoji(bootstrap)  -> <<"\xf0\x9f\x9f\xa4">>;  %% 🟤
+telegram_cell_emoji(daily)      -> <<"\xf0\x9f\x94\xb4">>;  %% 🔴
+telegram_cell_emoji(skills)     -> <<"\xf0\x9f\x9f\xa1">>;  %% 🟡
+telegram_cell_emoji(tools)      -> <<"\xf0\x9f\x9f\xa3">>;  %% 🟣
+telegram_cell_emoji(messages)   -> <<"\xf0\x9f\x94\xb5">>;  %% 🔵
+telegram_cell_emoji(free)       -> <<"\xe2\xac\x9c">>;       %% ⬜
+telegram_cell_emoji(compaction) -> <<"\xe2\x9a\xab">>.       %% ⚫
+
+telegram_legend(Categories, Window) ->
+    lists:map(fun({CatName, CatTokens}) ->
+        CatPct = case Window of 0 -> 0; _ -> (CatTokens * 100) div Window end,
+        CatKey = category_key(CatName),
+        Emoji = telegram_cell_emoji(CatKey),
+        iolist_to_binary([Emoji, <<" ">>, CatName, <<": ">>,
+                          format_size(CatTokens), <<" (">>,
+                          integer_to_list(CatPct), <<"%)">>])
+    end, Categories).
+
+%% ---- Layer 2c: Format as SVG ----
 
 -spec render_svg(map()) -> binary().
 render_svg(Info) ->

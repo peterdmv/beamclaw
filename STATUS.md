@@ -8,7 +8,7 @@ Core systems (M0–M10), workspaces (M11–M17), session persistence and sharing
 Docker sandbox (M25–M30), scheduler/heartbeat (M31–M37), Brave Search, bundled
 skills, on-demand skill loading, Telegram markdown-to-HTML formatting,
 BM25-based skill auto-injection, and `/context` command (Post-M37) are all complete.
-573 EUnit tests + 37 CT tests pass (610 total).
+578 EUnit tests + 37 CT tests pass (615 total).
 
 ---
 
@@ -80,8 +80,8 @@ BM25-based skill auto-injection, and `/context` command (Post-M37) are all compl
 | 10x10 Unicode grid with category colors | ✅ | ANSI colors for TUI, plain chars for Telegram fallback |
 | SVG rendering (dark theme) | ✅ | Grid + legend + bootstrap listing; PNG via `rsvg-convert` |
 | Intercept `/context` in `bc_channel_tui.erl` | ✅ | ANSI-colored output with model name + category breakdown |
-| Intercept `/context` in `bc_channel_telegram.erl` | ✅ | Monospace `<pre>` HTML text via `send_message_html/4` |
-| EUnit tests | ✅ | 12 new: tokens, context windows, format_size, gather, text/ANSI/SVG/PNG |
+| Intercept `/context` in `bc_channel_telegram.erl` | ✅ | Emoji grid via `format_telegram/1`, plain-text fallback |
+| EUnit tests | ✅ | 17 total: tokens, context windows, format_size, gather, text/ANSI/SVG/PNG, telegram (emoji/legend/bootstrap/grid) |
 | Update CLAUDE.md + STATUS.md | ✅ | File Layout, milestone |
 
 ### Post-M37 — BM25 Skill Auto-Injection ✅

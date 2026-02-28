@@ -255,10 +255,9 @@ handle_context_command(SessionId, AgentId, ChatId) ->
         {ok, Pid} ->
             History = bc_session:get_history(Pid),
             Info = bc_context:gather(#{agent_id => AgentId, history => History}),
-            Output = bc_context:format_text(Info),
-            Escaped = bc_telegram_format:escape_html(Output),
-            Html = <<"<pre>", Escaped/binary, "</pre>">>,
-            send_message_html(binary_to_integer(ChatId), Html, Output, TokenState);
+            Html = bc_context:format_telegram(Info),
+            PlainFallback = bc_context:format_text(Info),
+            send_message_html(binary_to_integer(ChatId), Html, PlainFallback, TokenState);
         {error, not_found} ->
             send_message_plain(binary_to_integer(ChatId),
                                <<"No active session.">>, TokenState)
