@@ -38,7 +38,7 @@ Output:     _build/default/bin/beamclaw
                              cmd_agent_rehatch/1,
                              cmd_skills_list/0, cmd_skills_status/0,
                              cmd_skills_show/1, cmd_skills_install/1,
-                             cmd_pair_list/0, cmd_pair_approve/2,
+                             cmd_pair_list/0, cmd_pair_approve/3,
                              cmd_pair_revoke/2,
                              cmd_sandbox_status/0, cmd_sandbox_list/0,
                              cmd_sandbox_kill/1, cmd_sandbox_build/0,
@@ -77,7 +77,8 @@ main(["skills", "show", Name    | _])     -> cmd_skills_show(list_to_binary(Name
 main(["skills"                  | _])     -> cmd_skills_list();
 main(["pair", "list"            | _])     -> cmd_pair_list();
 main(["pair", "revoke", Ch, Id  | _])     -> cmd_pair_revoke(list_to_atom(Ch), list_to_binary(Id));
-main(["pair", Ch, Code          | _])     -> cmd_pair_approve(list_to_atom(Ch), list_to_binary(Code));
+main(["pair", Ch, Code          | Rest])  -> cmd_pair_approve(list_to_atom(Ch), list_to_binary(Code),
+                                                                  extract_pair_agent(Rest));
 main(["pair"                    | _])     -> cmd_pair_list();
 main(["sandbox", "status"       | _])     -> cmd_sandbox_status();
 main(["sandbox", "list"         | _])     -> cmd_sandbox_list();
@@ -605,8 +606,10 @@ cmd_pair_list() ->
     io:format("~nApproved:~n"),
     HasApproved = lists:foldl(fun(Ch, Acc) ->
         Allowed = bc_pairing:list_allowed(Ch),
-        lists:foreach(fun(Id) ->
-            io:format("  ~s  ~s~n", [Ch, Id])
+        lists:foreach(fun(Entry) ->
+            Id = maps:get(<<"id">>, Entry),
+            Agent = maps:get(<<"agent_id">>, Entry, <<"default">>),
+            io:format("  ~s  ~s  agent=~s~n", [Ch, Id, Agent])
         end, Allowed),
         Acc orelse Allowed =/= []
     end, false, Channels),
@@ -616,11 +619,16 @@ cmd_pair_list() ->
     end,
     halt(0).
 
--doc "Approve a pending pairing request by channel and code.".
-cmd_pair_approve(Channel, Code) ->
-    case bc_pairing:approve(Channel, Code) of
+-doc "Approve a pending pairing request by channel, code, and optional agent.".
+cmd_pair_approve(Channel, Code, AgentId) ->
+    case bc_pairing:approve(Channel, Code, AgentId) of
         {ok, UserId} ->
-            io:format("Approved ~s user ~s.~n", [Channel, UserId]),
+            AgentLabel = case AgentId of
+                undefined -> <<"default">>;
+                _         -> AgentId
+            end,
+            io:format("Approved ~s user ~s (agent=~s).~n",
+                      [Channel, UserId, AgentLabel]),
             halt(0);
         {error, not_found} ->
             io:format(standard_error,
@@ -632,6 +640,9 @@ cmd_pair_approve(Channel, Code) ->
                       "beamclaw: code '~s' has expired~n", [Code]),
             halt(1)
     end.
+
+extract_pair_agent(["--agent", Name | _]) -> list_to_binary(Name);
+extract_pair_agent(_) -> undefined.
 
 -doc "Revoke an approved user from a channel's allowlist.".
 cmd_pair_revoke(Channel, UserId) ->
@@ -880,7 +891,7 @@ cmd_help() ->
         "  skills show NAME     Show a skill's SKILL.md content~n"
         "  skills install NAME  Install a skill's dependencies~n"
         "  pair [list]          List pending and approved pairing requests~n"
-        "  pair <channel> CODE  Approve a pending pairing request~n"
+        "  pair <ch> CODE [--agent NAME]  Approve with optional agent~n"
         "  pair revoke CH ID    Revoke a user from a channel's allowlist~n"
         "  sandbox [status]     Show sandbox config and Docker availability~n"
         "  sandbox list         List active sandbox containers~n"

@@ -221,13 +221,13 @@ dispatch_telegram_message(Update) ->
             end
     end.
 
-do_dispatch(UserId, _TgUserId, ChatId, <<"/context", _/binary>>, _Msg, _Attachments) ->
-    AgentId   = bc_config:get(beamclaw_core, default_agent, <<"default">>),
+do_dispatch(UserId, TgUserId, ChatId, <<"/context", _/binary>>, _Msg, _Attachments) ->
+    AgentId   = resolve_agent_id(TgUserId),
     SessionId = bc_session_registry:derive_session_id(UserId, AgentId, telegram),
     handle_context_command(SessionId, AgentId, ChatId),
     ok;
-do_dispatch(UserId, _TgUserId, ChatId, Content, Msg, Attachments) ->
-    AgentId   = bc_config:get(beamclaw_core, default_agent, <<"default">>),
+do_dispatch(UserId, TgUserId, ChatId, Content, Msg, Attachments) ->
+    AgentId   = resolve_agent_id(TgUserId),
     SessionId = bc_session_registry:derive_session_id(UserId, AgentId, telegram),
     %% Map the derived SessionId to the Telegram ChatId for response routing.
     ets:insert(bc_telegram_chat_map, {SessionId, ChatId}),
@@ -356,6 +356,13 @@ resolve_token() ->
     Channels = bc_config:get(beamclaw_gateway, channels, []),
     TgConfig = proplists:get_value(telegram, Channels, #{}),
     bc_config:resolve(maps:get(token, TgConfig, {env, "TELEGRAM_BOT_TOKEN"})).
+
+resolve_agent_id(TgUserId) ->
+    case bc_pairing:get_agent_id(telegram, TgUserId) of
+        {ok, Id} -> Id;
+        {error, not_found} ->
+            bc_config:get(beamclaw_core, default_agent, <<"default">>)
+    end.
 
 send_formatted(ChatId, Content, State) ->
     Formatted = bc_telegram_format:format(Content),

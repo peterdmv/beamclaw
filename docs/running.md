@@ -481,16 +481,22 @@ approves the code via CLI, and the user is added to a persistent allowlist.
    Run: beamclaw pair telegram HJKL7M2P
    ```
 3. Bot owner approves: `beamclaw pair telegram HJKL7M2P`
-4. User is now allowed — future messages reach the agent
+   - Optionally assign a specific agent: `beamclaw pair telegram HJKL7M2P --agent mom`
+4. User is now allowed — future messages are routed to their assigned agent
 
 #### CLI commands
 
 ```bash
 beamclaw pair                       # list pending + approved (default)
 beamclaw pair list                  # same as above
-beamclaw pair telegram <CODE>       # approve a pending request
+beamclaw pair telegram <CODE>       # approve with default agent
+beamclaw pair telegram <CODE> --agent NAME  # approve with specific agent
 beamclaw pair revoke telegram <ID>  # remove user from allowlist
 ```
+
+Each approved user is mapped to an agent. When `--agent` is omitted, the
+`default_agent` config value is used. The `pair list` command shows the
+assigned agent for each user.
 
 #### DM policy modes
 

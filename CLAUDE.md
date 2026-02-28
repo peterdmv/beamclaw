@@ -178,7 +178,8 @@ beamclaw scheduler resume JOB_ID     # resume a paused job
 # Pairing / access control (via CLI escript)
 beamclaw pair                       # list pending + approved
 beamclaw pair list                  # same as above
-beamclaw pair telegram <CODE>       # approve a pending request
+beamclaw pair telegram <CODE>       # approve a pending request (default agent)
+beamclaw pair telegram <CODE> --agent mom  # approve with specific agent
 beamclaw pair revoke telegram <ID>  # revoke user from allowlist
 ```
 

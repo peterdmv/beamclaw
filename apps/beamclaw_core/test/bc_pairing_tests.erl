@@ -26,6 +26,8 @@ setup() ->
     TmpDir = filename:join("/tmp", "bc_pairing_test_" ++
                            integer_to_list(erlang:unique_integer([positive]))),
     os:putenv("BEAMCLAW_HOME", TmpDir),
+    %% Set default_agent for tests
+    application:set_env(beamclaw_core, default_agent, <<"default">>),
     TmpDir.
 
 teardown(TmpDir) ->
@@ -49,7 +51,16 @@ pairing_test_() ->
         fun max_pending_evicts_oldest/1,
         fun list_pending_prunes_expired/1,
         fun approve_expired_code/1,
-        fun is_allowed_after_approve/1
+        fun is_allowed_after_approve/1,
+        %% v2 agent_id tests
+        fun approve_default_agent/1,
+        fun approve_with_agent/1,
+        fun get_agent_id_found/1,
+        fun get_agent_id_not_found/1,
+        fun v1_migration/1,
+        fun list_allowed_returns_maps/1,
+        fun revoke_v2_format/1,
+        fun is_allowed_v2_format/1
     ]}.
 
 %% ---- Tests ----
@@ -87,7 +98,9 @@ approve_moves_to_allowed(_TmpDir) ->
             telegram, <<"12345">>, #{}),
         {ok, <<"12345">>} = bc_pairing:approve(telegram, Code),
         ?assertEqual([], bc_pairing:list_pending(telegram)),
-        ?assertEqual([<<"12345">>], bc_pairing:list_allowed(telegram)),
+        Allowed = bc_pairing:list_allowed(telegram),
+        ?assertEqual(1, length(Allowed)),
+        ?assertEqual(<<"12345">>, maps:get(<<"id">>, hd(Allowed))),
         ?assertEqual(true, bc_pairing:is_allowed(telegram, <<"12345">>))
     end.
 
@@ -180,4 +193,105 @@ is_allowed_after_approve(_TmpDir) ->
         ?assertEqual(false, bc_pairing:is_allowed(telegram, <<"99">>)),
         {ok, <<"99">>} = bc_pairing:approve(telegram, Code),
         ?assertEqual(true, bc_pairing:is_allowed(telegram, <<"99">>))
+    end.
+
+%% ---- v2 agent_id tests ----
+
+approve_default_agent(_TmpDir) ->
+    fun() ->
+        {ok, Code, created} = bc_pairing:request_pairing(
+            telegram, <<"u1">>, #{}),
+        {ok, <<"u1">>} = bc_pairing:approve(telegram, Code),
+        [Entry] = bc_pairing:list_allowed(telegram),
+        ?assertEqual(<<"u1">>, maps:get(<<"id">>, Entry)),
+        ?assertEqual(<<"default">>, maps:get(<<"agent_id">>, Entry))
+    end.
+
+approve_with_agent(_TmpDir) ->
+    fun() ->
+        {ok, Code, created} = bc_pairing:request_pairing(
+            telegram, <<"u2">>, #{}),
+        {ok, <<"u2">>} = bc_pairing:approve(telegram, Code, <<"mom">>),
+        [Entry] = bc_pairing:list_allowed(telegram),
+        ?assertEqual(<<"u2">>, maps:get(<<"id">>, Entry)),
+        ?assertEqual(<<"mom">>, maps:get(<<"agent_id">>, Entry))
+    end.
+
+get_agent_id_found(_TmpDir) ->
+    fun() ->
+        {ok, Code, created} = bc_pairing:request_pairing(
+            telegram, <<"u3">>, #{}),
+        {ok, <<"u3">>} = bc_pairing:approve(telegram, Code, <<"helper">>),
+        ?assertEqual({ok, <<"helper">>},
+                     bc_pairing:get_agent_id(telegram, <<"u3">>))
+    end.
+
+get_agent_id_not_found(_TmpDir) ->
+    fun() ->
+        ?assertEqual({error, not_found},
+                     bc_pairing:get_agent_id(telegram, <<"nonexistent">>))
+    end.
+
+v1_migration(_TmpDir) ->
+    fun() ->
+        %% Manually write v1 format (bare binary IDs)
+        Dir = bc_pairing:pairing_dir(),
+        ok = filelib:ensure_dir(filename:join(Dir, "x")),
+        V1Data = jsx:encode(#{<<"version">> => 1,
+                              <<"allowed">> => [<<"alice">>, <<"bob">>]}),
+        ok = file:write_file(filename:join(Dir, "telegram-allowed.json"), V1Data),
+        %% read_allowed should auto-migrate to v2 maps
+        Allowed = bc_pairing:list_allowed(telegram),
+        ?assertEqual(2, length(Allowed)),
+        [A, B] = Allowed,
+        ?assertEqual(<<"alice">>, maps:get(<<"id">>, A)),
+        ?assertEqual(<<"default">>, maps:get(<<"agent_id">>, A)),
+        ?assertEqual(<<"bob">>, maps:get(<<"id">>, B)),
+        ?assertEqual(<<"default">>, maps:get(<<"agent_id">>, B)),
+        %% is_allowed should work with migrated data
+        ?assert(bc_pairing:is_allowed(telegram, <<"alice">>)),
+        ?assert(bc_pairing:is_allowed(telegram, <<"bob">>)),
+        ?assertNot(bc_pairing:is_allowed(telegram, <<"charlie">>))
+    end.
+
+list_allowed_returns_maps(_TmpDir) ->
+    fun() ->
+        {ok, Code1, created} = bc_pairing:request_pairing(
+            telegram, <<"m1">>, #{}),
+        {ok, <<"m1">>} = bc_pairing:approve(telegram, Code1, <<"agent_a">>),
+        {ok, Code2, created} = bc_pairing:request_pairing(
+            telegram, <<"m2">>, #{}),
+        {ok, <<"m2">>} = bc_pairing:approve(telegram, Code2),
+        Allowed = bc_pairing:list_allowed(telegram),
+        ?assertEqual(2, length(Allowed)),
+        %% All entries should be maps with id and agent_id
+        lists:foreach(fun(Entry) ->
+            ?assert(is_map(Entry)),
+            ?assert(maps:is_key(<<"id">>, Entry)),
+            ?assert(maps:is_key(<<"agent_id">>, Entry))
+        end, Allowed)
+    end.
+
+revoke_v2_format(_TmpDir) ->
+    fun() ->
+        {ok, Code1, created} = bc_pairing:request_pairing(
+            telegram, <<"r1">>, #{}),
+        {ok, <<"r1">>} = bc_pairing:approve(telegram, Code1, <<"agent_x">>),
+        {ok, Code2, created} = bc_pairing:request_pairing(
+            telegram, <<"r2">>, #{}),
+        {ok, <<"r2">>} = bc_pairing:approve(telegram, Code2, <<"agent_y">>),
+        ?assertEqual(2, length(bc_pairing:list_allowed(telegram))),
+        ok = bc_pairing:revoke(telegram, <<"r1">>),
+        Remaining = bc_pairing:list_allowed(telegram),
+        ?assertEqual(1, length(Remaining)),
+        ?assertEqual(<<"r2">>, maps:get(<<"id">>, hd(Remaining)))
+    end.
+
+is_allowed_v2_format(_TmpDir) ->
+    fun() ->
+        {ok, Code, created} = bc_pairing:request_pairing(
+            telegram, <<"v2user">>, #{}),
+        {ok, <<"v2user">>} = bc_pairing:approve(telegram, Code, <<"custom">>),
+        ?assert(bc_pairing:is_allowed(telegram, <<"v2user">>)),
+        ?assertNot(bc_pairing:is_allowed(telegram, <<"nobody">>))
     end.

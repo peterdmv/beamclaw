@@ -8,8 +8,8 @@ Core systems (M0–M10), workspaces (M11–M17), session persistence and sharing
 Docker sandbox (M25–M30), scheduler/heartbeat (M31–M37), Brave Search, bundled
 skills, on-demand skill loading, Telegram markdown-to-HTML formatting,
 BM25-based skill auto-injection, `/context` command, and outgoing photo
-delivery (Post-M37) are all complete.
-610 EUnit tests + 37 CT tests pass (647 total).
+delivery, and per-user agent mapping (Post-M37) are all complete.
+618 EUnit tests + 37 CT tests pass (655 total).
 
 ---
 
@@ -68,10 +68,24 @@ delivery (Post-M37) are all complete.
 | Post-M37 | BM25 Skill Auto-Injection |
 | Post-M37 | `/context` Command (TUI + Telegram) |
 | Post-M37 | Outgoing Photo Delivery (Telegram + TUI) |
+| Post-M37 | Per-User Agent Mapping (Telegram Pairing) |
 
 ---
 
 ## Recent Milestones
+
+### Post-M37 — Per-User Agent Mapping ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| v2 storage format in `bc_pairing.erl` | ✅ | `{"version": 2, "allowed": [{"id": "...", "agent_id": "..."}]}` with v1 auto-migration |
+| `approve/3` with agent_id | ✅ | New arity stores specified agent; `approve/2` defaults to `default_agent` config |
+| `get_agent_id/2` lookup | ✅ | Returns `{ok, AgentId}` or `{error, not_found}` |
+| `resolve_agent_id/1` in `bc_channel_telegram.erl` | ✅ | Both `do_dispatch` clauses use pairing lookup → config fallback |
+| `--agent NAME` flag in CLI `pair` command | ✅ | `beamclaw pair telegram CODE --agent mom` |
+| `pair list` shows agent column | ✅ | `telegram  12345  agent=mom` format |
+| EUnit tests | ✅ | 8 new: default/custom agent, get_agent_id, v1 migration, list/revoke/is_allowed v2 |
+| Update CLAUDE.md + STATUS.md | ✅ | CLI commands, milestone |
 
 ### Post-M37 — Outgoing Photo Delivery ✅
 
