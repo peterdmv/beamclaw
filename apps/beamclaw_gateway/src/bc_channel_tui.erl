@@ -120,6 +120,9 @@ handle_info({line_result, Line}, #{session_id := SessionId,
         <<>> ->
             %% Empty line — no LLM call, start next read immediately.
             self() ! read_line;
+        <<"/context", _/binary>> ->
+            handle_context_command(SessionId, AgentId),
+            self() ! read_line;
         _ ->
             ChannelMsg = #bc_channel_message{
                 session_id = SessionId,
@@ -142,6 +145,17 @@ handle_call(_Req, _From, State) -> {reply, {error, unknown}, State}.
 code_change(_OldVsn, State, _)  -> {ok, State}.
 
 %% Internal
+
+handle_context_command(SessionId, AgentId) ->
+    case bc_session_registry:lookup(SessionId) of
+        {ok, Pid} ->
+            History = bc_session:get_history(Pid),
+            Info = bc_context:gather(#{agent_id => AgentId, history => History}),
+            Output = bc_context:format_text(Info, #{ansi => true}),
+            io:format("~n~s~n> ", [Output]);
+        {error, not_found} ->
+            io:format("No active session.~n> ")
+    end.
 
 tui_user_id() ->
     case bc_config:canonical_user_id() of

@@ -841,6 +841,7 @@ beamclaw/
         bc_thinking.erl       %% strip LLM thinking/reasoning tags
         bc_tool_parser.erl
         bc_config.erl
+        bc_context.erl              %% context window usage display (pure function)
         bc_workspace_templates.erl  %% eight default bootstrap file templates
         bc_workspace.erl            %% agent workspace filesystem ops
         bc_system_prompt.erl        %% assemble bootstrap files into system messages

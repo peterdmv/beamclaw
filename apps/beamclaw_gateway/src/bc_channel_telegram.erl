@@ -210,6 +210,11 @@ dispatch_telegram_message(Update) ->
             end
     end.
 
+do_dispatch(UserId, _TgUserId, ChatId, <<"/context", _/binary>>, _Msg, _Attachments) ->
+    AgentId   = bc_config:get(beamclaw_core, default_agent, <<"default">>),
+    SessionId = bc_session_registry:derive_session_id(UserId, AgentId, telegram),
+    handle_context_command(SessionId, AgentId, ChatId),
+    ok;
 do_dispatch(UserId, _TgUserId, ChatId, Content, Msg, Attachments) ->
     AgentId   = bc_config:get(beamclaw_core, default_agent, <<"default">>),
     SessionId = bc_session_registry:derive_session_id(UserId, AgentId, telegram),
@@ -242,6 +247,52 @@ do_dispatch(UserId, _TgUserId, ChatId, Content, Msg, Attachments) ->
             {ok, Pid} = bc_session_registry:lookup(SessionId),
             bc_session:dispatch_run(Pid, ChannelMsg)
     end.
+
+handle_context_command(SessionId, AgentId, ChatId) ->
+    Token = resolve_token(),
+    TokenState = #{token => Token},
+    case bc_session_registry:lookup(SessionId) of
+        {ok, Pid} ->
+            History = bc_session:get_history(Pid),
+            Info = bc_context:gather(#{agent_id => AgentId, history => History}),
+            case bc_context:render_png(Info) of
+                {ok, PngBin} ->
+                    send_photo(binary_to_integer(ChatId), PngBin, TokenState);
+                {error, _} ->
+                    Output = bc_context:format_text(Info),
+                    send_message_plain(binary_to_integer(ChatId), Output, TokenState)
+            end;
+        {error, not_found} ->
+            send_message_plain(binary_to_integer(ChatId),
+                               <<"No active session.">>, TokenState)
+    end.
+
+send_photo(ChatId, PngBin, #{token := Token}) ->
+    Url = make_api_url(Token, "/sendPhoto"),
+    Boundary = <<"----beamclaw_boundary">>,
+    Body = build_multipart(Boundary, ChatId, PngBin),
+    CT = <<"multipart/form-data; boundary=", Boundary/binary>>,
+    case hackney:request(post, Url, [{<<"Content-Type">>, CT}],
+                         Body, [with_body]) of
+        {ok, 200, _, _} -> ok;
+        {ok, Code, _, RBody} ->
+            logger:warning("[telegram] sendPhoto failed: ~p ~s", [Code, RBody]);
+        {error, Reason} ->
+            logger:warning("[telegram] sendPhoto error: ~p", [Reason])
+    end.
+
+build_multipart(Boundary, ChatId, PngBin) ->
+    ChatIdBin = integer_to_binary(ChatId),
+    iolist_to_binary([
+        <<"--">>, Boundary, <<"\r\n">>,
+        <<"Content-Disposition: form-data; name=\"chat_id\"\r\n\r\n">>,
+        ChatIdBin, <<"\r\n">>,
+        <<"--">>, Boundary, <<"\r\n">>,
+        <<"Content-Disposition: form-data; name=\"photo\"; filename=\"context.png\"\r\n">>,
+        <<"Content-Type: image/png\r\n\r\n">>,
+        PngBin, <<"\r\n">>,
+        <<"--">>, Boundary, <<"--\r\n">>
+    ]).
 
 extract_content_and_attachments(Msg, Text) ->
     case photo_enabled() of

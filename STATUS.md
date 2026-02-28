@@ -7,8 +7,8 @@ Core systems (M0–M10), workspaces (M11–M17), session persistence and sharing
 (M18–M19), Telegram pairing (M20), memory search (M21–M23), photo/vision (M24),
 Docker sandbox (M25–M30), scheduler/heartbeat (M31–M37), Brave Search, bundled
 skills, on-demand skill loading, Telegram markdown-to-HTML formatting,
-and BM25-based skill auto-injection (Post-M37) are all complete.
-561 EUnit tests + 31 CT tests pass (592 total).
+BM25-based skill auto-injection, and `/context` command (Post-M37) are all complete.
+573 EUnit tests + 31 CT tests pass (604 total).
 
 ---
 
@@ -65,10 +65,25 @@ and BM25-based skill auto-injection (Post-M37) are all complete.
 | Post-M37 | Scrubber env var fix, empty Telegram messages, obs args scrubbing |
 | Post-M37 | Telegram Markdown-to-HTML Formatting |
 | Post-M37 | BM25 Skill Auto-Injection |
+| Post-M37 | `/context` Command (TUI + Telegram) |
 
 ---
 
 ## Recent Milestones
+
+### Post-M37 — `/context` Command ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Create `bc_context.erl` in `beamclaw_core` | ✅ | Pure-function module: gather/1, format_text/1,2, render_svg/1, render_png/1 |
+| Token estimation + context window lookup | ✅ | `byte_size/4` approximation, hardcoded model→window map |
+| 10x10 Unicode grid with category colors | ✅ | ANSI colors for TUI, plain chars for Telegram fallback |
+| SVG rendering (dark theme) | ✅ | Grid + legend + bootstrap listing; PNG via `rsvg-convert` |
+| Intercept `/context` in `bc_channel_tui.erl` | ✅ | ANSI-colored output with model name + category breakdown |
+| Intercept `/context` in `bc_channel_telegram.erl` | ✅ | SVG→PNG photo; plain-text fallback if rsvg-convert absent |
+| Telegram `sendPhoto` multipart upload | ✅ | `build_multipart/3` helper |
+| EUnit tests | ✅ | 12 new: tokens, context windows, format_size, gather, text/ANSI/SVG/PNG |
+| Update CLAUDE.md + STATUS.md | ✅ | File Layout, milestone |
 
 ### Post-M37 — BM25 Skill Auto-Injection ✅
 
@@ -97,17 +112,6 @@ and BM25-based skill auto-injection (Post-M37) are all complete.
 | Skip empty Telegram messages | ✅ | Guard `send/3` for `<<>>` and `undefined` content |
 | Scrub tool call args before obs logging | ✅ | `scrub_map/1` on `tool_call_start` event args |
 | EUnit tests | ✅ | 8 new: 4 env var passthrough, 1 real-value-still-scrubbed, 3 scrub_map |
-
-### Post-M37 — Empty Final LLM Response Fix ✅
-
-| Task | Status | Notes |
-|------|--------|-------|
-| `bc_thinking:strip` preserves content on full-strip | ✅ | Fallback to `do_strip_tags_only` when `do_strip` returns `<<>>` |
-| `bc_thinking:strip(null)` clause | ✅ | Prevents `function_clause` crash when provider returns JSON null |
-| `bc_provider_openrouter` null content normalization | ✅ | `null` atom → `<<>>` before `bc_thinking:strip` |
-| `bc_channel_telegram` debug logging on empty skip | ✅ | `logger:debug` in empty-content guards for observability |
-| `bc_loop` fallback for empty final response | ✅ | Warning + fallback message when final LLM content is empty |
-| EUnit tests | ✅ | 3 new: null, all-thinking-preserves, all-think-preserves; 1 updated: unclosed |
 
 ---
 
