@@ -5,7 +5,7 @@ set -e
 # This is the standard Docker entrypoint pattern (cf. PostgreSQL, Redis).
 for dir in /tmp/beamclaw-bridges /home/beamclaw/.beamclaw; do
     if [ -d "$dir" ]; then
-        chown beamclaw:beamclaw "$dir" 2>/dev/null || true
+        chown -R beamclaw:beamclaw "$dir" 2>/dev/null || true
     fi
 done
 

@@ -39,6 +39,10 @@ COPY --from=uv /uv /usr/local/bin/uv
 # Non-root user for principle-of-least-privilege
 RUN addgroup -S beamclaw && adduser -S beamclaw -G beamclaw -h /home/beamclaw
 
+# Ensure all processes (root via `docker exec`, beamclaw via daemon) resolve
+# the same agent/pairing path regardless of HOME.
+ENV BEAMCLAW_HOME=/home/beamclaw/.beamclaw
+
 # Copy the self-contained OTP release (includes ERTS, no other Erlang needed)
 COPY --from=builder --chown=beamclaw:beamclaw \
      /build/_build/docker/rel/beamclaw /opt/beamclaw
