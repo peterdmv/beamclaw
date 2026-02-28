@@ -15,17 +15,6 @@ asdf global erlang 28.0
 Alternatively, use [kerl](https://github.com/kerl/kerl) or your OS package manager, but
 confirm the version is OTP 28 (`erl -version`).
 
-### Optional: librsvg (for /context PNG rendering)
-
-The `/context` command renders context usage as a PNG image (Telegram) or ANSI text (TUI).
-PNG rendering requires `rsvg-convert`:
-
-- **Alpine/Docker**: `apk add rsvg-convert` (included in Dockerfile)
-- **Ubuntu/Debian**: `apt install librsvg2-bin`
-- **macOS**: `brew install librsvg`
-
-Without `rsvg-convert`, the Telegram channel gracefully falls back to plain text.
-
 ### rebar3
 
 Download the self-contained binary:

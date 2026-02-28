@@ -80,8 +80,7 @@ BM25-based skill auto-injection, and `/context` command (Post-M37) are all compl
 | 10x10 Unicode grid with category colors | ✅ | ANSI colors for TUI, plain chars for Telegram fallback |
 | SVG rendering (dark theme) | ✅ | Grid + legend + bootstrap listing; PNG via `rsvg-convert` |
 | Intercept `/context` in `bc_channel_tui.erl` | ✅ | ANSI-colored output with model name + category breakdown |
-| Intercept `/context` in `bc_channel_telegram.erl` | ✅ | SVG→PNG photo; plain-text fallback if rsvg-convert absent |
-| Telegram `sendPhoto` multipart upload | ✅ | `build_multipart/3` helper |
+| Intercept `/context` in `bc_channel_telegram.erl` | ✅ | Monospace `<pre>` HTML text via `send_message_html/4` |
 | EUnit tests | ✅ | 12 new: tokens, context windows, format_size, gather, text/ANSI/SVG/PNG |
 | Update CLAUDE.md + STATUS.md | ✅ | File Layout, milestone |
 
