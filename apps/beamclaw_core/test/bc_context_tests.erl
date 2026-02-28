@@ -216,6 +216,32 @@ render_png_test_() ->
          end]
      end}.
 
+%% ---- Exit code parsing (regression for render_png bug) ----
+
+exit_code_parsing_test() ->
+    %% Simulate what render_png does to parse os:cmd exit codes.
+    %% string:split("0\n", "\n", all) returns ["0", []] — the trailing
+    %% element is [] (empty list), not "0". The old code used lists:last/1
+    %% directly, which returned [] and never matched "0".
+    Parse = fun(Result) ->
+        Lines = string:split(Result, "\n", all),
+        NonEmpty = [L || L <- Lines, L =/= "", L =/= []],
+        case NonEmpty of
+            [] -> "unknown";
+            _  -> string:trim(lists:last(NonEmpty))
+        end
+    end,
+    %% Success, no stderr output
+    ?assertEqual("0", Parse("0\n")),
+    %% Success with stderr warnings
+    ?assertEqual("0", Parse("some warning\n0\n")),
+    %% Failure
+    ?assertEqual("1", Parse("error message\n1\n")),
+    %% Empty result
+    ?assertEqual("unknown", Parse("")),
+    %% Only newlines
+    ?assertEqual("unknown", Parse("\n\n")).
+
 %% ---- Test setup/teardown ----
 
 setup_gather() ->

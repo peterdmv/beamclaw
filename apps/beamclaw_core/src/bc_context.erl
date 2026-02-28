@@ -293,7 +293,11 @@ render_png(Info) ->
         case os:cmd(Cmd ++ " 2>&1; echo $?") of
             Result ->
                 Lines = string:split(Result, "\n", all),
-                ExitCode = string:trim(lists:last(Lines)),
+                NonEmpty = [L || L <- Lines, L =/= "", L =/= []],
+                ExitCode = case NonEmpty of
+                    [] -> "unknown";
+                    _  -> string:trim(lists:last(NonEmpty))
+                end,
                 case ExitCode of
                     "0" ->
                         case file:read_file(PngPath) of
