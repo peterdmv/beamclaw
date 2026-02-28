@@ -202,11 +202,36 @@ render_svg(Info) ->
     %% Title
     Title = <<"  <text x=\"20\" y=\"25\" fill=\"#e0e0e0\" font-size=\"16\">Context Usage</text>\n">>,
 
-    %% Grid cells (10×10, 30×30px each, 5px gap, starting at 20,40)
+    %% Model + summary text (below title)
+    ModelText = iolist_to_binary([
+        "  <text x=\"20\" y=\"50\" fill=\"#a0a0a0\" font-size=\"13\">",
+        svg_escape(Model), " \xC2\xB7 ",
+        format_size(UsedWithBuffer), "/", format_size(Window),
+        " (", integer_to_list(Pct), "%)",
+        "</text>\n"
+    ]),
+
+    %% Category legend (below model text)
+    LegendSvg = lists:map(fun({Idx, {CatName, CatTokens}}) ->
+        CatPct = case Window of 0 -> 0; _ -> (CatTokens * 100) div Window end,
+        CatKey = category_key(CatName),
+        CatColor = proplists:get_value(CatKey, SvgColors, <<"#808080">>),
+        CatY = 75 + Idx * 20,
+        CatSymbol = category_symbol(CatKey),
+        iolist_to_binary([
+            "  <text x=\"20\" y=\"", integer_to_list(CatY),
+            "\" fill=\"", CatColor, "\" font-size=\"12\">",
+            CatSymbol, " ", svg_escape(binary_to_list(CatName)), ": ",
+            format_size(CatTokens), " (", integer_to_list(CatPct), "%)",
+            "</text>\n"
+        ])
+    end, lists:zip(lists:seq(0, length(Categories) - 1), Categories)),
+
+    %% Grid cells (10×10, 30×30px each, 5px gap, below legend)
     CellSize = 30,
     Gap = 5,
     StartX = 20,
-    StartY = 40,
+    StartY = 230,
     GridSvg = lists:map(fun(Idx) ->
         Row = Idx div 10,
         Col = Idx rem 10,
@@ -223,38 +248,20 @@ render_svg(Info) ->
         ])
     end, lists:seq(0, 99)),
 
-    %% Model + summary text
-    ModelText = iolist_to_binary([
-        "  <text x=\"380\" y=\"60\" fill=\"#a0a0a0\" font-size=\"13\">",
-        svg_escape(Model), " \xC2\xB7 ",
-        format_size(UsedWithBuffer), "/", format_size(Window),
-        " (", integer_to_list(Pct), "%)",
-        "</text>\n"
-    ]),
+    %% Grid bottom: StartY + 10 rows * (30 + 5) - 5 = 230 + 345 = 575
+    GridBottom = StartY + 10 * (CellSize + Gap) - Gap,
 
-    %% Category legend
-    LegendSvg = lists:map(fun({Idx, {CatName, CatTokens}}) ->
-        CatPct = case Window of 0 -> 0; _ -> (CatTokens * 100) div Window end,
-        CatKey = category_key(CatName),
-        CatColor = proplists:get_value(CatKey, SvgColors, <<"#808080">>),
-        CatY = 130 + Idx * 22,
-        CatSymbol = category_symbol(CatKey),
-        iolist_to_binary([
-            "  <text x=\"380\" y=\"", integer_to_list(CatY),
-            "\" fill=\"", CatColor, "\" font-size=\"12\">",
-            CatSymbol, " ", svg_escape(binary_to_list(CatName)), ": ",
-            format_size(CatTokens), " (", integer_to_list(CatPct), "%)",
-            "</text>\n"
-        ])
-    end, lists:zip(lists:seq(0, length(Categories) - 1), Categories)),
-
-    %% Bootstrap file listing
+    %% Bootstrap file listing (below grid)
     BootstrapSvg = case BootstrapFiles of
         [] -> [];
         _ ->
-            BootHeader = <<"  <text x=\"20\" y=\"410\" fill=\"#a0a0a0\" font-size=\"12\">Bootstrap files</text>\n">>,
+            BootHeaderY = GridBottom + 20,
+            BootHeader = iolist_to_binary([
+                "  <text x=\"20\" y=\"", integer_to_list(BootHeaderY),
+                "\" fill=\"#a0a0a0\" font-size=\"12\">Bootstrap files</text>\n"
+            ]),
             BootLines = lists:map(fun({Idx, {Name, Tokens}}) ->
-                BY = 425 + Idx * 16,
+                BY = BootHeaderY + 16 + Idx * 16,
                 iolist_to_binary([
                     "  <text x=\"30\" y=\"", integer_to_list(BY),
                     "\" fill=\"#707090\" font-size=\"11\">\xe2\x94\x94 ",
@@ -265,8 +272,12 @@ render_svg(Info) ->
             [BootHeader | BootLines]
     end,
 
-    %% Adjust canvas height based on bootstrap files
-    CanvasHeight = 440 + max(0, (length(BootstrapFiles) - 2) * 16),
+    %% Adjust canvas height based on content
+    BaseHeight = GridBottom + 30,
+    CanvasHeight = case BootstrapFiles of
+        [] -> BaseHeight;
+        _  -> BaseHeight + 20 + 16 + length(BootstrapFiles) * 16
+    end,
     SvgHeaderFinal = iolist_to_binary([
         "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"720\" height=\"",
         integer_to_list(CanvasHeight),
@@ -276,8 +287,8 @@ render_svg(Info) ->
     SvgFooter = <<"</svg>\n">>,
 
     iolist_to_binary([
-        SvgHeaderFinal, Title | GridSvg
-    ] ++ [ModelText | LegendSvg] ++ BootstrapSvg ++ [SvgFooter]).
+        SvgHeaderFinal, Title, ModelText | LegendSvg
+    ] ++ GridSvg ++ BootstrapSvg ++ [SvgFooter]).
 
 %% ---- Layer 3: SVG → PNG ----
 
