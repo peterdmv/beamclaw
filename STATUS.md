@@ -6,9 +6,9 @@ Scaffolding is complete. All nine OTP apps compile clean with zero warnings.
 Core systems (M0–M10), workspaces (M11–M17), session persistence and sharing
 (M18–M19), Telegram pairing (M20), memory search (M21–M23), photo/vision (M24),
 Docker sandbox (M25–M30), scheduler/heartbeat (M31–M37), Brave Search, bundled
-skills, on-demand skill loading, and Telegram markdown-to-HTML formatting
-(Post-M37) are all complete.
-539 EUnit tests + 31 CT tests pass (570 total).
+skills, on-demand skill loading, Telegram markdown-to-HTML formatting,
+and BM25-based skill auto-injection (Post-M37) are all complete.
+561 EUnit tests + 31 CT tests pass (592 total).
 
 ---
 
@@ -64,10 +64,21 @@ skills, on-demand skill loading, and Telegram markdown-to-HTML formatting
 | Post-M37 | On-Demand Skill Loading (Token Optimization) |
 | Post-M37 | Scrubber env var fix, empty Telegram messages, obs args scrubbing |
 | Post-M37 | Telegram Markdown-to-HTML Formatting |
+| Post-M37 | BM25 Skill Auto-Injection |
 
 ---
 
 ## Recent Milestones
+
+### Post-M37 — BM25 Skill Auto-Injection ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Add `assemble/3` overload to `bc_system_prompt.erl` | ✅ | Accepts user message, passes to `load_skills/3` |
+| BM25-based skill promotion in `load_skills/3` | ✅ | `maybe_promote_skill/2`: rank on-demand skills by name+desc, promote top if score ≥ 0.5 |
+| Pass user message from `bc_loop.erl` | ✅ | `last_user_content(History)` → `assemble/3` in streaming `do_stream` |
+| EUnit tests | ✅ | 5 new test generators (11 assertions): promotes, no-match, best-of-multiple, threshold, always-unaffected |
+| Update STATUS.md | ✅ | Milestone |
 
 ### Post-M37 — Telegram Markdown-to-HTML Formatting ✅
 

@@ -27,7 +27,7 @@ and daily log updates mid-session are picked up immediately.
 
 -include_lib("beamclaw_core/include/bc_types.hrl").
 
--export([assemble/1, assemble/2, resolve_base_dir/2]).
+-export([assemble/1, assemble/2, assemble/3, resolve_base_dir/2]).
 
 -doc """
 Assemble system messages from an agent's bootstrap files.
@@ -44,6 +44,14 @@ assemble(AgentId) ->
 
 -spec assemble(binary(), map()) -> [#bc_message{}].
 assemble(AgentId, Config) ->
+    assemble(AgentId, Config, undefined).
+
+-doc """
+Assemble system messages, with BM25-based auto-injection of the best-matching
+on-demand skill when UserMessage is provided.
+""".
+-spec assemble(binary(), map(), binary() | undefined) -> [#bc_message{}].
+assemble(AgentId, Config, UserMessage) ->
     case bc_workspace:agent_exists(AgentId) of
         false ->
             [fallback_message()];
@@ -71,7 +79,7 @@ assemble(AgentId, Config) ->
                 end
             end, Order),
             DailyMsgs = load_daily_logs(AgentId),
-            SkillMsgs = load_skills(AgentId, Config),
+            SkillMsgs = load_skills(AgentId, Config, UserMessage),
             BaseMsgs = case BootstrapMsgs of
                 [] -> [fallback_message()];
                 _  -> BootstrapMsgs
@@ -123,8 +131,12 @@ Load eligible skills as system messages using a two-tier strategy:
 - **On-demand skills**: a single compact summary message listing skill names,
   descriptions, and read_file paths. The agent reads the full SKILL.md only
   when it decides to use a skill, saving tokens on every turn.
+- **Auto-promoted skill**: when a user message is provided, BM25-match it
+  against on-demand skill name+description. If the top result scores above
+  1.0, promote that single skill to full content injection (same as always
+  skills), eliminating the read_file round-trip.
 """.
-load_skills(AgentId, Config) ->
+load_skills(AgentId, Config, UserMessage) ->
     case code:ensure_loaded(bc_skill_discovery) of
         {module, _} ->
             try
@@ -139,7 +151,7 @@ load_skills(AgentId, Config) ->
                     end
                 end, Skills),
                 Filtered = filter_by_allowlist(Eligible, Config),
-                {Always, OnDemand} = lists:partition(fun is_always_skill/1, Filtered),
+                {Always, OnDemand0} = lists:partition(fun is_always_skill/1, Filtered),
                 AlwaysMsgs = lists:map(fun(Skill) ->
                     Name = skill_name(Skill),
                     RawContent = skill_content(Skill),
@@ -152,8 +164,9 @@ load_skills(AgentId, Config) ->
                         ts      = 0
                     }
                 end, Always),
+                {PromotedMsgs, OnDemand} = maybe_promote_skill(OnDemand0, UserMessage),
                 SummaryMsgs = build_skill_summary(OnDemand),
-                AlwaysMsgs ++ SummaryMsgs
+                AlwaysMsgs ++ PromotedMsgs ++ SummaryMsgs
             catch _:_ -> []
             end;
         _ -> []
@@ -165,6 +178,50 @@ is_always_skill(Skill) ->
         #{<<"beamclaw">> := #{<<"always">> := true}} -> true;
         _ -> false
     end.
+
+%% BM25-match user message against on-demand skill name+description.
+%% Promotes at most one skill above the score threshold.
+-define(AUTO_INJECT_THRESHOLD, 0.5).
+
+maybe_promote_skill(OnDemand, undefined) ->
+    {[], OnDemand};
+maybe_promote_skill([], _UserMessage) ->
+    {[], []};
+maybe_promote_skill(OnDemand, UserMessage) when is_binary(UserMessage) ->
+    case code:ensure_loaded(bc_bm25) of
+        {module, _} ->
+            Docs = [{Skill, skill_search_text(Skill)} || Skill <- OnDemand],
+            Ranked = bc_bm25:rank(UserMessage, Docs),
+            case Ranked of
+                [{TopSkill, Score} | _] when Score >= ?AUTO_INJECT_THRESHOLD ->
+                    Name = skill_name(TopSkill),
+                    RawContent = skill_content(TopSkill),
+                    Content = resolve_base_dir(RawContent, skill_path(TopSkill)),
+                    Msg = #bc_message{
+                        id      = generate_id(),
+                        role    = system,
+                        content = <<"[skill:", Name/binary, " (auto-matched)]\n",
+                                    Content/binary>>,
+                        ts      = 0
+                    },
+                    Remaining = [S || S <- OnDemand, skill_name(S) =/= Name],
+                    {[Msg], Remaining};
+                _ ->
+                    {[], OnDemand}
+            end;
+        _ ->
+            {[], OnDemand}
+    end;
+maybe_promote_skill(OnDemand, _) ->
+    {[], OnDemand}.
+
+skill_search_text(Skill) ->
+    Name = skill_name(Skill),
+    Desc = case skill_description(Skill) of
+               undefined -> <<>>;
+               D -> D
+           end,
+    <<Name/binary, " ", Desc/binary>>.
 
 build_skill_summary([]) -> [];
 build_skill_summary(Skills) ->

@@ -160,7 +160,8 @@ streaming(enter, _OldState, Data) ->
     {keep_state, Data};
 streaming(cast, do_stream, Data) ->
     History    = bc_session:get_history(Data#loop_data.session_pid),
-    SystemMsgs = bc_system_prompt:assemble(Data#loop_data.agent_id),
+    UserText   = last_user_content(History),
+    SystemMsgs = bc_system_prompt:assemble(Data#loop_data.agent_id, #{}, UserText),
     AutoCtxMsgs = maybe_auto_context(History, Data),
     FullHistory = SystemMsgs ++ AutoCtxMsgs ++ History,
     LoopCfg   = bc_config:get(beamclaw_core, agentic_loop, #{}),
