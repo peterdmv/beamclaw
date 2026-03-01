@@ -463,6 +463,7 @@ Key flags in `config/vm.args`:
 |---|---|---|
 | `-sname beamclaw` | — | Local node name (no distribution). Use `-name` for clustered deployments. |
 | `-setcookie beamclaw_dev` | — | Cluster cookie. Override via `ERL_FLAGS="-setcookie $BEAMCLAW_COOKIE"`. |
+| `-mnesia dir '"/home/beamclaw/.beamclaw/mnesia"'` | — | Mnesia data directory. Points to the persistent volume in Docker. Without this, Mnesia writes to `Mnesia.<nodename>/` in the release WORKDIR, which is lost on container rebuild. For local dev, `~/.beamclaw/mnesia` is created automatically. |
 | `+S auto` | auto | Scheduler threads — matches available CPU cores. |
 | `+A 32` | 32 | Async I/O thread pool size. |
 | `+Q 65536` | 65536 | Max open ports (file descriptors). |

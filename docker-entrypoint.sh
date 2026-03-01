@@ -3,7 +3,7 @@ set -e
 
 # Fix ownership of bind-mounted directories that Docker may create as root.
 # This is the standard Docker entrypoint pattern (cf. PostgreSQL, Redis).
-for dir in /tmp/beamclaw-bridges /home/beamclaw/.beamclaw; do
+for dir in /tmp/beamclaw-bridges /home/beamclaw/.beamclaw /home/beamclaw/.beamclaw/mnesia; do
     if [ -d "$dir" ]; then
         chown -R beamclaw:beamclaw "$dir" 2>/dev/null || true
     fi

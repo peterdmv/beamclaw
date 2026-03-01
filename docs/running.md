@@ -655,6 +655,7 @@ docker compose logs -f
 ```bash
 docker run -d \
   --name beamclaw \
+  --hostname beamclaw \
   --restart unless-stopped \
   -v beamclaw_data:/home/beamclaw/.beamclaw \
   -e OPENROUTER_API_KEY=sk-or-... \
@@ -664,8 +665,15 @@ docker run -d \
 ```
 
 The named volume `beamclaw_data` persists agent workspaces (bootstrap files,
-daily logs, skills) and Mnesia session history across container restarts.
-Omit the `-v` flag if you don't need persistence.
+daily logs, skills), Mnesia session history, pairing data, and scheduled jobs
+across container restarts and rebuilds. Omit the `-v` flag if you don't need
+persistence.
+
+**Important**: When using `docker run`, add `--hostname beamclaw` to ensure the
+Erlang node name (`beamclaw@beamclaw`) is stable across container recreations.
+Without a fixed hostname, Docker assigns a random container ID as hostname,
+causing Mnesia to look for a different data directory on each restart. The
+`docker-compose.yml` already includes this setting.
 
 ### Health check
 

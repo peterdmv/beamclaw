@@ -574,7 +574,7 @@ Usage: `bc_obs:emit(tool_call_start, #{tool_name => Name, args => Args, session_
 
 ---
 
-## Configuration (`config/sys.config`)
+## Configuration (`config/sys.config` + `config/vm.args`)
 
 `bc_config:get(App, Key)` resolves `{env, "VAR"}` tuples at runtime via `os:getenv/1`.
 
@@ -705,6 +705,13 @@ as the user_id, enabling cross-channel session sharing for single-user deploymen
                daily_log_lookback => 7}}
 ]}
 ```
+
+Key `vm.args` flags:
+
+| Flag | Value | Description |
+|---|---|---|
+| `-sname` | `beamclaw` | Local node name |
+| `-mnesia dir` | `'"/home/beamclaw/.beamclaw/mnesia"'` | Mnesia data directory on the persistent volume. Required for Docker session persistence across container rebuilds. |
 
 ---
 

@@ -79,17 +79,20 @@ webhook secret token validation, and smart session memory maintenance
 | Post-M37 | Fix /context Compaction Buffer Display |
 | Post-M37 | Fix /context Grid Clipping Compaction Buffer Cells |
 | Post-M37 | Smart Session Memory Maintenance |
+| Post-M37 | Fix Mnesia Session Persistence Across Docker Rebuilds |
 
 ---
 
 ## Recent Milestones
 
-### Post-M37 — Fix /context Grid Clipping Compaction Buffer Cells ✅
+### Post-M37 — Fix Mnesia Session Persistence Across Docker Rebuilds ✅
 
 | Task | Status | Notes |
 |------|--------|-------|
-| Fix `build_grid/1` in `bc_context.erl` | ✅ | Compute free cells as remainder (`100 - used - compaction`) instead of ceiling division |
-| All tests pass | ✅ | 666 EUnit tests pass |
+| Configure Mnesia data dir on persistent volume | ✅ | `-mnesia dir` in `vm.args` → `/home/beamclaw/.beamclaw/mnesia` |
+| Fix container hostname for stable node name | ✅ | `hostname: beamclaw` in `docker-compose.yml` → node `beamclaw@beamclaw` |
+| Create Mnesia dir in Docker entrypoint | ✅ | Added to ownership-fix loop in `docker-entrypoint.sh` |
+| Documentation | ✅ | CLAUDE.md, docs/configuration.md, docs/running.md |
 
 ### Post-M37 — Smart Session Memory Maintenance ✅
 
