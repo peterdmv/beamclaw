@@ -97,11 +97,9 @@ format_text(Info) ->
 format_text(Info, Opts) ->
     Ansi = maps:get(ansi, Opts, false),
     #{model := Model, context_window := Window, total := Total,
-      categories := Categories, bootstrap_files := BootstrapFiles,
-      compaction_buffer := CompBuffer} = Info,
+      categories := Categories, bootstrap_files := BootstrapFiles} = Info,
 
     Pct = case Window of 0 -> 0; _ -> (Total * 100) div Window end,
-    UsedWithBuffer = Total + CompBuffer,
 
     %% Build the 100-cell grid
     Grid = build_grid(Info),
@@ -123,7 +121,7 @@ format_text(Info, Opts) ->
 
     %% Format the grid rows with legend on the right
     ModelLine = iolist_to_binary([Model, " \xC2\xB7 ",
-                                  format_size(UsedWithBuffer), "/",
+                                  format_size(Total), "/",
                                   format_size(Window), " tokens (",
                                   integer_to_list(Pct), "%)"]),
 
@@ -185,11 +183,9 @@ format_text(Info, Opts) ->
 -spec format_telegram(map()) -> binary().
 format_telegram(Info) ->
     #{model := Model, context_window := Window, total := Total,
-      categories := Categories, bootstrap_files := BootstrapFiles,
-      compaction_buffer := CompBuffer} = Info,
+      categories := Categories, bootstrap_files := BootstrapFiles} = Info,
 
     Pct = case Window of 0 -> 0; _ -> (Total * 100) div Window end,
-    UsedWithBuffer = Total + CompBuffer,
 
     Grid = build_grid(Info),
 
@@ -205,7 +201,7 @@ format_telegram(Info) ->
     Header = iolist_to_binary([
         <<"<b>">>, <<"\xf0\x9f\x93\x8a">>, <<" Context Usage</b>\n">>,
         bc_telegram_format:escape_html(ModelBin), <<"\n">>,
-        format_size(UsedWithBuffer), <<"/">>, format_size(Window),
+        format_size(Total), <<"/">>, format_size(Window),
         <<" tokens (">>, integer_to_list(Pct), <<"%)">>,
         SessionLine
     ]),
@@ -265,11 +261,9 @@ telegram_legend(Categories, Window) ->
 -spec render_svg(map()) -> binary().
 render_svg(Info) ->
     #{model := Model, context_window := Window, total := Total,
-      categories := Categories, bootstrap_files := BootstrapFiles,
-      compaction_buffer := CompBuffer} = Info,
+      categories := Categories, bootstrap_files := BootstrapFiles} = Info,
 
     Pct = case Window of 0 -> 0; _ -> (Total * 100) div Window end,
-    UsedWithBuffer = Total + CompBuffer,
 
     Grid = build_grid(Info),
 
@@ -291,7 +285,7 @@ render_svg(Info) ->
     ModelText = iolist_to_binary([
         "  <text x=\"20\" y=\"50\" fill=\"#a0a0a0\" font-size=\"13\">",
         svg_escape(Model), " \xC2\xB7 ",
-        format_size(UsedWithBuffer), "/", format_size(Window),
+        format_size(Total), "/", format_size(Window),
         " (", integer_to_list(Pct), "%)",
         "</text>\n"
     ]),

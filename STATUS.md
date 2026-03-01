@@ -81,10 +81,21 @@ webhook secret token validation, and smart session memory maintenance
 | Post-M37 | Smart Session Memory Maintenance |
 | Post-M37 | Fix Mnesia Session Persistence Across Docker Rebuilds |
 | Post-M37 | Fix Mnesia Tables Always Created as ram_copies |
+| Post-M37 | Fix /context Header Token Count Including Compaction Buffer |
 
 ---
 
 ## Recent Milestones
+
+### Post-M37 — Fix /context Header Token Count Including Compaction Buffer ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Fix `format_text/2` header to use `Total` | ✅ | Removed `UsedWithBuffer`, display content-only tokens |
+| Fix `format_telegram/1` header to use `Total` | ✅ | Same change |
+| Fix `render_svg/1` header to use `Total` | ✅ | Same change |
+| Remove unused `CompBuffer` bindings | ✅ | Clean compile, 0 warnings |
+| All tests pass | ✅ | 683 EUnit tests pass |
 
 ### Post-M37 — Fix Mnesia Tables Always Created as ram_copies ✅
 
@@ -135,4 +146,4 @@ _None at this time._
 
 ## Last Updated
 
-2026-03-03
+2026-03-04
