@@ -153,6 +153,14 @@ and webhook secret token validation (Post-M37) are all complete.
 | EUnit tests | ✅ | 11 new: `verify_token/2` (valid, wrong, missing header, no config, different lengths, empty) |
 | Update CLAUDE.md + docs + STATUS.md | ✅ | Configuration section, `docs/configuration.md` env vars table + telegram config block |
 
+### Post-M37 — Fix /context compaction buffer display ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Fix `bc_context.erl` buffer calc | ✅ | Read `compaction_threshold_pct` (80), compute `100 - 80 = 20%` instead of using `compaction_target_pct` (40%) |
+| Update `bc_context_tests.erl` | ✅ | Test setup uses `compaction_threshold_pct => 80` instead of `compaction_target_pct => 40` |
+| All tests pass | ✅ | 664 EUnit tests pass |
+
 ---
 
 ## Active Work

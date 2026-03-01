@@ -55,10 +55,10 @@ gather(#{agent_id := AgentId, history := History} = Opts) ->
     %% Conversation history (non-system messages only)
     MessageTokens = estimate_history_tokens(History),
 
-    %% Compaction buffer estimate: tokens reserved for compaction target
+    %% Compaction buffer: headroom between trigger threshold and 100%
     LoopCfg = bc_config:get(beamclaw_core, agentic_loop, #{}),
-    CompactionTargetPct = maps:get(compaction_target_pct, LoopCfg, 40),
-    CompactionBuffer = Window * CompactionTargetPct div 100,
+    CompactionThresholdPct = maps:get(compaction_threshold_pct, LoopCfg, 80),
+    CompactionBuffer = Window * (100 - CompactionThresholdPct) div 100,
 
     Total = BootstrapTokens + DailyTokens + SkillTokens + ToolTokens + MessageTokens,
     FreeSpace = max(0, Window - Total - CompactionBuffer),

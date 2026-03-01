@@ -375,7 +375,7 @@ setup_gather() ->
     application:set_env(beamclaw_core, providers,
                         [{openrouter, #{model => "anthropic/claude-sonnet-4-5"}}]),
     application:set_env(beamclaw_core, agentic_loop,
-                        #{compaction_target_pct => 40}),
+                        #{compaction_threshold_pct => 80}),
     application:set_env(beamclaw_core, default_agent, <<"default">>),
     %% Ensure the default agent workspace exists
     ensure_test_workspace(),
