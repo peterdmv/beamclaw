@@ -131,6 +131,9 @@ handle_info({line_result, Line}, #{session_id := SessionId,
         <<"/context", _/binary>> ->
             handle_context_command(SessionId, AgentId),
             self() ! read_line;
+        <<"/new", _/binary>> ->
+            handle_new_command(SessionId),
+            self() ! read_line;
         _ ->
             ChannelMsg = #bc_channel_message{
                 session_id = SessionId,
@@ -163,6 +166,41 @@ handle_context_command(SessionId, AgentId) ->
             io:format("~n~ts~n> ", [Output]);
         {error, not_found} ->
             io:format("No active session.~n> ")
+    end.
+
+handle_new_command(SessionId) ->
+    case bc_session_registry:lookup(SessionId) of
+        {ok, Pid} ->
+            case bc_session:is_busy(Pid) of
+                true ->
+                    io:format("Session is busy — wait for the current response to finish.~n> ");
+                false ->
+                    History = bc_session:get_history(Pid),
+                    case History of
+                        [] ->
+                            io:format("Session is already empty.~n> ");
+                        _ ->
+                            io:format("[...saving memories...]~n"),
+                            maybe_memory_flush(Pid),
+                            bc_session:clear_history(Pid),
+                            bc_obs:emit(session_reset, #{session_id => SessionId}),
+                            io:format("Session cleared. Memories saved.~n> ")
+                    end
+            end;
+        {error, not_found} ->
+            io:format("No active session.~n> ")
+    end.
+
+maybe_memory_flush(SessionPid) ->
+    case bc_config:get(beamclaw_core, agentic_loop, #{}) of
+        #{memory_flush := false} -> ok;
+        _ ->
+            case bc_memory_flush:run(SessionPid) of
+                ok -> ok;
+                {error, Reason} ->
+                    logger:warning("[tui] memory flush failed before /new: ~p",
+                                   [Reason])
+            end
     end.
 
 tui_user_id() ->

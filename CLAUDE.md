@@ -558,6 +558,7 @@ Non-blocking cast; backends receive events asynchronously via `pg` process group
 | `session_start` | `session_id` |
 | `session_end` | `session_id` |
 | `session_restored` | `session_id`, `message_count` |
+| `session_reset` | `session_id` |
 | `sandbox_reaped` | `container_name` |
 | `sched_job_created` | `job_id`, `schedule_type`, `agent_id` |
 | `sched_job_fired` | `job_id`, `session_id`, `heartbeat` |

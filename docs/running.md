@@ -48,6 +48,21 @@ _build/default/bin/beamclaw
 
 Type a message and press Enter. Use Ctrl+D (EOF) to quit.
 
+### In-session commands
+
+| Command | Description |
+|---------|-------------|
+| `/context` | Show context window usage (token counts, compaction status) |
+| `/new` | Start a fresh session (saves memories first, then clears history) |
+
+These commands work in all TUI modes (local, remote) and in Telegram.
+In Telegram, commands appear in the bot's command menu automatically.
+
+The `/new` command performs a memory flush before clearing: the LLM is asked
+to save any durable facts to workspace memory (MEMORY.md, daily logs, bootstrap
+files). This mirrors the pre-compaction memory flush. The flush respects the
+`memory_flush` config flag and is skipped if the session has fewer than 2 messages.
+
 ### Daemon mode
 
 ```bash

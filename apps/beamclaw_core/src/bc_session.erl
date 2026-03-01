@@ -35,6 +35,7 @@ bc_session_registry, fetches history, and announces its new PID here.
          dispatch_run/2,
          get_history/1,
          set_history/2,
+         clear_history/1,
          get_channel_mod/1,
          get_agent_id/1,
          get_provider_mod/1,
@@ -124,6 +125,11 @@ during maintenance scans.
 -spec get_state_summary(Pid :: pid()) -> map().
 get_state_summary(Pid) ->
     gen_server:call(Pid, get_state_summary).
+
+-doc "Atomically clear history and delete Mnesia persistence.".
+-spec clear_history(Pid :: pid()) -> ok.
+clear_history(Pid) ->
+    gen_server:call(Pid, clear_history).
 
 -doc "Append a single message to history (called by bc_loop).".
 -spec append_message(Pid :: pid(), Message :: #bc_message{}) -> ok.
@@ -243,6 +249,12 @@ handle_call(get_state_summary, _From, State) ->
                 loop_busy     => State#state.loop_busy,
                 history_len   => length(State#state.history)},
     {reply, Summary, State};
+handle_call(clear_history, _From, State) ->
+    case bc_config:get(beamclaw_core, session_persistence, true) of
+        true  -> bc_session_store:delete(State#state.session_id);
+        false -> ok
+    end,
+    {reply, ok, State#state{history = []}};
 handle_call(_Req, _From, State) ->
     {reply, {error, unknown}, State}.
 

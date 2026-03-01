@@ -9,7 +9,8 @@ Docker sandbox (M25–M30), scheduler/heartbeat (M31–M37), Brave Search, bundl
 skills, on-demand skill loading, Telegram markdown-to-HTML formatting,
 BM25-based skill auto-injection, `/context` command, outgoing photo delivery,
 per-user agent mapping, voice message transcription, token-based compaction,
-webhook secret token validation, and smart session memory maintenance
+webhook secret token validation, smart session memory maintenance,
+Telegram bot command registration, and `/new` session reset
 (Post-M37) are all complete.
 683 EUnit tests + 37 CT tests pass (720 total).
 
@@ -82,39 +83,23 @@ webhook secret token validation, and smart session memory maintenance
 | Post-M37 | Fix Mnesia Session Persistence Across Docker Rebuilds |
 | Post-M37 | Fix Mnesia Tables Always Created as ram_copies |
 | Post-M37 | Fix /context Header Token Count Including Compaction Buffer |
+| Post-M37 | Telegram Bot Commands Registration + `/new` Session Reset |
 
 ---
 
 ## Recent Milestones
 
-### Post-M37 — Fix /context Header Token Count Including Compaction Buffer ✅
+### Post-M37 — Telegram Bot Commands Registration + `/new` Session Reset ✅
 
 | Task | Status | Notes |
 |------|--------|-------|
-| Fix `format_text/2` header to use `Total` | ✅ | Removed `UsedWithBuffer`, display content-only tokens |
-| Fix `format_telegram/1` header to use `Total` | ✅ | Same change |
-| Fix `render_svg/1` header to use `Total` | ✅ | Same change |
-| Remove unused `CompBuffer` bindings | ✅ | Clean compile, 0 warnings |
-| All tests pass | ✅ | 683 EUnit tests pass |
-
-### Post-M37 — Fix Mnesia Tables Always Created as ram_copies ✅
-
-| Task | Status | Notes |
-|------|--------|-------|
-| Fix `beamclaw_memory_app:init_mnesia/0` | ✅ | Detect `use_dir=false` → stop + create_schema + restart |
-| Fix `bc_session_store:init_table/0` | ✅ | Same pattern for robustness |
-| Fix `bc_sched_store:init_table/0` | ✅ | Same pattern for robustness |
-| Fix `docker-entrypoint.sh` | ✅ | `mkdir -p` mnesia dir before chown loop |
-| All tests pass | ✅ | 683 EUnit tests pass |
-
-### Post-M37 — Fix Mnesia Session Persistence Across Docker Rebuilds ✅
-
-| Task | Status | Notes |
-|------|--------|-------|
-| Configure Mnesia data dir on persistent volume | ✅ | `-mnesia dir` in `vm.args` → `/home/beamclaw/.beamclaw/mnesia` |
-| Fix container hostname for stable node name | ✅ | `hostname: beamclaw` in `docker-compose.yml` → node `beamclaw@beamclaw` |
-| Create Mnesia dir in Docker entrypoint | ✅ | Added to ownership-fix loop in `docker-entrypoint.sh` |
-| Documentation | ✅ | CLAUDE.md, docs/configuration.md, docs/running.md |
+| `bc_session.erl` — `clear_history/1` | ✅ | Atomic history clear + Mnesia delete |
+| `bc_channel_telegram.erl` — `setMyCommands` | ✅ | Registers `/context`, `/new` in bot menu on init |
+| `bc_channel_telegram.erl` — `/new` dispatch + handler | ✅ | Busy guard, memory flush, typing indicator |
+| `bc_channel_tui.erl` — `/new` dispatch + handler | ✅ | Same logic, `io:format` output |
+| `beamclaw_cli.erl` — `/new` in remote TUI | ✅ | All operations via `rpc:call/4` |
+| Documentation | ✅ | CLAUDE.md (obs event), docs/running.md, STATUS.md |
+| All tests pass | ✅ | 683 EUnit tests pass, 0 warnings |
 
 ### Post-M37 — Smart Session Memory Maintenance ✅
 
@@ -129,6 +114,15 @@ webhook secret token validation, and smart session memory maintenance
 | Tests | ✅ | 17 new tests (bc_session_api_tests, bc_memory_flush_tests, bc_session_maintenance_tests) |
 | Documentation | ✅ | CLAUDE.md, STATUS.md, docs/configuration.md |
 | All tests pass | ✅ | 683 EUnit tests pass (was 666) |
+
+### Post-M37 — Fix Mnesia Session Persistence Across Docker Rebuilds ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Configure Mnesia data dir on persistent volume | ✅ | `-mnesia dir` in `vm.args` → `/home/beamclaw/.beamclaw/mnesia` |
+| Fix container hostname for stable node name | ✅ | `hostname: beamclaw` in `docker-compose.yml` → node `beamclaw@beamclaw` |
+| Create Mnesia dir in Docker entrypoint | ✅ | Added to ownership-fix loop in `docker-entrypoint.sh` |
+| Documentation | ✅ | CLAUDE.md, docs/configuration.md, docs/running.md |
 
 ---
 
@@ -146,4 +140,4 @@ _None at this time._
 
 ## Last Updated
 
-2026-03-04
+2026-03-05
