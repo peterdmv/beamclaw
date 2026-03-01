@@ -116,7 +116,7 @@ idle(cast, {run, Message}, Data) ->
     bc_session:append_message(Data#loop_data.session_pid, UserMsg),
     History   = bc_session:get_history(Data#loop_data.session_pid),
     LoopCfg   = bc_config:get(beamclaw_core, agentic_loop, #{}),
-    Model     = bc_context:get_model_name(),
+    Model     = bc_context:get_model_name(Data#loop_data.provider_mod),
     Window    = bc_context:context_window(Model),
     ThreshPct = maps:get(compaction_threshold_pct, LoopCfg, 80),
     TokenLimit = Window * ThreshPct div 100,

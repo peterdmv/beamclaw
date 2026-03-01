@@ -72,10 +72,23 @@ per-user agent mapping, voice message transcription, and token-based compaction
 | Post-M37 | Per-User Agent Mapping (Telegram Pairing) |
 | Post-M37 | Voice Message Transcription (Telegram → Groq Whisper) |
 | Post-M37 | Token-Based Automatic Compaction Trigger |
+| Post-M37 | Per-Session Provider Model for Compaction |
 
 ---
 
 ## Recent Milestones
+
+### Post-M37 — Per-Session Provider Model for Compaction ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| `bc_session:get_provider_mod/1` accessor | ✅ | New export + handle_call clause |
+| `bc_context:get_model_name/1` (per-provider) | ✅ | Resolves model from config for a specific provider module |
+| `bc_loop.erl` uses session's provider | ✅ | `get_model_name(Data#loop_data.provider_mod)` instead of global default |
+| `bc_compactor.erl` uses session's provider | ✅ | `get_provider_mod(SessionPid)` → correct context window for compaction |
+| `compaction_provider` + `compaction_model` config | ✅ | Allows cheap/fast model for summarization independent of session model |
+| EUnit tests | ✅ | 4 new `get_model_name/1` tests + mock session updated for `get_provider_mod` |
+| Update configs + docs | ✅ | sys.config, sys.docker.config, CLAUDE.md, docs/configuration.md |
 
 ### Post-M37 — Token-Based Automatic Compaction Trigger ✅
 

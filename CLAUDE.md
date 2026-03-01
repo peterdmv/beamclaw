@@ -601,6 +601,8 @@ as the user_id, enabling cross-channel session sharing for single-user deploymen
     {agentic_loop, #{max_tool_iterations      => 10,
                      compaction_threshold_pct => 80,
                      compaction_target_pct    => 40,
+                     compaction_provider      => openrouter,
+                     compaction_model         => "moonshotai/kimi-k2.5",
                      stream_chunk_size        => 80,
                      memory_flush             => true,
                      auto_context             => false,

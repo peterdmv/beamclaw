@@ -39,6 +39,9 @@ mock_session_loop(History) ->
         {'$gen_call', From, get_history} ->
             gen_server:reply(From, History),
             mock_session_loop(History);
+        {'$gen_call', From, get_provider_mod} ->
+            gen_server:reply(From, bc_provider_openrouter),
+            mock_session_loop(History);
         {'$gen_cast', {set_history, NewHistory}} ->
             mock_session_loop(NewHistory);
         _ ->

@@ -37,6 +37,7 @@ bc_session_registry, fetches history, and announces its new PID here.
          set_history/2,
          get_channel_mod/1,
          get_agent_id/1,
+         get_provider_mod/1,
          append_message/2,
          set_loop_pid/2,
          turn_complete/2]).
@@ -90,6 +91,11 @@ get_channel_mod(Pid) ->
 -spec get_agent_id(Pid :: pid()) -> binary().
 get_agent_id(Pid) ->
     gen_server:call(Pid, get_agent_id).
+
+-doc "Return the provider module for this session.".
+-spec get_provider_mod(Pid :: pid()) -> module().
+get_provider_mod(Pid) ->
+    gen_server:call(Pid, get_provider_mod).
 
 -doc "Append a single message to history (called by bc_loop).".
 -spec append_message(Pid :: pid(), Message :: #bc_message{}) -> ok.
@@ -189,6 +195,8 @@ handle_call(get_channel_mod, _From, State) ->
     {reply, State#state.channel_mod, State};
 handle_call(get_agent_id, _From, State) ->
     {reply, State#state.agent_id, State};
+handle_call(get_provider_mod, _From, State) ->
+    {reply, State#state.provider_mod, State};
 handle_call(_Req, _From, State) ->
     {reply, {error, unknown}, State}.
 

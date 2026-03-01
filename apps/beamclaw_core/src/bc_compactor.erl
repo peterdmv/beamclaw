@@ -40,7 +40,8 @@ Algorithm:
 compact(SessionPid) ->
     History = bc_session:get_history(SessionPid),
     Cfg     = bc_config:get(beamclaw_core, agentic_loop, #{}),
-    Model   = bc_context:get_model_name(),
+    ProvMod = bc_session:get_provider_mod(SessionPid),
+    Model   = bc_context:get_model_name(ProvMod),
     Window  = bc_context:context_window(Model),
     TargetPct    = maps:get(compaction_target_pct, Cfg, 40),
     TargetTokens = Window * TargetPct div 100,
@@ -125,8 +126,18 @@ summarize(Messages) ->
         content = ConvText,
         ts      = erlang:system_time(millisecond)
     },
-    ProvMod    = bc_config:get(beamclaw_core, default_provider, openrouter),
-    ProvConfig = get_provider_config(ProvMod),
+    LoopCfg = bc_config:get(beamclaw_core, agentic_loop, #{}),
+    CompactionProvider = maps:get(compaction_provider, LoopCfg, undefined),
+    ProviderKey = case CompactionProvider of
+        undefined -> bc_config:get(beamclaw_core, default_provider, openrouter);
+        Key       -> Key
+    end,
+    ProvMod = provider_mod(ProviderKey),
+    ProvConfig0 = get_provider_config(ProvMod),
+    ProvConfig = case maps:get(compaction_model, LoopCfg, undefined) of
+        undefined -> ProvConfig0;
+        M         -> ProvConfig0#{model => M}
+    end,
     case ProvMod:init(ProvConfig) of
         {ok, ProvState} ->
             case ProvMod:complete([SystemPrompt, UserMsg], #{}, ProvState) of
@@ -136,6 +147,10 @@ summarize(Messages) ->
         {error, _} ->
             error
     end.
+
+provider_mod(openrouter) -> bc_provider_openrouter;
+provider_mod(openai)     -> bc_provider_openai;
+provider_mod(_)          -> bc_provider_openrouter.
 
 messages_to_text(Messages) ->
     Parts = lists:map(fun(#bc_message{role = Role, content = Content}) ->

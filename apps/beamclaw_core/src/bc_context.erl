@@ -32,7 +32,7 @@ Token estimation: byte_size(Content) div 4 (~4 chars/token approximation).
 
 %% Exported for testing and use by bc_loop / bc_compactor
 -export([estimate_tokens/1, context_window/1, format_size/1,
-         get_model_name/0, estimate_history_tokens/1]).
+         get_model_name/0, get_model_name/1, estimate_history_tokens/1]).
 
 %% ---- Layer 1: Gather raw data ----
 
@@ -444,6 +444,21 @@ get_model_name() ->
         M when is_list(M) -> M;
         M when is_binary(M) -> binary_to_list(M)
     end.
+
+-spec get_model_name(module()) -> string().
+get_model_name(ProviderMod) ->
+    ProviderKey = provider_key(ProviderMod),
+    Providers = bc_config:get(beamclaw_core, providers, []),
+    ProvMap = proplists:get_value(ProviderKey, Providers, #{}),
+    case maps:get(model, ProvMap, undefined) of
+        undefined -> "unknown";
+        M when is_list(M) -> M;
+        M when is_binary(M) -> binary_to_list(M)
+    end.
+
+provider_key(bc_provider_openrouter) -> openrouter;
+provider_key(bc_provider_openai)     -> openai;
+provider_key(_)                      -> openrouter.
 
 %% ---- Internal: Categorize system messages ----
 

@@ -45,6 +45,35 @@ context_window_unknown_model_test() ->
     ?assertEqual(128000, bc_context:context_window("unknown-model-v1")),
     ?assertEqual(128000, bc_context:context_window("some/random-model")).
 
+%% ---- get_model_name/1 (per-provider) ----
+
+get_model_name_openrouter_test() ->
+    application:set_env(beamclaw_core, providers,
+                        [{openrouter, #{model => "moonshotai/kimi-k2.5"}},
+                         {openai, #{model => "gpt-4o"}}]),
+    ?assertEqual("moonshotai/kimi-k2.5",
+                 bc_context:get_model_name(bc_provider_openrouter)).
+
+get_model_name_openai_test() ->
+    application:set_env(beamclaw_core, providers,
+                        [{openrouter, #{model => "moonshotai/kimi-k2.5"}},
+                         {openai, #{model => "gpt-4o"}}]),
+    ?assertEqual("gpt-4o",
+                 bc_context:get_model_name(bc_provider_openai)).
+
+get_model_name_unknown_provider_test() ->
+    application:set_env(beamclaw_core, providers,
+                        [{openrouter, #{model => "anthropic/claude-sonnet-4-5"}}]),
+    %% Unknown provider falls back to openrouter key
+    ?assertEqual("anthropic/claude-sonnet-4-5",
+                 bc_context:get_model_name(some_unknown_provider)).
+
+get_model_name_binary_model_test() ->
+    application:set_env(beamclaw_core, providers,
+                        [{openai, #{model => <<"gpt-4o-mini">>}}]),
+    ?assertEqual("gpt-4o-mini",
+                 bc_context:get_model_name(bc_provider_openai)).
+
 %% ---- Format size ----
 
 format_size_test() ->

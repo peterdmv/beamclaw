@@ -70,6 +70,13 @@ them to a file — `.env` and `*.secret` files are excluded by `.gitignore`.
         %% After compaction, keep recent messages whose cumulative tokens
         %% fit within this percentage of the context window.
         compaction_target_pct    => 40,
+        %% Provider used for compaction summarization LLM call.
+        %% Defaults to default_provider when not set.
+        %% Allows using a cheap/fast model for summarization.
+        compaction_provider      => openrouter,
+        %% Model override for compaction summarization.
+        %% Defaults to the compaction_provider's configured model when not set.
+        compaction_model         => "moonshotai/kimi-k2.5",
         %% Progressive streaming: send chunks of this many characters.
         stream_chunk_size        => 80,
         %% Pre-compaction memory flush: fire a hidden LLM turn before compacting
