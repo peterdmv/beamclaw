@@ -148,8 +148,8 @@ cmd_remote_tui(AgentId) ->
             halt(1);
         Id -> Id
     end,
-    io:format("BeamClaw TUI (remote) — connected to ~s (agent: ~s)~n",
-              [daemon_node(), AgentId]),
+    io:format("BeamClaw TUI (remote) — connected to ~s (agent: ~s, session: ~s)~n",
+              [daemon_node(), AgentId, SessionId]),
     io:format("Type a message and press Enter. Ctrl+D to disconnect.~n~n> "),
     remote_tui_loop(SessionId, AgentId, UserId).
 

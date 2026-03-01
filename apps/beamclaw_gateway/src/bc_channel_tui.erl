@@ -103,8 +103,9 @@ handle_cast({notify_typing, SessionId}, State) ->
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-handle_info(start_io, State) ->
-    io:format("BeamClaw TUI — type a message and press Enter.~n> "),
+handle_info(start_io, #{session_id := SId, agent_id := AId} = State) ->
+    io:format("BeamClaw TUI (agent: ~s, session: ~s) — type a message and press Enter.~n> ",
+              [AId, SId]),
     self() ! read_line,
     {noreply, State};
 handle_info(read_line, State) ->
