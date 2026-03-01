@@ -20,14 +20,23 @@
 -export([strip/1]).
 
 -doc "Strip thinking tags from binary content, preserving code blocks.".
--spec strip(binary() | undefined) -> binary() | undefined.
+-spec strip(binary() | undefined | null) -> binary() | undefined.
+strip(null) -> <<>>;           %% jsx decodes JSON null as atom
 strip(undefined) -> undefined;
 strip(<<>>) -> <<>>;
 strip(Content) when is_binary(Content) ->
     %% Fast path: if no angle bracket, nothing to strip
     case binary:match(Content, <<"<">>) of
         nomatch -> Content;
-        _ -> do_strip(Content)
+        _ ->
+            Stripped = do_strip(Content),
+            case Stripped of
+                <<>> ->
+                    %% Stripping removed all content — preserve inner text
+                    do_strip_tags_only(Content);
+                _ ->
+                    Stripped
+            end
     end.
 
 %% Internal
@@ -246,6 +255,16 @@ find_first_outside_code(Content, Pat, CodeRegions, Offset) ->
                     false
             end
     end.
+
+%% Strip thinking tag delimiters only (keep content) — fallback when
+%% do_strip would return <<>> (all content was inside thinking blocks).
+-spec do_strip_tags_only(binary()) -> binary().
+do_strip_tags_only(Content) ->
+    Tags = [<<"think">>, <<"thinking">>, <<"thought">>, <<"antThinking">>, <<"final">>],
+    Result = lists:foldl(fun(Tag, Acc) ->
+        strip_tag_pair(Acc, Tag, find_code_regions(Acc), false)
+    end, Content, Tags),
+    trim_leading(Result).
 
 %% Build regex for opening tag: <\s*TagName\s*> (case insensitive)
 make_open_pattern(Tag) ->

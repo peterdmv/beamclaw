@@ -34,14 +34,16 @@ Exercises the full agentic loop: session → dispatch → bc_loop → provider
 
 %% Test cases
 -export([smoke_roundtrip/1, tool_crash_resilience/1,
-         tool_call_and_result/1, session_queue_drains/1]).
+         tool_call_and_result/1, session_queue_drains/1,
+         web_search_tool_call/1]).
 
 suite() ->
     [{timetrap, {seconds, 30}}].
 
 all() ->
     [smoke_roundtrip, tool_crash_resilience,
-     tool_call_and_result, session_queue_drains].
+     tool_call_and_result, session_queue_drains,
+     web_search_tool_call].
 
 %% ---------------------------------------------------------------------------
 %% Suite lifecycle
@@ -221,6 +223,49 @@ session_queue_drains(Config) ->
     [First, Second | _] = UserMsgs,
     ?assertEqual(<<"first message">>, First#bc_message.content),
     ?assertEqual(<<"second message">>, Second#bc_message.content),
+    ok.
+
+%% Mock provider returns a web_search tool call. Without BRAVE_API_KEY, the
+%% tool returns a "not configured" error. Verify the full loop path:
+%% session → dispatch → bc_loop → tool dispatch → execute → result in history.
+web_search_tool_call(Config) ->
+    %% Ensure no API key is set so tool returns the config error
+    application:unset_env(beamclaw_tools, web_search),
+
+    SessionId = proplists:get_value(session_id, Config),
+    SessionConfig = #{
+        session_id   => SessionId,
+        provider_mod => bc_provider_websearch_mock,
+        autonomy     => full
+    },
+    {ok, _SupPid} = bc_sessions_sup:start_session(SessionConfig),
+    {ok, SessionPid} = bc_session_registry:lookup(SessionId),
+
+    Msg = #bc_channel_message{
+        session_id = SessionId,
+        user_id    = <<"test">>,
+        channel    = tui,
+        content    = <<"search the web for erlang">>,
+        raw        = <<"search the web for erlang">>,
+        ts         = 0
+    },
+    bc_session:dispatch_run(SessionPid, Msg),
+
+    %% Wait for tool result to appear in history
+    ok = wait_for_history(SessionPid, fun(History) ->
+        ToolMsgs = [M || M <- History, M#bc_message.role =:= tool],
+        length(ToolMsgs) >= 1
+    end, 10000),
+
+    %% Verify tool result contains the "not configured" error
+    History = bc_session:get_history(SessionPid),
+    ToolMsgs = [M || M <- History,
+                M#bc_message.role =:= tool,
+                M#bc_message.name =:= <<"web_search">>],
+    ?assert(length(ToolMsgs) >= 1),
+    [ToolMsg | _] = ToolMsgs,
+    ?assertNotEqual(nomatch,
+        binary:match(ToolMsg#bc_message.content, <<"not configured">>)),
     ok.
 
 %% ---------------------------------------------------------------------------

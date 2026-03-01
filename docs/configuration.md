@@ -22,6 +22,7 @@ resolved at runtime by `bc_config:get/2` via `os:getenv/1`.
 | `BEAMCLAW_HOME` | No | Override workspace base directory (default: `~/.beamclaw`) |
 | `BEAMCLAW_AGENT` | No | Default agent name for TUI sessions (default: `default`) |
 | `BEAMCLAW_USER` | No | Canonical user identity for cross-channel session sharing. When set, all channels (TUI, Telegram, HTTP, WebSocket) use this value as-is (no prefix), enabling a single shared session across channels. When unset, each channel prefixes user IDs independently. |
+| `BRAVE_API_KEY` | No | Brave Search API key for the `web_search` built-in tool. Get one at [brave.com/search/api](https://brave.com/search/api/). When unset, the tool returns a configuration error. |
 | `BEAMCLAW_EMBEDDING_API_KEY` | No | API key for the embedding service (OpenAI-compatible). When unset, semantic/hybrid search degrades to BM25 keyword-only. |
 | `BEAMCLAW_EMBEDDING_URL` | No | Base URL for the embedding API (default: `https://api.openai.com/v1`). Supports OpenAI, Azure OpenAI, Ollama, or any OpenAI-compatible endpoint. |
 | `BEAMCLAW_EMBEDDING_MODEL` | No | Embedding model name (default: `text-embedding-3-small`). |
@@ -129,6 +130,25 @@ Each configured server is started as a `bc_mcp_server` gen_server that owns a st
 Tools discovered via `tools/list` are registered in `bc_mcp_registry` and made available
 to the agentic loop.
 
+### beamclaw_tools
+
+```erlang
+{beamclaw_tools, [
+    %% Brave Search API configuration for the web_search built-in tool.
+    %% The tool is always registered but returns a helpful error at execute
+    %% time if the API key is not configured.
+    {web_search, #{
+        api_key     => {env, "BRAVE_API_KEY"},   %% required for web search
+        max_results => 10                         %% upper bound for count parameter
+    }}
+]}
+```
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `web_search.api_key` | `{env, Var}` | — | Brave Search API key. Get one at [brave.com/search/api](https://brave.com/search/api/) |
+| `web_search.max_results` | integer | `10` | Maximum number of results the tool can return |
+
 ### beamclaw_gateway
 
 ```erlang
@@ -155,6 +175,15 @@ to the agentic loop.
             photo => #{
                 enabled        => true,       %% set false to ignore photos
                 max_size_bytes => 5242880     %% 5 MB; photos over this are skipped
+            },
+            %% Voice message transcription (speech-to-text).
+            %% Uses Groq Whisper (OpenAI-compatible /audio/transcriptions API).
+            voice => #{
+                enabled              => true,
+                max_duration_seconds => 120,          %% skip voice > 2 min
+                stt_base_url => "https://api.groq.com/openai/v1",
+                stt_api_key  => {env, "GROQ_API_KEY"},
+                stt_model    => "whisper-large-v3-turbo"
             }
         }},
         {tui, #{
@@ -242,6 +271,11 @@ backend automatically falls back to `ram_copies`.
     %% Script execution timeout (seconds).
     {timeout_seconds, 60},
 
+    %% Orphan container reaper sweep interval (milliseconds).
+    %% The reaper periodically scans for beamclaw-sbx-* containers
+    %% not tracked in the registry and kills/removes them.
+    {reaper_interval_ms, 60000},
+
     %% Docker resource limits.
     {memory_limit, "512m"},
     {cpu_limit, "1.0"},
@@ -290,6 +324,32 @@ backend automatically falls back to `ram_copies`.
                      <<"TELEGRAM_BOT_TOKEN">>, <<"AWS_SECRET_ACCESS_KEY">>]}
 ]}
 ```
+
+### beamclaw_scheduler
+
+```erlang
+{beamclaw_scheduler, [
+    {enabled, false},                      %% opt-in; creates bc_tool_scheduler when true
+    {max_jobs_per_agent, 50},              %% max active/paused jobs per agent
+    {default_autonomy, supervised},        %% autonomy level for scheduled sessions
+    {max_errors, 3},                       %% consecutive failures → auto-pause
+    {heartbeat, #{
+        default_interval_ms => 1800000,    %% 30 min default heartbeat interval
+        suppress_ok => true,               %% suppress HEARTBEAT_OK output
+        active_hours => {8, 22}            %% UTC hour range (skip outside)
+    }}
+]}
+```
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | boolean | `false` | Enable the scheduler and register the `scheduler` tool |
+| `max_jobs_per_agent` | integer | `50` | Maximum number of active/paused jobs per agent |
+| `default_autonomy` | atom | `supervised` | Autonomy level for scheduled sessions |
+| `max_errors` | integer | `3` | Consecutive failures before auto-pausing a job |
+| `heartbeat.default_interval_ms` | integer | `1800000` | Default heartbeat interval (30 minutes) |
+| `heartbeat.suppress_ok` | boolean | `true` | Suppress delivery when LLM responds `HEARTBEAT_OK` |
+| `heartbeat.active_hours` | tuple | `{8, 22}` | UTC hour range for heartbeat delivery |
 
 ### beamclaw_obs
 

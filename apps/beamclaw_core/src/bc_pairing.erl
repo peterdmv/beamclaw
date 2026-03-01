@@ -26,8 +26,8 @@ Unknown users receive a pairing code; the bot owner approves via CLI
 allowlist.
 """.
 
--export([is_allowed/2, request_pairing/3, approve/2, revoke/2,
-         list_pending/1, list_allowed/1, pairing_dir/0]).
+-export([is_allowed/2, request_pairing/3, approve/2, approve/3, revoke/2,
+         list_pending/1, list_allowed/1, get_agent_id/2, pairing_dir/0]).
 
 -define(CODE_ALPHABET, "ABCDEFGHJKLMNPQRSTUVWXYZ23456789").
 -define(CODE_LENGTH, 8).
@@ -42,7 +42,7 @@ allowlist.
 -spec is_allowed(Channel :: atom(), UserId :: binary()) -> boolean().
 is_allowed(Channel, UserId) ->
     Allowed = read_allowed(Channel),
-    lists:member(UserId, Allowed).
+    lists:any(fun(Entry) -> maps:get(<<"id">>, Entry) =:= UserId end, Allowed).
 
 -doc """
 Request a pairing code for a user. Returns {ok, Code, created} for new
@@ -77,10 +77,16 @@ request_pairing(Channel, UserId, Meta) ->
             {ok, Code, created}
     end.
 
--doc "Approve a pending request by code. Moves user to allowed list.".
+-doc "Approve a pending request by code. Uses default_agent config for agent_id.".
 -spec approve(Channel :: atom(), Code :: binary()) ->
     {ok, UserId :: binary()} | {error, not_found | expired}.
 approve(Channel, Code) ->
+    approve(Channel, Code, undefined).
+
+-doc "Approve a pending request by code with a specific agent_id.".
+-spec approve(Channel :: atom(), Code :: binary(), AgentId :: binary() | undefined) ->
+    {ok, UserId :: binary()} | {error, not_found | expired}.
+approve(Channel, Code, AgentId) ->
     Pending = read_pending(Channel),
     Now = erlang:system_time(millisecond),
     case lists:filter(fun(R) -> maps:get(<<"code">>, R) =:= Code end, Pending) of
@@ -95,15 +101,15 @@ approve(Channel, Code) ->
                     {error, expired};
                 false ->
                     UserId = maps:get(<<"id">>, Match),
+                    ResolvedAgent = resolve_agent(AgentId),
                     %% Remove from pending
                     Remaining = [R || R <- Pending, maps:get(<<"code">>, R) =/= Code],
                     write_pending(Channel, Remaining),
-                    %% Add to allowed (idempotent)
+                    %% Add to allowed (idempotent — update agent_id if already present)
                     Allowed = read_allowed(Channel),
-                    case lists:member(UserId, Allowed) of
-                        true  -> ok;
-                        false -> write_allowed(Channel, Allowed ++ [UserId])
-                    end,
+                    NewEntry = #{<<"id">> => UserId, <<"agent_id">> => ResolvedAgent},
+                    Filtered = [E || E <- Allowed, maps:get(<<"id">>, E) =/= UserId],
+                    write_allowed(Channel, Filtered ++ [NewEntry]),
                     {ok, UserId}
             end
     end.
@@ -112,10 +118,11 @@ approve(Channel, Code) ->
 -spec revoke(Channel :: atom(), UserId :: binary()) -> ok | {error, not_found}.
 revoke(Channel, UserId) ->
     Allowed = read_allowed(Channel),
-    case lists:member(UserId, Allowed) of
+    case lists:any(fun(E) -> maps:get(<<"id">>, E) =:= UserId end, Allowed) of
         false -> {error, not_found};
         true  ->
-            write_allowed(Channel, Allowed -- [UserId]),
+            Filtered = [E || E <- Allowed, maps:get(<<"id">>, E) =/= UserId],
+            write_allowed(Channel, Filtered),
             ok
     end.
 
@@ -126,10 +133,20 @@ list_pending(Channel) ->
     Now = erlang:system_time(millisecond),
     [R || R <- Pending, not is_expired(R, Now)].
 
--doc "List all allowed user IDs for a channel.".
--spec list_allowed(Channel :: atom()) -> [binary()].
+-doc "List all allowed entries for a channel. Each entry is a map with id and agent_id.".
+-spec list_allowed(Channel :: atom()) -> [map()].
 list_allowed(Channel) ->
     read_allowed(Channel).
+
+-doc "Look up the agent_id assigned to a user in the allowed list.".
+-spec get_agent_id(Channel :: atom(), UserId :: binary()) ->
+    {ok, binary()} | {error, not_found}.
+get_agent_id(Channel, UserId) ->
+    Allowed = read_allowed(Channel),
+    case [E || E <- Allowed, maps:get(<<"id">>, E) =:= UserId] of
+        [Entry | _] -> {ok, maps:get(<<"agent_id">>, Entry)};
+        []          -> {error, not_found}
+    end.
 
 -doc "Return the pairing storage directory path.".
 -spec pairing_dir() -> string().
@@ -198,7 +215,9 @@ read_allowed(Channel) ->
         {ok, Bin} ->
             try
                 Decoded = jsx:decode(Bin, [return_maps]),
-                maps:get(<<"allowed">>, Decoded, [])
+                Version = maps:get(<<"version">>, Decoded, 1),
+                Entries = maps:get(<<"allowed">>, Decoded, []),
+                maybe_migrate_v1(Version, Entries)
             catch _:_ -> []
             end;
         {error, enoent} -> []
@@ -207,5 +226,26 @@ read_allowed(Channel) ->
 write_allowed(Channel, AllowedList) ->
     File = allowed_file(Channel),
     ok = filelib:ensure_dir(File),
-    Data = jsx:encode(#{<<"version">> => 1, <<"allowed">> => AllowedList}),
+    Data = jsx:encode(#{<<"version">> => 2, <<"allowed">> => AllowedList}),
     ok = file:write_file(File, Data).
+
+%%--------------------------------------------------------------------
+%% Internal: v1 → v2 migration
+%%--------------------------------------------------------------------
+
+maybe_migrate_v1(2, Entries) ->
+    Entries;
+maybe_migrate_v1(_V1, Entries) ->
+    DefaultAgent = resolve_agent(undefined),
+    [case Entry of
+        #{<<"id">> := _} -> Entry;  %% already a map (shouldn't happen in v1)
+        Id when is_binary(Id) -> #{<<"id">> => Id, <<"agent_id">> => DefaultAgent}
+    end || Entry <- Entries].
+
+resolve_agent(undefined) ->
+    case application:get_env(beamclaw_core, default_agent) of
+        {ok, Val} -> Val;
+        undefined -> <<"default">>
+    end;
+resolve_agent(AgentId) when is_binary(AgentId) ->
+    AgentId.

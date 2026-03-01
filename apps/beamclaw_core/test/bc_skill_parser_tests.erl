@@ -115,3 +115,37 @@ path_test() ->
 unclosed_frontmatter_test() ->
     Bin = <<"---\nname: oops\nNo closing delimiter.\n">>,
     ?assertEqual({error, no_closing_delimiter}, bc_skill_parser:parse(Bin, global)).
+
+%% ---- bundled finnhub skill ----
+
+bundled_finnhub_test() ->
+    SkillFile = filename:join([code:priv_dir(beamclaw_core), "skills",
+                               "finnhub", "SKILL.md"]),
+    {ok, Bin} = file:read_file(SkillFile),
+    {ok, Skill} = bc_skill_parser:parse(Bin, global, SkillFile),
+    ?assertEqual(<<"finnhub">>, Skill#bc_skill.name),
+    ?assertNotEqual(undefined, Skill#bc_skill.description),
+    ?assertMatch(#{<<"beamclaw">> := #{<<"requires">> := _}},
+                 Skill#bc_skill.metadata),
+    %% Verify requires has env and bins
+    #{<<"beamclaw">> := #{<<"requires">> := Reqs}} = Skill#bc_skill.metadata,
+    ?assert(lists:member(<<"FINNHUB_TOKEN">>, maps:get(<<"env">>, Reqs))),
+    ?assert(lists:member(<<"curl">>, maps:get(<<"bins">>, Reqs))),
+    ?assert(lists:member(<<"jq">>, maps:get(<<"bins">>, Reqs))).
+
+%% ---- bundled nano-banana-pro skill ----
+
+bundled_nano_banana_pro_test() ->
+    SkillFile = filename:join([code:priv_dir(beamclaw_core), "skills",
+                               "nano-banana-pro", "SKILL.md"]),
+    {ok, Bin} = file:read_file(SkillFile),
+    {ok, Skill} = bc_skill_parser:parse(Bin, global, SkillFile),
+    ?assertEqual(<<"nano-banana-pro">>, Skill#bc_skill.name),
+    ?assertEqual(<<"https://ai.google.dev/">>, Skill#bc_skill.homepage),
+    ?assertMatch(#{<<"beamclaw">> := #{<<"requires">> := _}},
+                 Skill#bc_skill.metadata),
+    #{<<"beamclaw">> := #{<<"requires">> := Reqs}} = Skill#bc_skill.metadata,
+    ?assert(lists:member(<<"uv">>, maps:get(<<"bins">>, Reqs))),
+    ?assert(lists:member(<<"GEMINI_API_KEY">>, maps:get(<<"env">>, Reqs))),
+    %% Content should contain {baseDir} template (not yet resolved)
+    ?assert(binary:match(Skill#bc_skill.content, <<"{baseDir}">>) =/= nomatch).

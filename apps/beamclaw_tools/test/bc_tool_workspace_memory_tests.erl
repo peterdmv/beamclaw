@@ -296,6 +296,45 @@ update_bootstrap_no_content_test() ->
         #{<<"action">> => <<"update_bootstrap">>,
           <<"file">> => <<"IDENTITY.md">>}, Ref, #{})).
 
+%% ---- delete_bootstrap ----
+
+delete_bootstrap_test_() -> ?setup(delete_bootstrap_t).
+delete_bootstrap_t(TmpDir) ->
+    Ref = session_ref(),
+    %% Write BOOTSTRAP.md for the test agent
+    AgentDir = filename:join([TmpDir, "agents", "test-agent"]),
+    BootPath = filename:join(AgentDir, "BOOTSTRAP.md"),
+    ok = file:write_file(BootPath, <<"# Bootstrap\n\nDiscovery...">>),
+    ?assert(filelib:is_regular(BootPath)),
+    {ok, Msg} = bc_tool_workspace_memory:execute(
+        #{<<"action">> => <<"delete_bootstrap">>,
+          <<"file">> => <<"BOOTSTRAP.md">>}, Ref, #{}),
+    [?_assertEqual(<<"Deleted BOOTSTRAP.md">>, Msg),
+     ?_assertNot(filelib:is_regular(BootPath))].
+
+delete_bootstrap_already_absent_test_() -> ?setup(delete_bootstrap_absent_t).
+delete_bootstrap_absent_t(_TmpDir) ->
+    Ref = session_ref(),
+    {ok, Msg} = bc_tool_workspace_memory:execute(
+        #{<<"action">> => <<"delete_bootstrap">>,
+          <<"file">> => <<"BOOTSTRAP.md">>}, Ref, #{}),
+    [?_assert(binary:match(Msg, <<"already absent">>) =/= nomatch)].
+
+delete_bootstrap_reject_memory_test() ->
+    Ref = #bc_session_ref{session_id = <<"x">>, user_id = <<"u">>,
+                          session_pid = self(), autonomy = supervised,
+                          agent_id = <<"any">>},
+    ?assertMatch({error, _}, bc_tool_workspace_memory:execute(
+        #{<<"action">> => <<"delete_bootstrap">>,
+          <<"file">> => <<"MEMORY.md">>}, Ref, #{})).
+
+delete_bootstrap_no_file_test() ->
+    Ref = #bc_session_ref{session_id = <<"x">>, user_id = <<"u">>,
+                          session_pid = self(), autonomy = supervised,
+                          agent_id = <<"any">>},
+    ?assertMatch({error, _}, bc_tool_workspace_memory:execute(
+        #{<<"action">> => <<"delete_bootstrap">>}, Ref, #{})).
+
 %% ---- search ----
 
 search_memory_test_() -> ?setup(search_memory_t).

@@ -18,7 +18,7 @@
 -moduledoc """
 BeamClaw CLI entry point (escript).
 
-Usage: beamclaw [tui|start|stop|restart|remote_console|agent|skills|pair|doctor|status|version|help]
+Usage: beamclaw [tui|start|stop|restart|remote_console|agent|skills|pair|sandbox|scheduler|doctor|status|version|help]
 
 Built with: rebar3 escriptize
 Output:     _build/default/bin/beamclaw
@@ -38,10 +38,12 @@ Output:     _build/default/bin/beamclaw
                              cmd_agent_rehatch/1,
                              cmd_skills_list/0, cmd_skills_status/0,
                              cmd_skills_show/1, cmd_skills_install/1,
-                             cmd_pair_list/0, cmd_pair_approve/2,
+                             cmd_pair_list/0, cmd_pair_approve/3,
                              cmd_pair_revoke/2,
                              cmd_sandbox_status/0, cmd_sandbox_list/0,
                              cmd_sandbox_kill/1, cmd_sandbox_build/0,
+                             cmd_scheduler_list/0, cmd_scheduler_cancel/1,
+                             cmd_scheduler_pause/1, cmd_scheduler_resume/1,
                              spawn_daemon/0, check_openrouter_network/0]}).
 
 -include_lib("beamclaw_core/include/bc_types.hrl").
@@ -75,13 +77,19 @@ main(["skills", "show", Name    | _])     -> cmd_skills_show(list_to_binary(Name
 main(["skills"                  | _])     -> cmd_skills_list();
 main(["pair", "list"            | _])     -> cmd_pair_list();
 main(["pair", "revoke", Ch, Id  | _])     -> cmd_pair_revoke(list_to_atom(Ch), list_to_binary(Id));
-main(["pair", Ch, Code          | _])     -> cmd_pair_approve(list_to_atom(Ch), list_to_binary(Code));
+main(["pair", Ch, Code          | Rest])  -> cmd_pair_approve(list_to_atom(Ch), list_to_binary(Code),
+                                                                  extract_pair_agent(Rest));
 main(["pair"                    | _])     -> cmd_pair_list();
 main(["sandbox", "status"       | _])     -> cmd_sandbox_status();
 main(["sandbox", "list"         | _])     -> cmd_sandbox_list();
 main(["sandbox", "kill", Id     | _])     -> cmd_sandbox_kill(list_to_binary(Id));
 main(["sandbox", "build"        | _])     -> cmd_sandbox_build();
 main(["sandbox"                 | _])     -> cmd_sandbox_status();
+main(["scheduler", "list"       | _])     -> cmd_scheduler_list();
+main(["scheduler", "cancel", Id | _])     -> cmd_scheduler_cancel(list_to_binary(Id));
+main(["scheduler", "pause", Id  | _])     -> cmd_scheduler_pause(list_to_binary(Id));
+main(["scheduler", "resume", Id | _])     -> cmd_scheduler_resume(list_to_binary(Id));
+main(["scheduler"               | _])     -> cmd_scheduler_list();
 main(["doctor"                  | _])     -> cmd_doctor();
 main(["status"                  | _])     -> cmd_status();
 main(["version"                 | _])     -> cmd_version();
@@ -159,11 +167,26 @@ remote_tui_loop(SessionId, AgentId, UserId) ->
                 "" ->
                     io:format("> "),
                     remote_tui_loop(SessionId, AgentId, UserId);
+                "/context" ++ _ ->
+                    handle_remote_context(SessionId, AgentId),
+                    remote_tui_loop(SessionId, AgentId, UserId);
                 _ ->
                     dispatch_remote(SessionId, iolist_to_binary(Text), AgentId, UserId),
                     receive_remote_response(SessionId),
                     remote_tui_loop(SessionId, AgentId, UserId)
             end
+    end.
+
+handle_remote_context(SessionId, AgentId) ->
+    Node = daemon_node(),
+    case rpc:call(Node, bc_session_registry, lookup, [SessionId]) of
+        {ok, Pid} ->
+            History = rpc:call(Node, bc_session, get_history, [Pid]),
+            Info = bc_context:gather(#{agent_id => AgentId, history => History}),
+            Output = bc_context:format_text(Info, #{ansi => true}),
+            io:format("~n~s~n> ", [Output]);
+        _ ->
+            io:format("No active session.~n> ")
     end.
 
 dispatch_remote(SessionId, Text, AgentId, UserId) ->
@@ -583,8 +606,10 @@ cmd_pair_list() ->
     io:format("~nApproved:~n"),
     HasApproved = lists:foldl(fun(Ch, Acc) ->
         Allowed = bc_pairing:list_allowed(Ch),
-        lists:foreach(fun(Id) ->
-            io:format("  ~s  ~s~n", [Ch, Id])
+        lists:foreach(fun(Entry) ->
+            Id = maps:get(<<"id">>, Entry),
+            Agent = maps:get(<<"agent_id">>, Entry, <<"default">>),
+            io:format("  ~s  ~s  agent=~s~n", [Ch, Id, Agent])
         end, Allowed),
         Acc orelse Allowed =/= []
     end, false, Channels),
@@ -594,11 +619,16 @@ cmd_pair_list() ->
     end,
     halt(0).
 
--doc "Approve a pending pairing request by channel and code.".
-cmd_pair_approve(Channel, Code) ->
-    case bc_pairing:approve(Channel, Code) of
+-doc "Approve a pending pairing request by channel, code, and optional agent.".
+cmd_pair_approve(Channel, Code, AgentId) ->
+    case bc_pairing:approve(Channel, Code, AgentId) of
         {ok, UserId} ->
-            io:format("Approved ~s user ~s.~n", [Channel, UserId]),
+            AgentLabel = case AgentId of
+                undefined -> <<"default">>;
+                _         -> AgentId
+            end,
+            io:format("Approved ~s user ~s (agent=~s).~n",
+                      [Channel, UserId, AgentLabel]),
             halt(0);
         {error, not_found} ->
             io:format(standard_error,
@@ -610,6 +640,9 @@ cmd_pair_approve(Channel, Code) ->
                       "beamclaw: code '~s' has expired~n", [Code]),
             halt(1)
     end.
+
+extract_pair_agent(["--agent", Name | _]) -> list_to_binary(Name);
+extract_pair_agent(_) -> undefined.
 
 -doc "Revoke an approved user from a channel's allowlist.".
 cmd_pair_revoke(Channel, UserId) ->
@@ -713,6 +746,131 @@ cmd_sandbox_build() ->
             halt(0)
     end.
 
+%% ---------------------------------------------------------------------------
+%% Scheduler commands
+%% ---------------------------------------------------------------------------
+
+-doc "List all scheduled jobs.".
+cmd_scheduler_list() ->
+    case try_connect_daemon() of
+        connected ->
+            case rpc:call(daemon_node(), bc_sched_store, list_active, []) of
+                {badrpc, Reason} ->
+                    io:format(standard_error,
+                              "beamclaw: failed to list jobs: ~p~n", [Reason]),
+                    halt(1);
+                [] ->
+                    io:format("No active scheduled jobs.~n"),
+                    halt(0);
+                Jobs ->
+                    io:format("Scheduled jobs:~n~n"),
+                    lists:foreach(fun(J) ->
+                        JobId = element(2, J),
+                        AgentId = element(3, J),
+                        Type = element(6, J),
+                        Prompt = element(8, J),
+                        Status = element(12, J),
+                        Heartbeat = element(19, J),
+                        FireCount = element(16, J),
+                        ShortPrompt = case byte_size(Prompt) > 50 of
+                            true -> <<(binary:part(Prompt, 0, 50))/binary, "...">>;
+                            false -> Prompt
+                        end,
+                        io:format("  ~s~n", [JobId]),
+                        io:format("    Agent: ~s | Type: ~p | Status: ~p~n",
+                                  [AgentId, Type, Status]),
+                        io:format("    Heartbeat: ~p | Fires: ~B~n",
+                                  [Heartbeat, FireCount]),
+                        io:format("    Prompt: ~s~n~n", [ShortPrompt])
+                    end, Jobs),
+                    halt(0)
+            end;
+        not_running ->
+            io:format(standard_error,
+                      "beamclaw: daemon not running. Start with: beamclaw start~n", []),
+            halt(1)
+    end.
+
+-doc "Cancel a scheduled job by ID.".
+cmd_scheduler_cancel(JobId) ->
+    case try_connect_daemon() of
+        connected ->
+            %% Cancel timers first
+            rpc:call(daemon_node(), bc_sched_runner, cancel, [JobId]),
+            case rpc:call(daemon_node(), bc_sched_store, update_status,
+                          [JobId, completed]) of
+                ok ->
+                    io:format("Job ~s cancelled.~n", [JobId]),
+                    halt(0);
+                {error, not_found} ->
+                    io:format(standard_error,
+                              "beamclaw: job not found: ~s~n", [JobId]),
+                    halt(1);
+                {badrpc, Reason} ->
+                    io:format(standard_error,
+                              "beamclaw: RPC failed: ~p~n", [Reason]),
+                    halt(1)
+            end;
+        not_running ->
+            io:format(standard_error,
+                      "beamclaw: daemon not running. Start with: beamclaw start~n", []),
+            halt(1)
+    end.
+
+-doc "Pause a scheduled job by ID.".
+cmd_scheduler_pause(JobId) ->
+    case try_connect_daemon() of
+        connected ->
+            case rpc:call(daemon_node(), bc_sched_runner, pause, [JobId]) of
+                ok ->
+                    io:format("Job ~s paused.~n", [JobId]),
+                    halt(0);
+                {error, not_found} ->
+                    io:format(standard_error,
+                              "beamclaw: job not found: ~s~n", [JobId]),
+                    halt(1);
+                {error, _} ->
+                    io:format(standard_error,
+                              "beamclaw: job ~s is not active~n", [JobId]),
+                    halt(1);
+                {badrpc, Reason} ->
+                    io:format(standard_error,
+                              "beamclaw: RPC failed: ~p~n", [Reason]),
+                    halt(1)
+            end;
+        not_running ->
+            io:format(standard_error,
+                      "beamclaw: daemon not running. Start with: beamclaw start~n", []),
+            halt(1)
+    end.
+
+-doc "Resume a paused scheduled job by ID.".
+cmd_scheduler_resume(JobId) ->
+    case try_connect_daemon() of
+        connected ->
+            case rpc:call(daemon_node(), bc_sched_runner, resume, [JobId]) of
+                ok ->
+                    io:format("Job ~s resumed.~n", [JobId]),
+                    halt(0);
+                {error, not_found} ->
+                    io:format(standard_error,
+                              "beamclaw: job not found: ~s~n", [JobId]),
+                    halt(1);
+                {error, _} ->
+                    io:format(standard_error,
+                              "beamclaw: job ~s is not paused~n", [JobId]),
+                    halt(1);
+                {badrpc, Reason} ->
+                    io:format(standard_error,
+                              "beamclaw: RPC failed: ~p~n", [Reason]),
+                    halt(1)
+            end;
+        not_running ->
+            io:format(standard_error,
+                      "beamclaw: daemon not running. Start with: beamclaw start~n", []),
+            halt(1)
+    end.
+
 cmd_help() ->
     io:format(
         "Usage: beamclaw <command>~n~n"
@@ -733,12 +891,16 @@ cmd_help() ->
         "  skills show NAME     Show a skill's SKILL.md content~n"
         "  skills install NAME  Install a skill's dependencies~n"
         "  pair [list]          List pending and approved pairing requests~n"
-        "  pair <channel> CODE  Approve a pending pairing request~n"
+        "  pair <ch> CODE [--agent NAME]  Approve with optional agent~n"
         "  pair revoke CH ID    Revoke a user from a channel's allowlist~n"
         "  sandbox [status]     Show sandbox config and Docker availability~n"
         "  sandbox list         List active sandbox containers~n"
         "  sandbox kill ID      Force-kill a sandbox container~n"
         "  sandbox build        Build the sandbox Docker image~n"
+        "  scheduler [list]     List active scheduled jobs~n"
+        "  scheduler cancel ID  Cancel a scheduled job~n"
+        "  scheduler pause ID   Pause a scheduled job~n"
+        "  scheduler resume ID  Resume a paused scheduled job~n"
         "  doctor               Check environment and connectivity~n"
         "  status               Ping running gateway HTTP health endpoint~n"
         "  version              Print version~n"

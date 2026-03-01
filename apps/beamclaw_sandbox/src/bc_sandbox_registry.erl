@@ -63,7 +63,7 @@ destroy(SessionId, Scope) ->
 list_all() ->
     ets:tab2list(?TAB).
 
-%% State: #{monitors => #{pid() => {reference(), {SessionId, Scope}}}}
+%% State: #{monitors => #{pid() => {reference(), Key, ContainerName}}}
 init([]) ->
     _ = ets:new(?TAB, [set, named_table, public, {read_concurrency, true}]),
     {ok, #{monitors => #{}}}.
@@ -102,8 +102,10 @@ handle_info({'DOWN', _Ref, process, Pid, _Reason}, #{monitors := Mons} = State) 
     case maps:get(Pid, Mons, undefined) of
         undefined ->
             {noreply, State};
-        {_Ref2, Key} ->
+        {_Ref2, Key, ContainerName} ->
             ets:delete(?TAB, Key),
+            %% Best-effort immediate container cleanup (fire-and-forget)
+            cleanup_container_async(ContainerName),
             {noreply, State#{monitors := maps:remove(Pid, Mons)}}
     end;
 handle_info(_Info, State) ->
@@ -125,7 +127,11 @@ start_and_register(Key, Config, #{monitors := Mons} = State) ->
         {ok, Pid} ->
             ets:insert(?TAB, {Key, Pid}),
             Ref = erlang:monitor(process, Pid),
-            NewMons = Mons#{Pid => {Ref, Key}},
+            %% Fetch container name so DOWN handler can clean up immediately
+            ContainerName = try bc_sandbox:get_container_name(Pid)
+                            catch _:_ -> "unknown"
+                            end,
+            NewMons = Mons#{Pid => {Ref, Key, ContainerName}},
             {reply, {ok, Pid}, State#{monitors := NewMons}};
         {error, Reason} ->
             {reply, {error, Reason}, State}
@@ -134,7 +140,26 @@ start_and_register(Key, Config, #{monitors := Mons} = State) ->
 remove_monitor(Pid, #{monitors := Mons} = State) ->
     case maps:get(Pid, Mons, undefined) of
         undefined -> State;
-        {Ref, _Key} ->
+        {Ref, _Key, _ContainerName} ->
             erlang:demonitor(Ref, [flush]),
             State#{monitors := maps:remove(Pid, Mons)}
     end.
+
+cleanup_container_async(ContainerName) ->
+    spawn(fun() ->
+        try
+            KillCmd = "docker kill " ++ ContainerName ++ " 2>/dev/null",
+            _ = os:cmd(KillCmd),
+            RmCmd = "docker rm -f " ++ ContainerName ++ " 2>/dev/null",
+            _ = os:cmd(RmCmd),
+            %% Clean up bridge socket
+            BridgeDir = application:get_env(beamclaw_sandbox, bridge_socket_dir,
+                                            "/tmp/beamclaw-bridges"),
+            SocketPath = filename:join(BridgeDir, ContainerName ++ ".sock"),
+            _ = file:delete(SocketPath),
+            logger:info("[sandbox_registry] cleaned up container on DOWN: ~s",
+                        [ContainerName])
+        catch
+            _:_ -> ok
+        end
+    end).

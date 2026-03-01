@@ -3,7 +3,7 @@
   {vsn,          "0.1.0"},
   {registered,   [bc_session_registry, beamclaw_core_sup, bc_sessions_sup]},
   {mod,          {beamclaw_core_app, []}},
-  {applications, [kernel, stdlib, crypto, inets, ssl, mnesia, jsx,
+  {applications, [kernel, stdlib, crypto, mnesia, jsx, hackney,
                   beamclaw_obs, beamclaw_memory, beamclaw_tools, beamclaw_sandbox,
                   beamclaw_mcp]},
   {env,          []},

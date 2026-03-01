@@ -39,7 +39,7 @@ execute(#{<<"filter">> := Filter, <<"input">> := Input}, _Session, _Context) ->
     Cmd = io_lib:format("jq ~p ~s 2>&1", [binary_to_list(Filter), TmpIn]),
     Output = os:cmd(lists:flatten(Cmd)),
     _ = file:delete(TmpIn),
-    {ok, iolist_to_binary(Output)}.
+    {ok, unicode:characters_to_binary(Output)}.
 
 requires_approval() -> false.
 

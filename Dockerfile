@@ -19,16 +19,29 @@ COPY config/ config/
 RUN rebar3 as docker release
 RUN rebar3 escriptize
 
+## ---- Stage: uv binary (no Alpine package available) ------------------------
+FROM ghcr.io/astral-sh/uv:latest AS uv
+
 ## ---- Stage 2: Minimal runtime ----------------------------------------------
 FROM alpine:3.23
 
 # Erlang runtime C-library dependencies only — no Erlang package needed
 # because the OTP release from stage 1 bundles its own ERTS.
 # docker-cli enables sandbox sibling containers when Docker socket is mounted.
-RUN apk add --no-cache ncurses-libs openssl libstdc++ libgcc docker-cli su-exec
+# bash/curl/jq: required by bc_tool_bash, bc_tool_curl, bc_tool_jq, finnhub skill.
+# python3: required by uv for nano-banana-pro skill scripts.
+RUN apk add --no-cache ncurses-libs openssl libstdc++ libgcc docker-cli su-exec \
+    bash curl jq python3
+
+# uv: Python package runner for nano-banana-pro skill (no Alpine package exists).
+COPY --from=uv /uv /usr/local/bin/uv
 
 # Non-root user for principle-of-least-privilege
 RUN addgroup -S beamclaw && adduser -S beamclaw -G beamclaw -h /home/beamclaw
+
+# Ensure all processes (root via `docker exec`, beamclaw via daemon) resolve
+# the same agent/pairing path regardless of HOME.
+ENV BEAMCLAW_HOME=/home/beamclaw/.beamclaw
 
 # Copy the self-contained OTP release (includes ERTS, no other Erlang needed)
 COPY --from=builder --chown=beamclaw:beamclaw \

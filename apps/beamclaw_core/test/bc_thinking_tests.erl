@@ -66,8 +66,21 @@ preserve_inline_code_test() ->
     ?assertNotEqual(nomatch, binary:match(Result, <<"<thinking>">>)),
     ?assertNotEqual(nomatch, binary:match(Result, <<"is a tag">>)).
 
+strip_null_test() ->
+    ?assertEqual(<<>>, bc_thinking:strip(null)).
+
+strip_all_thinking_preserves_content_test() ->
+    %% When stripping would empty the response, preserve inner text
+    ?assertEqual(<<"The stock price is $150.">>,
+                 bc_thinking:strip(<<"<thinking>The stock price is $150.</thinking>">>)).
+
+strip_all_think_preserves_content_test() ->
+    ?assertEqual(<<"response text">>,
+                 bc_thinking:strip(<<"<think>response text</think>">>)).
+
 strict_unclosed_test() ->
-    ?assertEqual(<<>>,
+    %% Unclosed tag: preserve inner text rather than returning empty
+    ?assertEqual(<<"partial reasoning">>,
                  bc_thinking:strip(<<"<thinking>partial reasoning">>)).
 
 multiple_blocks_test() ->

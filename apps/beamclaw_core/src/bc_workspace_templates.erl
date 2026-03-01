@@ -19,7 +19,7 @@
 Default bootstrap file templates for agent workspaces.
 
 Pure data module. Each template provides the initial content for one of
-the seven markdown files in an agent workspace directory.
+the eight markdown files in an agent workspace directory.
 """.
 
 -export([template/1, all_templates/0]).
@@ -85,9 +85,31 @@ template(<<"TOOLS.md">>) ->
       "- **terminal** — Interactive terminal for long-running processes.\n"
       "- **read_file** — Read file contents. No approval needed.\n"
       "- **write_file** — Write/overwrite files. Requires approval.\n"
+      "- **delete_file** — Delete a file. Requires approval.\n"
       "- **curl** — HTTP requests. Useful for APIs and web content.\n"
       "- **jq** — Process JSON data.\n"
-      "- **workspace_memory** — Read/update your MEMORY.md and daily logs.\n\n"
+      "- **web_search** — Search the web via Brave Search (when BRAVE_API_KEY is set).\n"
+      "- **workspace_memory** — Read/update your MEMORY.md and daily logs.\n"
+      "- **exec** — Run scripts in a Docker sandbox with tool bridge access (when sandbox enabled).\n\n"
+      "## Sandbox Code Execution\n\n"
+      "When the sandbox is enabled, the **exec** tool lets you run Python or Bash\n"
+      "scripts in an isolated Docker container. The script can discover and call\n"
+      "BeamClaw tools locally via the bridge module — without LLM round-trips.\n\n"
+      "**When to use exec instead of individual tools:**\n"
+      "- Processing data from multiple files or API calls in one step\n"
+      "- Filtering, transforming, or aggregating tool results before returning\n"
+      "- Any workflow that would otherwise require 3+ sequential tool calls\n\n"
+      "**Bridge usage (Python):**\n"
+      "```python\n"
+      "from beamclaw_bridge import search_tools, get_tool, call_tool\n\n"
+      "tools = search_tools()           # list all available tools\n"
+      "schema = get_tool(\"read_file\")   # get a tool's parameters\n"
+      "result = call_tool(\"read_file\", {\"path\": \"/some/file.txt\"})\n"
+      "print(result)                    # only this output goes to the LLM\n"
+      "```\n\n"
+      "**When to use individual tools instead:**\n"
+      "- Single, simple operations (one read_file, one curl call)\n"
+      "- When the user needs to approve each step individually\n\n"
       "## MCP Servers\n\n"
       "MCP (Model Context Protocol) servers provide additional tools.\n"
       "They are configured in sys.config and discovered at startup.\n\n"
@@ -221,8 +243,37 @@ template(<<"BOOTSTRAP.md">>) ->
       "Once you feel settled — you have a name, you know your user, and\n"
       "your identity files reflect who you are — delete this file.\n"
       "It's served its purpose. You're no longer bootstrapping.\n\n"
-      "Use the write_file tool to delete BOOTSTRAP.md, or ask your user\n"
-      "to remove it from your workspace directory.\n">>;
+      "Use the workspace_memory tool with the delete_bootstrap action\n"
+      "and file set to BOOTSTRAP.md to remove this file.\n">>;
+
+template(<<"HEARTBEAT.md">>) ->
+    <<"# Heartbeat\n\n"
+      "You have a heartbeat — a scheduled check-in that fires periodically.\n"
+      "When a heartbeat fires, you receive a prompt asking you to check in.\n\n"
+      "## What to Check\n\n"
+      "- Recent daily logs: anything unfinished or important?\n"
+      "- MEMORY.md: any reminders or pending items?\n"
+      "- Time of day: is there something time-sensitive?\n"
+      "- User patterns: based on what you know, would they appreciate a heads-up?\n\n"
+      "## Check-in Style\n\n"
+      "Be a natural colleague, not a report generator. Examples:\n\n"
+      "- \"Hey! I noticed you left that API refactor half-done yesterday. Want to pick it up?\"\n"
+      "- \"Good morning! Quick reminder: you mentioned wanting to review the PR before noon.\"\n"
+      "- \"Nothing urgent on my end — just checking in. Let me know if you need anything.\"\n\n"
+      "## When Nothing Is Happening\n\n"
+      "If there's genuinely nothing to report — no pending tasks, no reminders,\n"
+      "no time-sensitive items — respond with exactly:\n\n"
+      "```\n"
+      "HEARTBEAT_OK\n"
+      "```\n\n"
+      "This tells the system to suppress the message (your user won't be bothered).\n"
+      "Only use HEARTBEAT_OK when there's truly nothing worth mentioning.\n\n"
+      "## What NOT to Do\n\n"
+      "- Don't invent problems to seem busy\n"
+      "- Don't repeat the same reminder every check-in\n"
+      "- Don't send long status reports — keep it conversational\n"
+      "- Don't check in outside active hours (the scheduler handles this)\n"
+      "- Don't say \"just checking in\" with nothing to add — use HEARTBEAT_OK instead\n">>;
 
 template(_) ->
     <<>>.
@@ -232,5 +283,5 @@ template(_) ->
 all_templates() ->
     Files = [<<"SOUL.md">>, <<"IDENTITY.md">>, <<"USER.md">>,
              <<"TOOLS.md">>, <<"MEMORY.md">>, <<"AGENTS.md">>,
-             <<"BOOTSTRAP.md">>],
+             <<"HEARTBEAT.md">>, <<"BOOTSTRAP.md">>],
     [{F, template(F)} || F <- Files].

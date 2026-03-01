@@ -32,6 +32,7 @@ Actions:
   - list_daily:       List available daily log files
   - read_bootstrap:   Read a bootstrap file by name (requires `file` parameter)
   - update_bootstrap: Replace a bootstrap file's content (requires `file` + `content`)
+  - delete_bootstrap: Delete a bootstrap file (requires `file` parameter)
   - search:           BM25/hybrid keyword search across MEMORY.md and daily logs
   - search_all:       Unified search across workspace files AND structured memory
 """.
@@ -49,6 +50,7 @@ definition() ->
                        "Use read/append/replace for MEMORY.md, read_daily/append_daily/list_daily "
                        "for daily logs, read_bootstrap/update_bootstrap for identity and config "
                        "files (IDENTITY.md, USER.md, SOUL.md, TOOLS.md, AGENTS.md), "
+                       "delete_bootstrap to remove a bootstrap file (e.g. BOOTSTRAP.md after setup), "
                        "and search to find relevant content across all memory sources.">>,
       parameters  => #{
           type       => object,
@@ -58,6 +60,7 @@ definition() ->
                           enum => [<<"read">>, <<"append">>, <<"replace">>,
                                    <<"read_daily">>, <<"append_daily">>, <<"list_daily">>,
                                    <<"read_bootstrap">>, <<"update_bootstrap">>,
+                                   <<"delete_bootstrap">>,
                                    <<"search">>, <<"search_all">>]},
               content => #{type => string,
                            description => <<"Text to append or replace with "
@@ -65,8 +68,9 @@ definition() ->
               date => #{type => string,
                         description => <<"Date in YYYY-MM-DD format (for read_daily/append_daily; defaults to today)">>},
               file => #{type => string,
-                        description => <<"Bootstrap filename for read_bootstrap/update_bootstrap. "
-                                         "Allowed: IDENTITY.md, USER.md, SOUL.md, TOOLS.md, AGENTS.md">>},
+                        description => <<"Bootstrap filename for read_bootstrap/update_bootstrap/delete_bootstrap. "
+                                         "Allowed: IDENTITY.md, USER.md, SOUL.md, TOOLS.md, AGENTS.md "
+                                         "(delete_bootstrap also allows BOOTSTRAP.md)">>},
               query => #{type => string,
                          description => <<"Search query (required for search action)">>},
               limit => #{type => integer,
@@ -208,6 +212,26 @@ execute(#{<<"action">> := <<"update_bootstrap">>, <<"file">> := File,
             {error, Msg}
     end;
 
+%% ---- Delete bootstrap file action ----
+
+execute(#{<<"action">> := <<"delete_bootstrap">>, <<"file">> := File}, Session, _Ctx) ->
+    case validate_delete_bootstrap_file(File) of
+        {ok, Name} ->
+            AgentId = Session#bc_session_ref.agent_id,
+            Path = bc_workspace_path:bootstrap_file(AgentId, Name),
+            case file:delete(Path) of
+                ok -> {ok, <<"Deleted ", Name/binary>>};
+                {error, enoent} -> {ok, <<"File already absent: ", Name/binary>>};
+                {error, Reason} ->
+                    {error, iolist_to_binary(
+                        io_lib:format("Failed to delete ~s: ~p", [Name, Reason]))}
+            end;
+        {error, Msg} -> {error, Msg}
+    end;
+
+execute(#{<<"action">> := <<"delete_bootstrap">>}, _Session, _Context) ->
+    {error, <<"'file' is required for delete_bootstrap action">>};
+
 %% ---- Search action ----
 
 execute(#{<<"action">> := <<"search">>, <<"query">> := Query} = Args, Session, _Context)
@@ -297,7 +321,8 @@ execute(#{<<"action">> := <<"update_bootstrap">>}, _Session, _Context) ->
 
 execute(_, _Session, _Context) ->
     {error, <<"Invalid action. Use: read, append, replace, read_daily, append_daily, "
-              "list_daily, read_bootstrap, update_bootstrap, search, or search_all">>}.
+              "list_daily, read_bootstrap, update_bootstrap, delete_bootstrap, "
+              "search, or search_all">>}.
 
 requires_approval() -> false.
 
@@ -307,16 +332,32 @@ min_autonomy() -> read_only.
 
 -define(ALLOWED_BOOTSTRAP_FILES,
     [<<"IDENTITY.md">>, <<"USER.md">>, <<"SOUL.md">>,
-     <<"TOOLS.md">>, <<"AGENTS.md">>]).
+     <<"TOOLS.md">>, <<"AGENTS.md">>, <<"HEARTBEAT.md">>]).
 
 validate_bootstrap_file(File) when is_binary(File) ->
     case lists:member(File, ?ALLOWED_BOOTSTRAP_FILES) of
         true  -> {ok, File};
         false -> {error, <<"Invalid bootstrap file '", File/binary, "'. "
-                           "Allowed: IDENTITY.md, USER.md, SOUL.md, TOOLS.md, AGENTS.md">>}
+                           "Allowed: IDENTITY.md, USER.md, SOUL.md, TOOLS.md, AGENTS.md, HEARTBEAT.md">>}
     end;
 validate_bootstrap_file(_) ->
     {error, <<"'file' must be a string">>}.
+
+-define(DELETABLE_BOOTSTRAP_FILES,
+    [<<"IDENTITY.md">>, <<"USER.md">>, <<"SOUL.md">>,
+     <<"TOOLS.md">>, <<"AGENTS.md">>, <<"HEARTBEAT.md">>, <<"BOOTSTRAP.md">>]).
+
+validate_delete_bootstrap_file(File) when is_binary(File) ->
+    case lists:member(File, ?DELETABLE_BOOTSTRAP_FILES) of
+        true -> {ok, File};
+        false ->
+            Allowed = lists:join(<<", ">>, ?DELETABLE_BOOTSTRAP_FILES),
+            {error, iolist_to_binary(
+                [<<"Invalid file for delete_bootstrap. Allowed: ">>,
+                 Allowed])}
+    end;
+validate_delete_bootstrap_file(_) ->
+    {error, <<"'file' parameter must be a string">>}.
 
 resolve_date(#{<<"date">> := Date}) when is_binary(Date), byte_size(Date) > 0 ->
     Date;

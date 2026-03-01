@@ -24,6 +24,10 @@ Commands:
   sandbox list         Active sandbox containers
   sandbox kill ID      Force-kill a sandbox container
   sandbox build        Build sandbox Docker image
+  scheduler list       List active/paused scheduled jobs
+  scheduler cancel ID  Cancel a scheduled job
+  scheduler pause ID   Pause a scheduled job
+  scheduler resume ID  Resume a paused job
   pair [list]          List pending and approved pairing requests
   pair <channel> CODE  Approve a pending pairing request
   pair revoke CH ID    Revoke a user from a channel's allowlist
@@ -381,6 +385,83 @@ docker exec beamclaw docker ps
 The bridge Unix sockets (`/tmp/beamclaw-bridges/`) are shared between the BeamClaw
 container and sandbox containers via a bind mount, so both can access the same sockets.
 
+### Scheduler Management
+
+The scheduler enables agents to act autonomously on a schedule — heartbeat check-ins,
+one-shot tasks, recurring tasks, and randomized check-ins. It is opt-in
+(`{enabled, false}` by default in `sys.config`).
+
+#### Enabling the scheduler
+
+Set `{enabled, true}` in the `beamclaw_scheduler` section of `sys.config` (or
+`sys.docker.config` for Docker deployments), then restart BeamClaw.
+
+#### CLI commands
+
+```bash
+beamclaw scheduler list              # List active/paused scheduled jobs
+beamclaw scheduler cancel JOB_ID     # Cancel a scheduled job
+beamclaw scheduler pause JOB_ID      # Pause a scheduled job
+beamclaw scheduler resume JOB_ID     # Resume a paused job
+```
+
+In Docker:
+
+```bash
+docker exec beamclaw beamclaw-ctl scheduler list
+docker exec beamclaw beamclaw-ctl scheduler cancel <job_id>
+```
+
+#### Schedule types
+
+The agent creates scheduled jobs via the `scheduler` tool (when enabled):
+
+| Type | Description | Example |
+|------|-------------|---------|
+| `at` | One-shot at a specific time | "Remind me at 2026-03-01T14:00:00Z" |
+| `every` | Fixed interval | "Check every 30m" |
+| `random_in` | N random firings per interval | "Check on me 4 times in 24h" |
+
+Intervals use human-friendly strings: `30s`, `5m`, `2h`, `24h`, `7d`.
+
+#### Heartbeat setup
+
+The heartbeat is a periodic check-in where the agent proactively reaches out.
+New agents include a `HEARTBEAT.md` bootstrap file that guides check-in behaviour.
+
+To set up a heartbeat, ask your agent:
+
+```
+Set up a heartbeat to check on me every 2 hours during business hours (8am-6pm UTC).
+```
+
+The agent will use the `scheduler` tool to create a recurring job with:
+- `heartbeat: true` — uses HEARTBEAT.md guidance for check-in style
+- `suppress_ok: true` — suppresses delivery when nothing notable to report (agent
+  responds with `HEARTBEAT_OK`)
+- `active_hours: "8-18"` — only fires within the specified UTC hour range
+
+#### Session modes
+
+| Mode | Description |
+|------|-------------|
+| `shared` | Reuse the originating session (full conversation context) |
+| `isolated` | Fresh session per execution (clean slate, inherits agent workspace) |
+
+#### Delivery channels
+
+| Channel | Description |
+|---------|-------------|
+| `telegram` | Deliver to the Telegram chat where the job was created |
+| `tui` | Deliver to the TUI channel |
+| `webhook` | POST JSON payload to a URL |
+| `silent` | No delivery; result logged via observability only |
+
+#### Auto-pause on failures
+
+Jobs are automatically paused after `max_errors` consecutive failures (default: 3).
+Resume with `beamclaw scheduler resume JOB_ID` after investigating.
+
 ### Telegram Pairing (Access Control)
 
 By default, BeamClaw's Telegram channel uses **pairing** to control access.
@@ -400,16 +481,22 @@ approves the code via CLI, and the user is added to a persistent allowlist.
    Run: beamclaw pair telegram HJKL7M2P
    ```
 3. Bot owner approves: `beamclaw pair telegram HJKL7M2P`
-4. User is now allowed — future messages reach the agent
+   - Optionally assign a specific agent: `beamclaw pair telegram HJKL7M2P --agent mom`
+4. User is now allowed — future messages are routed to their assigned agent
 
 #### CLI commands
 
 ```bash
 beamclaw pair                       # list pending + approved (default)
 beamclaw pair list                  # same as above
-beamclaw pair telegram <CODE>       # approve a pending request
+beamclaw pair telegram <CODE>       # approve with default agent
+beamclaw pair telegram <CODE> --agent NAME  # approve with specific agent
 beamclaw pair revoke telegram <ID>  # remove user from allowlist
 ```
+
+Each approved user is mapped to an agent. When `--agent` is omitted, the
+`default_agent` config value is used. The `pair list` command shows the
+assigned agent for each user.
 
 #### DM policy modes
 

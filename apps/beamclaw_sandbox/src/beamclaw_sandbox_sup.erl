@@ -20,6 +20,7 @@ Top-level supervisor for beamclaw_sandbox.
 
 Children:
   - bc_sandbox_registry: ETS-backed {SessionId, Scope} -> Pid mapping
+  - bc_sandbox_reaper: periodic orphan container cleanup
   - bc_sandbox_sup: simple_one_for_one for per-sandbox bc_sandbox processes
 """.
 -behaviour(supervisor).
@@ -38,6 +39,12 @@ init([]) ->
           shutdown => 5000,
           type     => worker,
           modules  => [bc_sandbox_registry]},
+        #{id       => bc_sandbox_reaper,
+          start    => {bc_sandbox_reaper, start_link, []},
+          restart  => permanent,
+          shutdown => 5000,
+          type     => worker,
+          modules  => [bc_sandbox_reaper]},
         #{id       => bc_sandbox_sup,
           start    => {bc_sandbox_sup, start_link, []},
           restart  => permanent,

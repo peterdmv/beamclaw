@@ -85,6 +85,8 @@ Expected: 407+ tests passing, 0 failures. Runs in < 5 seconds, no external deps.
 rebar3 ct --dir=apps/beamclaw_core/test --suite=bc_agentic_loop_SUITE
 rebar3 ct --dir=apps/beamclaw_gateway/test --suite=bc_http_integration_SUITE
 rebar3 ct --dir=apps/beamclaw_sandbox/test --suite=bc_sandbox_docker_SUITE
+rebar3 ct --dir=apps/beamclaw_scheduler/test --suite=bc_scheduler_SUITE
+rebar3 ct --dir=apps/beamclaw_gateway/test --suite=bc_context_integration_SUITE
 ```
 
 | Suite | Tier | Time | Requires |
@@ -92,6 +94,8 @@ rebar3 ct --dir=apps/beamclaw_sandbox/test --suite=bc_sandbox_docker_SUITE
 | `bc_agentic_loop_SUITE` | Integration | < 10s | OTP apps only |
 | `bc_http_integration_SUITE` | Integration | < 15s | OTP apps only |
 | `bc_sandbox_docker_SUITE` | Docker E2E | 1–3 min | Docker + sandbox image |
+| `bc_scheduler_SUITE` | Integration | < 15s | OTP apps only |
+| `bc_context_integration_SUITE` | Integration | < 15s | OTP apps only |
 
 The Docker E2E suite self-skips with `{skip, "Docker not available"}` when Docker
 or the sandbox image is absent, so it is safe to run unconditionally.
@@ -103,6 +107,7 @@ or the sandbox image is absent, so it is safe to run unconditionally.
 | Pure-function module | `rebar3 eunit` |
 | Multi-module OTP interaction (session + loop + tools) | `rebar3 eunit` + CT integration suite |
 | HTTP/WebSocket handler | `rebar3 eunit` + `bc_http_integration_SUITE` |
+| Scheduler/heartbeat/cron changes | `rebar3 eunit` + `bc_scheduler_SUITE` |
 | Docker/sandbox/external process | `rebar3 eunit` + `bc_sandbox_docker_SUITE` |
 
 **When to run**:

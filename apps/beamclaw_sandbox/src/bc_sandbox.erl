@@ -162,11 +162,10 @@ handle_call({exec_script, Script, Language, ToolBridgeFn}, From,
     _WorkerPid = spawn_link(fun() ->
         Output = os:cmd("timeout " ++ integer_to_list(TimeoutSec) ++ " "
                          ++ ExecCmd),
-        Truncated = case byte_size(iolist_to_binary(Output)) > MaxOutput of
-            true  ->
-                binary:part(iolist_to_binary(Output), 0, MaxOutput);
-            false ->
-                iolist_to_binary(Output)
+        Bin = unicode:characters_to_binary(Output),
+        Truncated = case byte_size(Bin) > MaxOutput of
+            true  -> binary:part(Bin, 0, MaxOutput);
+            false -> Bin
         end,
         Parent ! {exec_complete, Truncated}
     end),
@@ -234,6 +233,8 @@ handle_info(start_container, #sandbox_state{config = Config,
                                       {ifaddr, {local, SocketPath}}]),
     NewState = case ListenResult of
         {ok, ListenSock} ->
+            %% Make socket world-writable so sandbox user (uid 1000) can connect
+            file:change_mode(SocketPath, 8#0777),
             %% Start Docker container
             RunArgs = bc_sandbox_docker:run_args(Config),
             RunCmd = string:join(["docker" | RunArgs], " ") ++ " 2>&1",

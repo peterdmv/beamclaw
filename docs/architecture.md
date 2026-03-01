@@ -1,11 +1,11 @@
 # BeamClaw Architecture
 
-BeamClaw is an Erlang/OTP 28 umbrella project composed of eight OTP applications. Each app
+BeamClaw is an Erlang/OTP 28 umbrella project composed of nine OTP applications. Each app
 has a clearly defined responsibility and a strictly acyclic dependency relationship.
 
 ---
 
-## Eight-App Umbrella
+## Nine-App Umbrella
 
 ```
 beamclaw_obs         — fire-and-forget telemetry (zero sibling deps)
@@ -19,6 +19,8 @@ beamclaw_sandbox     — Docker sandboxed code execution, PII tokenization, tool
 beamclaw_mcp         — MCP client (stdio / HTTP), tool discovery
      ↑
 beamclaw_core        — sessions, agentic loop, LLM providers, approval, compaction
+     ↑
+beamclaw_scheduler   — scheduled tasks, heartbeat check-ins, timer management
      ↑
 beamclaw_gateway     — channels (Telegram, TUI), HTTP gateway, rate limiter
 
@@ -36,6 +38,7 @@ The rule: no dependency cycle. `beamclaw_obs` never imports from any sibling.
 | `beamclaw_sandbox` | Sandboxed execution | `bc_sandbox`, `bc_sandbox_registry`, `bc_tool_exec`, `bc_pii_tokenizer`, `bc_sandbox_policy`, `bc_sandbox_env`, `bc_sandbox_bridge`, `bc_sandbox_docker`, `bc_sandbox_discovery`, `bc_sandbox_skills` |
 | `beamclaw_mcp` | MCP protocol | `bc_mcp_server`, `bc_mcp_registry` |
 | `beamclaw_core` | Brain | `bc_session`, `bc_loop`, `bc_provider_*`, `bc_approval`, `bc_scrubber`, `bc_skill_parser`, `bc_skill_discovery`, `bc_skill_eligibility`, `bc_skill_installer` |
+| `beamclaw_scheduler` | Scheduled tasks | `bc_sched_store`, `bc_sched_runner`, `bc_sched_executor`, `bc_tool_scheduler`, `bc_sched_random`, `bc_sched_interval` |
 | `beamclaw_gateway` | Interfaces | `bc_channel_telegram`, `bc_channel_tui`, Cowboy handlers |
 | `beamclaw_cli` | CLI escript | `beamclaw_cli` (escript `main/1`); not started as a daemon |
 
@@ -74,6 +77,7 @@ processes.
 ```
 beamclaw_sandbox_sup  (one_for_one)
   ├── bc_sandbox_registry     (gen_server, permanent — ETS: {session_id, scope} → pid)
+  ├── bc_sandbox_reaper       (gen_server, permanent — periodic orphan container cleanup)
   └── bc_sandbox_sup          (simple_one_for_one)
         └── [per sandbox] bc_sandbox (gen_server, transient — Docker container lifecycle)
 ```
@@ -94,6 +98,19 @@ beamclaw_mcp_sup  (one_for_one)
   └── bc_mcp_servers_sup     (one_for_one, dynamic)
         └── bc_mcp_server    (gen_server, transient — one per configured server)
 ```
+
+### beamclaw_scheduler
+
+```
+beamclaw_scheduler_sup  (one_for_one)
+  ├── bc_sched_store       (gen_server, permanent — Mnesia job CRUD)
+  ├── bc_sched_runner      (gen_server, permanent — timer management, fire events)
+  └── bc_sched_executor    (gen_server, permanent — session dispatch, delivery)
+```
+
+Runner manages timers (lightweight, never blocks). Executor does heavy work
+(session creation, LLM dispatch, HTTP delivery). A crash in execution doesn't
+lose timer state — same failure-domain split as `bc_session` / `bc_loop`.
 
 ### beamclaw_gateway
 

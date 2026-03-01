@@ -116,14 +116,15 @@ encode_params(V) ->
     V.
 
 post(#{api_key := Key, base_url := Base}, Path, Body) ->
-    Url     = Base ++ Path,
-    Headers = [{"authorization", "Bearer " ++ Key},
-               {"content-type",  "application/json"}],
-    case httpc:request(post, {Url, Headers, "application/json", Body},
-                       [{timeout, 120000}, {connect_timeout, 10000}], []) of
-        {ok, {{_, 200, _}, _, RespBody}} ->
-            {ok, iolist_to_binary(RespBody)};
-        {ok, {{_, Status, _}, _, RespBody}} ->
+    Url     = list_to_binary(Base ++ Path),
+    Headers = [{<<"authorization">>, list_to_binary("Bearer " ++ Key)},
+               {<<"content-type">>,  <<"application/json">>}],
+    case hackney:request(post, Url, Headers, Body,
+                         [{recv_timeout, 120000}, {connect_timeout, 10000},
+                          with_body]) of
+        {ok, 200, _RespHeaders, RespBody} ->
+            {ok, RespBody};
+        {ok, Status, _RespHeaders, RespBody} ->
             {error, {Status, RespBody}};
         {error, Reason} ->
             {error, Reason}
@@ -133,7 +134,8 @@ parse_response(Body) ->
     Decoded = jsx:decode(Body, [return_maps]),
     Choice  = hd(maps:get(<<"choices">>, Decoded, [#{}])),
     MsgMap  = maps:get(<<"message">>, Choice, #{}),
-    RawContent = maps:get(<<"content">>, MsgMap, <<>>),
+    RawContent0 = maps:get(<<"content">>, MsgMap, <<>>),
+    RawContent = case RawContent0 of null -> <<>>; _ -> RawContent0 end,
     Content = bc_thinking:strip(RawContent),
     ToolCalls = maps:get(<<"tool_calls">>, MsgMap, []),
     #bc_message{
