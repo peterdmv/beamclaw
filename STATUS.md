@@ -80,10 +80,21 @@ webhook secret token validation, and smart session memory maintenance
 | Post-M37 | Fix /context Grid Clipping Compaction Buffer Cells |
 | Post-M37 | Smart Session Memory Maintenance |
 | Post-M37 | Fix Mnesia Session Persistence Across Docker Rebuilds |
+| Post-M37 | Fix Mnesia Tables Always Created as ram_copies |
 
 ---
 
 ## Recent Milestones
+
+### Post-M37 — Fix Mnesia Tables Always Created as ram_copies ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Fix `beamclaw_memory_app:init_mnesia/0` | ✅ | Detect `use_dir=false` → stop + create_schema + restart |
+| Fix `bc_session_store:init_table/0` | ✅ | Same pattern for robustness |
+| Fix `bc_sched_store:init_table/0` | ✅ | Same pattern for robustness |
+| Fix `docker-entrypoint.sh` | ✅ | `mkdir -p` mnesia dir before chown loop |
+| All tests pass | ✅ | 683 EUnit tests pass |
 
 ### Post-M37 — Fix Mnesia Session Persistence Across Docker Rebuilds ✅
 
@@ -124,4 +135,4 @@ _None at this time._
 
 ## Last Updated
 
-2026-03-02
+2026-03-03
