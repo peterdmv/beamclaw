@@ -623,8 +623,9 @@ as the user_id, enabling cross-channel session sharing for single-user deploymen
     {channels, [
         {telegram, #{token => {env, "TELEGRAM_BOT_TOKEN"}, mode => long_poll,
                      %% Webhook mode settings (only used when mode => webhook):
-                     webhook_url    => {env, "TELEGRAM_WEBHOOK_URL"},
-                     webhook_secret => {env, "TELEGRAM_WEBHOOK_SECRET"},
+                     %% TELEGRAM_WEBHOOK_URL and TELEGRAM_WEBHOOK_SECRET are
+                     %% read directly from env vars at runtime (not via config)
+                     %% to avoid crashes when unset in long_poll mode.
                      dm_policy => pairing, allow_from => [],
                      photo => #{enabled => true,
                                 max_size_bytes => 5242880},   %% 5 MB

@@ -176,12 +176,13 @@ to the agentic loop.
             token => {env, "TELEGRAM_BOT_TOKEN"},
             mode  => long_poll,  %% or: webhook
             %% Webhook mode settings (only used when mode => webhook):
+            %% TELEGRAM_WEBHOOK_URL and TELEGRAM_WEBHOOK_SECRET are read
+            %% directly from env vars at runtime (not via config) to avoid
+            %% crashes when these vars are unset in long_poll mode.
             %% When mode => webhook, set_webhook is called on startup to
             %% register the URL and secret with Telegram. The webhook
             %% handler (POST /webhook/telegram) validates the secret
             %% header on every request (fail-closed: rejects if unset).
-            webhook_url    => {env, "TELEGRAM_WEBHOOK_URL"},
-            webhook_secret => {env, "TELEGRAM_WEBHOOK_SECRET"},
             %% Access control policy for direct messages.
             %% pairing   — unknown users get a code; blocked until approved (default)
             %% allowlist — unknown users silently dropped; no codes issued

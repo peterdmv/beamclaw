@@ -63,9 +63,7 @@ constant_time_equals(_, _) ->
     false.
 
 resolve_webhook_secret() ->
-    Channels = bc_config:get(beamclaw_gateway, channels, []),
-    TgConfig = proplists:get_value(telegram, Channels, #{}),
-    case maps:get(webhook_secret, TgConfig, undefined) of
-        undefined -> undefined;
-        Val       -> iolist_to_binary(bc_config:resolve(Val))
+    case os:getenv("TELEGRAM_WEBHOOK_SECRET") of
+        false -> undefined;
+        Val   -> list_to_binary(Val)
     end.

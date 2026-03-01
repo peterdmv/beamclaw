@@ -74,10 +74,21 @@ and webhook secret token validation (Post-M37) are all complete.
 | Post-M37 | Token-Based Automatic Compaction Trigger |
 | Post-M37 | Per-Session Provider Model for Compaction |
 | Post-M37 | Telegram Webhook Secret Token Validation |
+| Post-M37 | Fix Docker Cyclic Restarts (Webhook Env Vars) |
 
 ---
 
 ## Recent Milestones
+
+### Post-M37 — Fix Docker Cyclic Restarts (Webhook Env Vars) ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Remove `webhook_url`/`webhook_secret` from `sys.config` | ✅ | `{env, ...}` tuples eagerly resolved by `bc_config:get` crashed when unset |
+| Remove from `sys.docker.config` | ✅ | Same fix |
+| `bc_channel_telegram.erl` direct env read | ✅ | `resolve_webhook_url/0` and `resolve_webhook_secret/0` use `os:getenv/1` |
+| `bc_webhook_telegram_h.erl` direct env read | ✅ | `resolve_webhook_secret/0` uses `os:getenv/1` |
+| Update CLAUDE.md + docs | ✅ | Config block updated, `docs/configuration.md` updated |
 
 ### Post-M37 — Per-Session Provider Model for Compaction ✅
 

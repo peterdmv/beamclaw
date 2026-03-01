@@ -432,19 +432,15 @@ resolve_token() ->
     bc_config:resolve(maps:get(token, TgConfig, {env, "TELEGRAM_BOT_TOKEN"})).
 
 resolve_webhook_secret() ->
-    Channels = bc_config:get(beamclaw_gateway, channels, []),
-    TgConfig = proplists:get_value(telegram, Channels, #{}),
-    case maps:get(webhook_secret, TgConfig, undefined) of
-        undefined -> undefined;
-        Val       -> bc_config:resolve(Val)
+    case os:getenv("TELEGRAM_WEBHOOK_SECRET") of
+        false -> undefined;
+        Val   -> list_to_binary(Val)
     end.
 
 resolve_webhook_url() ->
-    Channels = bc_config:get(beamclaw_gateway, channels, []),
-    TgConfig = proplists:get_value(telegram, Channels, #{}),
-    case maps:get(webhook_url, TgConfig, undefined) of
-        undefined -> undefined;
-        Val       -> bc_config:resolve(Val)
+    case os:getenv("TELEGRAM_WEBHOOK_URL") of
+        false -> undefined;
+        Val   -> list_to_binary(Val)
     end.
 
 set_webhook(#{token := Token}) ->
