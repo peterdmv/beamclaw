@@ -62,22 +62,25 @@ them to a file — `.env` and `*.secret` files are excluded by `.gitignore`.
     %% Agentic loop tuning.
     {agentic_loop, #{
         %% Maximum number of tool call iterations per turn before giving up.
-        max_tool_iterations  => 10,
-        %% Trigger context compaction when history exceeds this many messages.
-        compaction_threshold => 50,
-        %% Keep this many recent messages verbatim after compaction.
-        compaction_target    => 20,
+        max_tool_iterations      => 10,
+        %% Trigger context compaction when history tokens exceed this
+        %% percentage of the model's context window. Token estimation
+        %% uses byte_size/4 (~4 chars per token).
+        compaction_threshold_pct => 80,
+        %% After compaction, keep recent messages whose cumulative tokens
+        %% fit within this percentage of the context window.
+        compaction_target_pct    => 40,
         %% Progressive streaming: send chunks of this many characters.
-        stream_chunk_size    => 80,
+        stream_chunk_size        => 80,
         %% Pre-compaction memory flush: fire a hidden LLM turn before compacting
         %% to let the agent save durable memories to workspace files.
-        memory_flush         => true,
+        memory_flush             => true,
         %% Auto-context: BM25 search of MEMORY.md before each LLM call.
         %% Injects top matching snippets as context. Off by default to
         %% avoid unnecessary token usage.
-        auto_context         => false,
+        auto_context             => false,
         %% Maximum number of auto-context snippets to inject per turn.
-        auto_context_limit   => 3
+        auto_context_limit       => 3
     }},
 
     %% Default autonomy level for new sessions.

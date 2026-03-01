@@ -444,7 +444,7 @@ idle → compacting (optional) → streaming → awaiting_approval (optional)
 ```
 
 State transition rules:
-- Enter `compacting` from `idle` when `length(History) > compaction_threshold`
+- Enter `compacting` from `idle` when history tokens exceed `compaction_threshold_pct`% of the model's context window
 - In `compacting`: if `memory_flush` is enabled (default), fire a hidden LLM turn to save durable memories before compaction
 - Enter `awaiting_approval` from `streaming` when any tool call requires approval and autonomy ≠ `full`
 - Loop back to `streaming` after `executing_tools` until no tool calls remain
@@ -493,12 +493,15 @@ Security rule: parsers only match structured delimiters. **Never** extract arbit
 
 Triggered in `compacting` state:
 
-1. Check: `length(History) > compaction_threshold` (default: 50)
-2. Split: keep last `compaction_target` (default: 20) messages verbatim
+1. Check: history tokens > `compaction_threshold_pct`% of context window (default: 80%)
+2. Split: keep most recent messages whose cumulative tokens fit within `compaction_target_pct`% of the context window (default: 40%)
 3. Summarize older messages via LLM: system prompt instructs concise factual summary
 4. Summary becomes a `system` role message: `"[Conversation summary]: <text>"`
-5. Fallback on LLM failure: deterministic trim to last `compaction_target` messages
+5. Fallback on LLM failure: deterministic trim to kept messages only
 6. Emit `compaction_complete` obs event with `{before, After}` message counts
+
+Token estimation: `byte_size(Content) div 4` (~4 chars/token). Context window
+sizes are looked up from the model name via `bc_context:context_window/1`.
 
 ---
 
@@ -595,13 +598,13 @@ as the user_id, enabling cross-channel session sharing for single-user deploymen
                    base_url => "https://api.openai.com/v1",
                    model    => "gpt-4o"}}
     ]},
-    {agentic_loop, #{max_tool_iterations => 10,
-                     compaction_threshold => 50,
-                     compaction_target    => 20,
-                     stream_chunk_size    => 80,
-                     memory_flush         => true,
-                     auto_context         => false,
-                     auto_context_limit   => 3}},
+    {agentic_loop, #{max_tool_iterations      => 10,
+                     compaction_threshold_pct => 80,
+                     compaction_target_pct    => 40,
+                     stream_chunk_size        => 80,
+                     memory_flush             => true,
+                     auto_context             => false,
+                     auto_context_limit       => 3}},
     {autonomy_level, supervised},
     {session_ttl_seconds, 3600},
     {default_agent, <<"default">>},

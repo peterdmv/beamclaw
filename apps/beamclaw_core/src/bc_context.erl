@@ -30,8 +30,9 @@ Token estimation: byte_size(Content) div 4 (~4 chars/token approximation).
 -export([gather/1, format_text/1, format_text/2, format_telegram/1,
          render_svg/1, render_png/1]).
 
-%% Exported for testing
--export([estimate_tokens/1, context_window/1, format_size/1]).
+%% Exported for testing and use by bc_loop / bc_compactor
+-export([estimate_tokens/1, context_window/1, format_size/1,
+         get_model_name/0, estimate_history_tokens/1]).
 
 %% ---- Layer 1: Gather raw data ----
 
@@ -54,15 +55,10 @@ gather(#{agent_id := AgentId, history := History} = Opts) ->
     %% Conversation history (non-system messages only)
     MessageTokens = estimate_history_tokens(History),
 
-    %% Compaction buffer estimate
+    %% Compaction buffer estimate: tokens reserved for compaction target
     LoopCfg = bc_config:get(beamclaw_core, agentic_loop, #{}),
-    CompactionTarget = maps:get(compaction_target, LoopCfg, 20),
-    %% Estimate avg message size from history, or use a default
-    AvgMsgTokens = case length(History) of
-        0 -> 200;
-        N -> max(200, MessageTokens div N)
-    end,
-    CompactionBuffer = CompactionTarget * AvgMsgTokens,
+    CompactionTargetPct = maps:get(compaction_target_pct, LoopCfg, 40),
+    CompactionBuffer = Window * CompactionTargetPct div 100,
 
     Total = BootstrapTokens + DailyTokens + SkillTokens + ToolTokens + MessageTokens,
     FreeSpace = max(0, Window - Total - CompactionBuffer),
