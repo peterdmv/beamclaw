@@ -1,8 +1,25 @@
-%% @doc A2A Agent Card — discovery metadata.
 %%
-%% Published at `GET /.well-known/agent.json` per the A2A protocol specification.
-%% Describes the agent's identity, capabilities, skills, and service endpoint.
+%% Copyright Péter Dimitrov 2026, All Rights Reserved.
+%%
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
+%%
 -module(bc_a2a_agent_card).
+-moduledoc """
+A2A Agent Card — discovery metadata.
+
+Published at `GET /.well-known/agent.json` per the A2A protocol specification.
+Describes the agent's identity, capabilities, skills, and service endpoint.
+""".
 
 -export([build/0, to_json/1]).
 
@@ -20,7 +37,6 @@
     authentication       :: map() | undefined
 }).
 
-%% @doc Build the agent card from application config.
 -spec build() -> #agent_card{}.
 build() ->
     Config = bc_config:get(beamclaw_a2a, agent_card, #{}),
@@ -29,7 +45,7 @@ build() ->
         description = maps:get(description, Config,
             <<"A fault-tolerant AI agent gateway on the BEAM with A2A interoperability.">>),
         url = maps:get(url, Config, <<"http://localhost:18800">>),
-        version = <<"0.1.0">>,
+        version = bc_context:version(),
         capabilities = #{
             streaming => maps:get(streaming, Config, true),
             push_notifications => maps:get(push_notifications, Config, false),
@@ -46,10 +62,9 @@ build() ->
         authentication = undefined
     }.
 
-%% @doc Serialize agent card to JSON-compatible map.
 -spec to_json(#agent_card{}) -> map().
 to_json(#agent_card{} = C) ->
-    reject_undefined(#{
+    bc_a2a_task:reject_undefined(#{
         <<"name">>              => C#agent_card.name,
         <<"description">>       => C#agent_card.description,
         <<"url">>               => C#agent_card.url,
@@ -89,10 +104,7 @@ skill_to_json(S) ->
 
 provider_to_json(undefined) -> undefined;
 provider_to_json(P) ->
-    reject_undefined(#{
+    bc_a2a_task:reject_undefined(#{
         <<"organization">> => maps:get(organization, P),
         <<"url">>          => maps:get(url, P, undefined)
     }).
-
-reject_undefined(Map) when is_map(Map) ->
-    maps:filter(fun(_K, V) -> V =/= undefined end, Map).

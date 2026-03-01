@@ -383,6 +383,7 @@ route_response(Data, Msg) ->
 
 channel_mod_for(tui)       -> bc_channel_tui;
 channel_mod_for(telegram)  -> bc_channel_telegram;
+channel_mod_for(a2a)       -> bc_channel_a2a;
 channel_mod_for(_)         -> undefined.
 
 emit_typing(Data) ->

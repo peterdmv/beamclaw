@@ -28,10 +28,19 @@ Token estimation: byte_size(Content) div 4 (~4 chars/token approximation).
 -include_lib("beamclaw_core/include/bc_types.hrl").
 
 -export([gather/1, format_text/1, format_text/2, format_telegram/1,
-         render_svg/1, render_png/1]).
+         render_svg/1, render_png/1, version/0]).
 
 %% Exported for testing
 -export([estimate_tokens/1, context_window/1, format_size/1]).
+
+%% ---- Version ----
+
+-spec version() -> binary().
+version() ->
+    case application:get_key(beamclaw_core, vsn) of
+        {ok, Vsn} -> list_to_binary(Vsn);
+        undefined  -> <<"dev">>
+    end.
 
 %% ---- Layer 1: Gather raw data ----
 

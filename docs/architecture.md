@@ -1,11 +1,11 @@
 # BeamClaw Architecture
 
-BeamClaw is an Erlang/OTP 28 umbrella project composed of nine OTP applications. Each app
+BeamClaw is an Erlang/OTP 28 umbrella project composed of ten OTP applications. Each app
 has a clearly defined responsibility and a strictly acyclic dependency relationship.
 
 ---
 
-## Nine-App Umbrella
+## Ten-App Umbrella
 
 ```
 beamclaw_obs         — fire-and-forget telemetry (zero sibling deps)
@@ -21,6 +21,8 @@ beamclaw_mcp         — MCP client (stdio / HTTP), tool discovery
 beamclaw_core        — sessions, agentic loop, LLM providers, approval, compaction
      ↑
 beamclaw_scheduler   — scheduled tasks, heartbeat check-ins, timer management
+     ↑
+beamclaw_a2a         — A2A (Agent2Agent) protocol: task manager, JSON-RPC, agent card
      ↑
 beamclaw_gateway     — channels (Telegram, TUI), HTTP gateway, rate limiter
 
@@ -39,6 +41,7 @@ The rule: no dependency cycle. `beamclaw_obs` never imports from any sibling.
 | `beamclaw_mcp` | MCP protocol | `bc_mcp_server`, `bc_mcp_registry` |
 | `beamclaw_core` | Brain | `bc_session`, `bc_loop`, `bc_provider_*`, `bc_approval`, `bc_scrubber`, `bc_skill_parser`, `bc_skill_discovery`, `bc_skill_eligibility`, `bc_skill_installer` |
 | `beamclaw_scheduler` | Scheduled tasks | `bc_sched_store`, `bc_sched_runner`, `bc_sched_executor`, `bc_tool_scheduler`, `bc_sched_random`, `bc_sched_interval` |
+| `beamclaw_a2a` | A2A protocol | `bc_a2a_task_manager`, `bc_a2a_server`, `bc_a2a_http_h`, `bc_channel_a2a` |
 | `beamclaw_gateway` | Interfaces | `bc_channel_telegram`, `bc_channel_tui`, Cowboy handlers |
 | `beamclaw_cli` | CLI escript | `beamclaw_cli` (escript `main/1`); not started as a daemon |
 
@@ -111,6 +114,15 @@ beamclaw_scheduler_sup  (one_for_one)
 Runner manages timers (lightweight, never blocks). Executor does heavy work
 (session creation, LLM dispatch, HTTP delivery). A crash in execution doesn't
 lose timer state — same failure-domain split as `bc_session` / `bc_loop`.
+
+### beamclaw_a2a
+
+```
+beamclaw_a2a_sup  (one_for_one)
+  └── bc_a2a_task_manager     (gen_server, permanent — ETS-backed task store)
+```
+
+`bc_channel_a2a` is a stateless response routing module (no supervised process).
 
 ### beamclaw_gateway
 
@@ -463,6 +475,8 @@ request body as OpenAI-format function-calling tool definitions.
 | `POST` | `/v1/chat/completions` | `bc_http_completions_h` | OpenAI-compatible API (SSE + sync) |
 | `GET` | `/ws` | `bc_ws_h` | WebSocket session |
 | `POST` | `/webhook/telegram` | `bc_webhook_telegram_h` | Telegram webhook receiver |
+| `GET` | `/.well-known/agent.json` | `bc_a2a_http_h` | A2A Agent Card discovery |
+| `POST` | `/a2a` | `bc_a2a_http_h` | A2A JSON-RPC 2.0 endpoint |
 
 Rate limiting: sliding-window per client IP, ETS-backed, pruned every 60 s. Checked in
 every handler before dispatch.

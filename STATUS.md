@@ -2,14 +2,15 @@
 
 ## Current Phase: Implementation
 
-Scaffolding is complete. All nine OTP apps compile clean with zero warnings.
+Scaffolding is complete. All ten OTP apps compile clean with zero warnings.
 Core systems (M0–M10), workspaces (M11–M17), session persistence and sharing
 (M18–M19), Telegram pairing (M20), memory search (M21–M23), photo/vision (M24),
 Docker sandbox (M25–M30), scheduler/heartbeat (M31–M37), Brave Search, bundled
 skills, on-demand skill loading, Telegram markdown-to-HTML formatting,
 BM25-based skill auto-injection, `/context` command, outgoing photo delivery,
-per-user agent mapping, and voice message transcription (Post-M37) are all complete.
-642 EUnit tests + 37 CT tests pass (679 total).
+per-user agent mapping, voice message transcription, and A2A protocol
+(Post-M37) are all complete.
+668 EUnit tests + 41 CT tests pass (709 total).
 
 ---
 
@@ -70,6 +71,7 @@ per-user agent mapping, and voice message transcription (Post-M37) are all compl
 | Post-M37 | Outgoing Photo Delivery (Telegram + TUI) |
 | Post-M37 | Per-User Agent Mapping (Telegram Pairing) |
 | Post-M37 | Voice Message Transcription (Telegram → Groq Whisper) |
+| Post-M37 | A2A (Agent2Agent) Protocol |
 
 ---
 
