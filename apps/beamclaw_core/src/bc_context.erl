@@ -36,7 +36,8 @@ Token estimation: byte_size(Content) div 4 (~4 chars/token approximation).
 %% ---- Layer 1: Gather raw data ----
 
 -spec gather(map()) -> map().
-gather(#{agent_id := AgentId, history := History}) ->
+gather(#{agent_id := AgentId, history := History} = Opts) ->
+    SessionId = maps:get(session_id, Opts, undefined),
     %% Get model name from provider config
     Model = get_model_name(),
     Window = context_window(Model),
@@ -67,6 +68,7 @@ gather(#{agent_id := AgentId, history := History}) ->
     FreeSpace = max(0, Window - Total - CompactionBuffer),
 
     #{model            => Model,
+      session_id       => SessionId,
       context_window   => Window,
       total            => Total,
       bootstrap_files  => BootstrapFiles,
@@ -134,9 +136,14 @@ format_text(Info, Opts) ->
     GridRows = build_grid_rows(Grid, Ansi, Colors),
 
     %% Right-side annotations for each row
+    SessionLine = case maps:get(session_id, Info, undefined) of
+        undefined -> <<>>;
+        SId -> iolist_to_binary(["Session: ", SId])
+    end,
+
     RightSide = [
         ModelLine,                           %% Row 0
-        <<>>,                                %% Row 1
+        SessionLine,                         %% Row 1
         <<>>,                                %% Row 2
         <<"Estimated usage by category">>,   %% Row 3
         lists:nth(1, LegendLines),           %% Row 4 — Bootstrap
@@ -194,11 +201,16 @@ format_telegram(Info) ->
         M when is_list(M) -> list_to_binary(M);
         M when is_binary(M) -> M
     end,
+    SessionLine = case maps:get(session_id, Info, undefined) of
+        undefined -> <<>>;
+        SId -> iolist_to_binary([<<"\nSession: ">>, SId])
+    end,
     Header = iolist_to_binary([
         <<"<b>">>, <<"\xf0\x9f\x93\x8a">>, <<" Context Usage</b>\n">>,
         bc_telegram_format:escape_html(ModelBin), <<"\n">>,
         format_size(UsedWithBuffer), <<"/">>, format_size(Window),
-        <<" tokens (">>, integer_to_list(Pct), <<"%)">>
+        <<" tokens (">>, integer_to_list(Pct), <<"%)">>,
+        SessionLine
     ]),
 
     %% Grid: 10×10 emoji, no spaces between cells

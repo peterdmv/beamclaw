@@ -156,7 +156,7 @@ handle_context_command(SessionId, AgentId) ->
     case bc_session_registry:lookup(SessionId) of
         {ok, Pid} ->
             History = bc_session:get_history(Pid),
-            Info = bc_context:gather(#{agent_id => AgentId, history => History}),
+            Info = bc_context:gather(#{agent_id => AgentId, history => History, session_id => SessionId}),
             Output = bc_context:format_text(Info, #{ansi => true}),
             io:format("~n~s~n> ", [Output]);
         {error, not_found} ->

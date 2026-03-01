@@ -265,7 +265,7 @@ handle_context_command(SessionId, AgentId, ChatId) ->
     case bc_session_registry:lookup(SessionId) of
         {ok, Pid} ->
             History = bc_session:get_history(Pid),
-            Info = bc_context:gather(#{agent_id => AgentId, history => History}),
+            Info = bc_context:gather(#{agent_id => AgentId, history => History, session_id => SessionId}),
             Html = bc_context:format_telegram(Info),
             PlainFallback = bc_context:format_text(Info),
             send_message_html(binary_to_integer(ChatId), Html, PlainFallback, TokenState);

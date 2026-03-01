@@ -182,7 +182,7 @@ handle_remote_context(SessionId, AgentId) ->
     case rpc:call(Node, bc_session_registry, lookup, [SessionId]) of
         {ok, Pid} ->
             History = rpc:call(Node, bc_session, get_history, [Pid]),
-            Info = bc_context:gather(#{agent_id => AgentId, history => History}),
+            Info = bc_context:gather(#{agent_id => AgentId, history => History, session_id => SessionId}),
             Output = bc_context:format_text(Info, #{ansi => true}),
             io:format("~n~s~n> ", [Output]);
         _ ->
