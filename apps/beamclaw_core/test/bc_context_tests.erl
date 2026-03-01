@@ -20,6 +20,13 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("beamclaw_core/include/bc_types.hrl").
 
+%% ---- Version ----
+
+version_returns_binary_test() ->
+    Vsn = bc_context:version(),
+    ?assert(is_binary(Vsn)),
+    ?assertNotEqual(<<>>, Vsn).
+
 %% ---- Token estimation ----
 
 estimate_tokens_test() ->
@@ -44,6 +51,35 @@ context_window_known_models_test() ->
 context_window_unknown_model_test() ->
     ?assertEqual(128000, bc_context:context_window("unknown-model-v1")),
     ?assertEqual(128000, bc_context:context_window("some/random-model")).
+
+%% ---- get_model_name/1 (per-provider) ----
+
+get_model_name_openrouter_test() ->
+    application:set_env(beamclaw_core, providers,
+                        [{openrouter, #{model => "moonshotai/kimi-k2.5"}},
+                         {openai, #{model => "gpt-4o"}}]),
+    ?assertEqual("moonshotai/kimi-k2.5",
+                 bc_context:get_model_name(bc_provider_openrouter)).
+
+get_model_name_openai_test() ->
+    application:set_env(beamclaw_core, providers,
+                        [{openrouter, #{model => "moonshotai/kimi-k2.5"}},
+                         {openai, #{model => "gpt-4o"}}]),
+    ?assertEqual("gpt-4o",
+                 bc_context:get_model_name(bc_provider_openai)).
+
+get_model_name_unknown_provider_test() ->
+    application:set_env(beamclaw_core, providers,
+                        [{openrouter, #{model => "anthropic/claude-sonnet-4-5"}}]),
+    %% Unknown provider falls back to openrouter key
+    ?assertEqual("anthropic/claude-sonnet-4-5",
+                 bc_context:get_model_name(some_unknown_provider)).
+
+get_model_name_binary_model_test() ->
+    application:set_env(beamclaw_core, providers,
+                        [{openai, #{model => <<"gpt-4o-mini">>}}]),
+    ?assertEqual("gpt-4o-mini",
+                 bc_context:get_model_name(bc_provider_openai)).
 
 %% ---- Format size ----
 
@@ -70,7 +106,8 @@ gather_empty_history_test_() ->
              ?assertEqual(0, maps:get(message_count, Info)),
              ?assert(maps:get(context_window, Info) > 0),
              ?assert(is_list(maps:get(categories, Info))),
-             ?assertEqual(7, length(maps:get(categories, Info)))
+             ?assertEqual(7, length(maps:get(categories, Info))),
+             ?assert(is_binary(maps:get(version, Info)))
          end]
      end}.
 
@@ -107,6 +144,7 @@ format_text_output_test_() ->
                                         history => []}),
              Output = bc_context:format_text(Info),
              %% Should contain key sections
+             ?assertNotEqual(nomatch, binary:match(Output, <<"BeamClaw">>)),
              ?assertNotEqual(nomatch, binary:match(Output, <<"Context Usage">>)),
              ?assertNotEqual(nomatch, binary:match(Output, <<"tokens">>)),
              ?assertNotEqual(nomatch, binary:match(Output, <<"Bootstrap files">>)),
@@ -127,6 +165,7 @@ format_text_ansi_test_() ->
              Output = bc_context:format_text(Info, #{ansi => true}),
              %% ANSI output should contain escape codes
              ?assertNotEqual(nomatch, binary:match(Output, <<"\e[">>)),
+             ?assertNotEqual(nomatch, binary:match(Output, <<"BeamClaw">>)),
              ?assertNotEqual(nomatch, binary:match(Output, <<"Context Usage">>))
          end]
      end}.
@@ -149,7 +188,7 @@ format_text_no_ansi_test_() ->
 
 bar_rendering_test() ->
     %% Build a properly structured info map for a known ratio
-    Info = #{model => "test-model", context_window => 1000,
+    Info = #{version => <<"0.1.0">>, model => "test-model", context_window => 1000,
              total => 500, bootstrap_tokens => 100,
              daily_tokens => 50, skill_tokens => 50, tool_tokens => 100,
              message_tokens => 200, compaction_buffer => 200,
@@ -306,7 +345,7 @@ format_telegram_bootstrap_test_() ->
 
 format_telegram_emoji_grid_test() ->
     %% Verify emoji mapping covers all cell types
-    Info = #{model => "test-model", context_window => 1000,
+    Info = #{version => <<"0.1.0">>, model => "test-model", context_window => 1000,
              total => 500, bootstrap_tokens => 100,
              daily_tokens => 50, skill_tokens => 50, tool_tokens => 100,
              message_tokens => 200, compaction_buffer => 200,
@@ -337,6 +376,38 @@ format_telegram_emoji_grid_test() ->
     %% Black circle (compaction)
     ?assertNotEqual(nomatch, binary:match(Output, <<"\xe2\x9a\xab">>)).
 
+%% ---- Grid: no clipping regression ----
+
+grid_no_clipping_test() ->
+    %% Regression: ceiling division on small segments caused total > 100 cells,
+    %% clipping the compaction buffer via lists:sublist(Grid, 100).
+    Info = #{context_window => 256000,
+             bootstrap_tokens => 2100,
+             daily_tokens => 0,
+             skill_tokens => 473,
+             tool_tokens => 1000,
+             message_tokens => 43,
+             compaction_buffer => 51200,    %% 20% of 256k
+             free_space => 201184},
+    Grid = bc_context:build_grid(Info),
+    ?assertEqual(100, length(Grid)),
+    CompCells = length([C || C <- Grid, C =:= compaction]),
+    ?assertEqual(20, CompCells).
+
+grid_all_zero_test() ->
+    %% All segments zero — grid should be 100 free cells
+    Info = #{context_window => 128000,
+             bootstrap_tokens => 0,
+             daily_tokens => 0,
+             skill_tokens => 0,
+             tool_tokens => 0,
+             message_tokens => 0,
+             compaction_buffer => 0,
+             free_space => 128000},
+    Grid = bc_context:build_grid(Info),
+    ?assertEqual(100, length(Grid)),
+    ?assertEqual(100, length([C || C <- Grid, C =:= free])).
+
 %% ---- Test setup/teardown ----
 
 setup_gather() ->
@@ -346,7 +417,7 @@ setup_gather() ->
     application:set_env(beamclaw_core, providers,
                         [{openrouter, #{model => "anthropic/claude-sonnet-4-5"}}]),
     application:set_env(beamclaw_core, agentic_loop,
-                        #{compaction_target => 20}),
+                        #{compaction_threshold_pct => 80}),
     application:set_env(beamclaw_core, default_agent, <<"default">>),
     %% Ensure the default agent workspace exists
     ensure_test_workspace(),

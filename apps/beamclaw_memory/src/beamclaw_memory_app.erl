@@ -33,25 +33,40 @@ stop(_State) ->
 %% Mnesia initialisation
 %% ---------------------------------------------------------------------------
 
-%% Ensure Mnesia is running and the bc_memory_entries table exists.
+%% Ensure Mnesia is running with a disc schema and the bc_memory_entries table
+%% exists.
 %%
-%% Schema creation must happen before mnesia:start/0 — but if Mnesia is already
-%% running (e.g. listed in `applications` or started in a shell), we skip that
-%% step and go straight to table creation.
+%% When Mnesia is listed in the app's `applications` list, OTP auto-starts it
+%% before start/2 runs. On a fresh install (no schema on disk) this means
+%% Mnesia is already running but with use_dir=false — so tables would be
+%% created as ram_copies, silently losing persistence.
 %%
-%% Storage type is disc_copies when a disc schema exists (production), otherwise
-%% ram_copies (dev/test shell without schema setup).
+%% Fix: detect use_dir=false, stop Mnesia, create the disc schema, restart.
 init_mnesia() ->
     case mnesia:system_info(is_running) of
         yes ->
-            ensure_tables();
+            case mnesia:system_info(use_dir) of
+                true ->
+                    %% Schema exists on disk — disc_copies will be used
+                    ensure_tables();
+                false ->
+                    %% Mnesia auto-started without disk schema.
+                    %% Stop, create schema, restart to enable disc_copies.
+                    mnesia:stop(),
+                    ok = ensure_schema(),
+                    ok = mnesia:start(),
+                    ensure_tables()
+            end;
         _ ->
-            case mnesia:create_schema([node()]) of
-                ok                                -> ok;
-                {error, {_, {already_exists, _}}} -> ok
-            end,
+            ok = ensure_schema(),
             ok = mnesia:start(),
             ensure_tables()
+    end.
+
+ensure_schema() ->
+    case mnesia:create_schema([node()]) of
+        ok                                -> ok;
+        {error, {_, {already_exists, _}}} -> ok
     end.
 
 ensure_tables() ->

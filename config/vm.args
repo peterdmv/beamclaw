@@ -23,12 +23,23 @@
 ## Appropriate for latency-tolerant workloads (AI chat is bursty, not HFT).
 +sbwt none
 
+## Enable Unicode printable character detection.
+## Required for io:format("~ts") to correctly handle non-Latin-1 codepoints.
++pc unicode
+
 ## Reduce memory footprint for idle schedulers.
 +scl false
 
 ## Allow the VM to return memory to the OS more aggressively.
 +MBas aobf
 +MBlmbcs 512
+
+## Mnesia data directory.
+## Points to the persistent volume in Docker (/home/beamclaw/.beamclaw/mnesia).
+## For local dev, ~/.beamclaw/mnesia is used (created automatically by Mnesia).
+## Without this flag, Mnesia defaults to Mnesia.<nodename>/ in the release WORKDIR,
+## which is lost on Docker container rebuild.
+-mnesia dir '"/home/beamclaw/.beamclaw/mnesia"'
 
 ## Crash dump location (writable at runtime).
 -env ERL_CRASH_DUMP /tmp/beamclaw_erl_crash.dump

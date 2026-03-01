@@ -2,6 +2,7 @@ services:
   beamclaw:
     build: .
     container_name: beamclaw
+    hostname: beamclaw
     restart: unless-stopped
     ports:
       - "${BEAMCLAW_PORT:-18800}:18800"

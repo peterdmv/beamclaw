@@ -17,6 +17,8 @@ resolved at runtime by `bc_config:get/2` via `os:getenv/1`.
 | `OPENROUTER_API_KEY` | Yes (if using OpenRouter) | OpenRouter API key (`sk-or-...`) |
 | `OPENAI_API_KEY` | Yes (if using OpenAI) | OpenAI API key (`sk-...`) |
 | `TELEGRAM_BOT_TOKEN` | Only if using Telegram | Telegram bot token from @BotFather |
+| `TELEGRAM_WEBHOOK_URL` | Only if mode => webhook | Public HTTPS URL for Telegram webhook delivery |
+| `TELEGRAM_WEBHOOK_SECRET` | Only if mode => webhook | Secret token for webhook request validation (fail-closed: webhook endpoint rejects all requests when unset) |
 | `BEAMCLAW_PORT` | No | Override gateway HTTP port (default: `18800`) |
 | `BEAMCLAW_COOKIE` | No | Erlang cluster cookie (default: `beamclaw_dev`) |
 | `BEAMCLAW_HOME` | No | Override workspace base directory (default: `~/.beamclaw`) |
@@ -62,22 +64,32 @@ them to a file — `.env` and `*.secret` files are excluded by `.gitignore`.
     %% Agentic loop tuning.
     {agentic_loop, #{
         %% Maximum number of tool call iterations per turn before giving up.
-        max_tool_iterations  => 10,
-        %% Trigger context compaction when history exceeds this many messages.
-        compaction_threshold => 50,
-        %% Keep this many recent messages verbatim after compaction.
-        compaction_target    => 20,
+        max_tool_iterations      => 10,
+        %% Trigger context compaction when history tokens exceed this
+        %% percentage of the model's context window. Token estimation
+        %% uses byte_size/4 (~4 chars per token).
+        compaction_threshold_pct => 80,
+        %% After compaction, keep recent messages whose cumulative tokens
+        %% fit within this percentage of the context window.
+        compaction_target_pct    => 40,
+        %% Provider used for compaction summarization LLM call.
+        %% Defaults to default_provider when not set.
+        %% Allows using a cheap/fast model for summarization.
+        compaction_provider      => openrouter,
+        %% Model override for compaction summarization.
+        %% Defaults to the compaction_provider's configured model when not set.
+        compaction_model         => "moonshotai/kimi-k2.5",
         %% Progressive streaming: send chunks of this many characters.
-        stream_chunk_size    => 80,
+        stream_chunk_size        => 80,
         %% Pre-compaction memory flush: fire a hidden LLM turn before compacting
         %% to let the agent save durable memories to workspace files.
-        memory_flush         => true,
+        memory_flush             => true,
         %% Auto-context: BM25 search of MEMORY.md before each LLM call.
         %% Injects top matching snippets as context. Off by default to
         %% avoid unnecessary token usage.
-        auto_context         => false,
+        auto_context             => false,
         %% Maximum number of auto-context snippets to inject per turn.
-        auto_context_limit   => 3
+        auto_context_limit       => 3
     }},
 
     %% Default autonomy level for new sessions.
@@ -163,6 +175,14 @@ to the agentic loop.
         {telegram, #{
             token => {env, "TELEGRAM_BOT_TOKEN"},
             mode  => long_poll,  %% or: webhook
+            %% Webhook mode settings (only used when mode => webhook):
+            %% TELEGRAM_WEBHOOK_URL and TELEGRAM_WEBHOOK_SECRET are read
+            %% directly from env vars at runtime (not via config) to avoid
+            %% crashes when these vars are unset in long_poll mode.
+            %% When mode => webhook, set_webhook is called on startup to
+            %% register the URL and secret with Telegram. The webhook
+            %% handler (POST /webhook/telegram) validates the secret
+            %% header on every request (fail-closed: rejects if unset).
             %% Access control policy for direct messages.
             %% pairing   — unknown users get a code; blocked until approved (default)
             %% allowlist — unknown users silently dropped; no codes issued
@@ -351,6 +371,38 @@ backend automatically falls back to `ram_copies`.
 | `heartbeat.suppress_ok` | boolean | `true` | Suppress delivery when LLM responds `HEARTBEAT_OK` |
 | `heartbeat.active_hours` | tuple | `{8, 22}` | UTC hour range for heartbeat delivery |
 
+### beamclaw_core — Session Maintenance
+
+```erlang
+{maintenance, #{
+    enabled                       => false,   %% opt-in proactive maintenance
+    scan_interval_ms              => 300000,   %% 5 minutes between scans
+    idle_compaction_minutes       => 15,       %% idle time before compaction
+    idle_compaction_threshold_pct => 20,       %% trigger: >20% of context window
+    idle_compaction_target_pct    => 10,       %% compact down to 10% of window
+    quiet_hours                   => {2, 4},   %% UTC hour range for nightly
+    nightly_min_messages          => 10,       %% min history for nightly flush
+    pre_expiry_minutes            => 10        %% flush window before TTL expiry
+}}
+```
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | boolean | `false` | Enable proactive session maintenance |
+| `scan_interval_ms` | integer | `300000` | Scan interval (5 minutes) |
+| `idle_compaction_minutes` | integer | `15` | Minimum idle time (minutes) before a session is eligible for idle compaction |
+| `idle_compaction_threshold_pct` | integer | `20` | Token threshold as % of context window — idle sessions above this get compacted |
+| `idle_compaction_target_pct` | integer | `10` | Target token level after compaction (% of context window) |
+| `quiet_hours` | tuple | `{2, 4}` | UTC hour range for aggressive nightly maintenance |
+| `nightly_min_messages` | integer | `10` | Minimum history messages for a session to be included in nightly flush |
+| `pre_expiry_minutes` | integer | `10` | Minutes before TTL expiry to extract memories from idle sessions |
+
+When enabled, `bc_session_maintenance` runs three tasks on each scan tick:
+
+1. **Idle compaction**: sessions idle > `idle_compaction_minutes` with history tokens > `idle_compaction_threshold_pct`% of the context window get a memory flush + aggressive compaction (down to `idle_compaction_target_pct`%).
+2. **Nightly maintenance**: during `quiet_hours` (once per day), all non-busy sessions with sufficient history get a memory flush + aggressive compaction.
+3. **Pre-expiry flush**: sessions approaching TTL expiry get a memory flush to extract knowledge before deletion.
+
 ### beamclaw_obs
 
 ```erlang
@@ -411,6 +463,7 @@ Key flags in `config/vm.args`:
 |---|---|---|
 | `-sname beamclaw` | — | Local node name (no distribution). Use `-name` for clustered deployments. |
 | `-setcookie beamclaw_dev` | — | Cluster cookie. Override via `ERL_FLAGS="-setcookie $BEAMCLAW_COOKIE"`. |
+| `-mnesia dir '"/home/beamclaw/.beamclaw/mnesia"'` | — | Mnesia data directory. Points to the persistent volume in Docker. Without this, Mnesia writes to `Mnesia.<nodename>/` in the release WORKDIR, which is lost on container rebuild. For local dev, `~/.beamclaw/mnesia` is created automatically. |
 | `+S auto` | auto | Scheduler threads — matches available CPU cores. |
 | `+A 32` | 32 | Async I/O thread pool size. |
 | `+Q 65536` | 65536 | Max open ports (file descriptors). |

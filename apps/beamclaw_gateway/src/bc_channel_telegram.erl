@@ -65,8 +65,9 @@ init(Config) ->
             delete_webhook(State),
             self() ! poll;
         webhook ->
-            ok
+            set_webhook(State)
     end,
+    set_bot_commands(State),
     {ok, State}.
 
 listen(State) ->
@@ -194,37 +195,42 @@ dispatch_telegram_message(Update) ->
     ChatId   = integer_to_binary(maps:get(<<"id">>, Chat, 0)),
     Username = maps:get(<<"username">>, From, <<>>),
     {Content, Attachments} = extract_content_and_attachments(Msg, Text),
-    case bc_config:canonical_user_id() of
-        Canonical when Canonical =/= undefined ->
-            do_dispatch(Canonical, TgUserId, ChatId, Content, Msg, Attachments);
-        undefined ->
-            DmPolicy = get_dm_policy(),
-            case DmPolicy of
-                open ->
-                    do_dispatch(<<"tg:", TgUserId/binary>>, TgUserId, ChatId, Content, Msg, Attachments);
-                _ ->
-                    case is_user_allowed(TgUserId) of
-                        true ->
-                            do_dispatch(<<"tg:", TgUserId/binary>>, TgUserId, ChatId, Content, Msg, Attachments);
-                        false when DmPolicy =:= pairing ->
-                            Meta = #{<<"username">> => Username},
-                            {ok, Code, Status} = bc_pairing:request_pairing(telegram, TgUserId, Meta),
-                            case Status of
-                                created -> send_pairing_reply(ChatId, TgUserId, Code);
-                                existing -> ok
-                            end,
-                            ok;
-                        false ->
-                            %% allowlist mode — silently drop
-                            ok
-                    end
-            end
+    %% Access control runs FIRST, regardless of BEAMCLAW_USER.
+    DmPolicy = get_dm_policy(),
+    Allowed = case DmPolicy of
+        open -> true;
+        _    -> is_user_allowed(TgUserId)
+    end,
+    case Allowed of
+        true ->
+            UserId = case bc_config:canonical_user_id() of
+                Canonical when Canonical =/= undefined -> Canonical;
+                undefined -> <<"tg:", TgUserId/binary>>
+            end,
+            do_dispatch(UserId, TgUserId, ChatId, Content, Msg, Attachments);
+        false when DmPolicy =:= pairing ->
+            Meta = #{<<"username">> => Username},
+            {ok, Code, Status} = bc_pairing:request_pairing(telegram, TgUserId, Meta),
+            case Status of
+                created -> send_pairing_reply(ChatId, TgUserId, Code);
+                existing -> ok
+            end,
+            ok;
+        false ->
+            %% allowlist mode — silently drop
+            ok
     end.
 
 do_dispatch(UserId, TgUserId, ChatId, <<"/context", _/binary>>, _Msg, _Attachments) ->
     AgentId   = resolve_agent_id(TgUserId),
     SessionId = bc_session_registry:derive_session_id(UserId, AgentId, telegram),
     handle_context_command(SessionId, AgentId, ChatId),
+    ok;
+do_dispatch(UserId, TgUserId, ChatId, <<"/new", _/binary>>, _Msg, _Attachments) ->
+    AgentId   = resolve_agent_id(TgUserId),
+    SessionId = bc_session_registry:derive_session_id(UserId, AgentId, telegram),
+    ets:insert(bc_telegram_chat_map, {SessionId, ChatId}),
+    handle_new_command(SessionId, ChatId),
     ok;
 do_dispatch(UserId, TgUserId, ChatId, Content, Msg, Attachments) ->
     AgentId   = resolve_agent_id(TgUserId),
@@ -265,13 +271,56 @@ handle_context_command(SessionId, AgentId, ChatId) ->
     case bc_session_registry:lookup(SessionId) of
         {ok, Pid} ->
             History = bc_session:get_history(Pid),
-            Info = bc_context:gather(#{agent_id => AgentId, history => History}),
+            Info = bc_context:gather(#{agent_id => AgentId, history => History, session_id => SessionId}),
             Html = bc_context:format_telegram(Info),
             PlainFallback = bc_context:format_text(Info),
             send_message_html(binary_to_integer(ChatId), Html, PlainFallback, TokenState);
         {error, not_found} ->
             send_message_plain(binary_to_integer(ChatId),
                                <<"No active session.">>, TokenState)
+    end.
+
+handle_new_command(SessionId, ChatId) ->
+    Token = resolve_token(),
+    TokenState = #{token => Token},
+    IntChatId = binary_to_integer(ChatId),
+    case bc_session_registry:lookup(SessionId) of
+        {ok, Pid} ->
+            case bc_session:is_busy(Pid) of
+                true ->
+                    send_message_plain(IntChatId,
+                        <<"Session is busy — wait for the current response to finish.">>,
+                        TokenState);
+                false ->
+                    History = bc_session:get_history(Pid),
+                    case History of
+                        [] ->
+                            send_message_plain(IntChatId,
+                                <<"Session is already empty.">>, TokenState);
+                        _ ->
+                            send_action(IntChatId, <<"typing">>, TokenState),
+                            maybe_memory_flush(Pid),
+                            bc_session:clear_history(Pid),
+                            bc_obs:emit(session_reset, #{session_id => SessionId}),
+                            send_message_plain(IntChatId,
+                                <<"Session cleared. Memories saved.">>, TokenState)
+                    end
+            end;
+        {error, not_found} ->
+            send_message_plain(IntChatId,
+                <<"No active session.">>, TokenState)
+    end.
+
+maybe_memory_flush(SessionPid) ->
+    case bc_config:get(beamclaw_core, agentic_loop, #{}) of
+        #{memory_flush := false} -> ok;
+        _ ->
+            case bc_memory_flush:run(SessionPid) of
+                ok -> ok;
+                {error, Reason} ->
+                    logger:warning("[telegram] memory flush failed before /new: ~p",
+                                   [Reason])
+            end
     end.
 
 extract_content_and_attachments(Msg, Text) ->
@@ -430,6 +479,62 @@ resolve_token() ->
     Channels = bc_config:get(beamclaw_gateway, channels, []),
     TgConfig = proplists:get_value(telegram, Channels, #{}),
     bc_config:resolve(maps:get(token, TgConfig, {env, "TELEGRAM_BOT_TOKEN"})).
+
+resolve_webhook_secret() ->
+    case os:getenv("TELEGRAM_WEBHOOK_SECRET") of
+        false -> undefined;
+        Val   -> list_to_binary(Val)
+    end.
+
+resolve_webhook_url() ->
+    case os:getenv("TELEGRAM_WEBHOOK_URL") of
+        false -> undefined;
+        Val   -> list_to_binary(Val)
+    end.
+
+set_webhook(#{token := Token}) ->
+    case {resolve_webhook_url(), resolve_webhook_secret()} of
+        {undefined, _} ->
+            logger:error("[telegram] webhook mode requires webhook_url config");
+        {_, undefined} ->
+            logger:error("[telegram] webhook mode requires webhook_secret config");
+        {WebhookUrl, Secret} ->
+            Url = make_api_url(Token, "/setWebhook"),
+            Body = jsx:encode(#{url => iolist_to_binary(WebhookUrl),
+                                secret_token => iolist_to_binary(Secret)}),
+            case hackney:request(post, Url,
+                                 [{<<"content-type">>, <<"application/json">>}],
+                                 Body, [{recv_timeout, 10000}, with_body]) of
+                {ok, 200, _, _} ->
+                    logger:info("[telegram] webhook set: url=~s", [WebhookUrl]);
+                {ok, Code, _, RBody} ->
+                    logger:warning("[telegram] setWebhook failed: ~p ~s",
+                                   [Code, RBody]);
+                {error, Reason} ->
+                    logger:warning("[telegram] setWebhook error: ~p", [Reason])
+            end
+    end.
+
+set_bot_commands(#{token := Token}) ->
+    Url = make_api_url(Token, "/setMyCommands"),
+    Commands = [
+        #{<<"command">> => <<"context">>,
+          <<"description">> => <<"Show context window usage">>},
+        #{<<"command">> => <<"new">>,
+          <<"description">> => <<"Start a fresh session">>}
+    ],
+    Body = jsx:encode(#{<<"commands">> => Commands}),
+    case hackney:request(post, Url,
+                         [{<<"content-type">>, <<"application/json">>}],
+                         Body, [{recv_timeout, 10000}, with_body]) of
+        {ok, 200, _, _} ->
+            logger:info("[telegram] bot commands registered");
+        {ok, Code, _, RBody} ->
+            logger:warning("[telegram] setMyCommands failed: ~p ~s",
+                           [Code, RBody]);
+        {error, Reason} ->
+            logger:warning("[telegram] setMyCommands error: ~p", [Reason])
+    end.
 
 resolve_agent_id(TgUserId) ->
     case bc_pairing:get_agent_id(telegram, TgUserId) of

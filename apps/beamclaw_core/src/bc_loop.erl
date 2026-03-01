@@ -116,8 +116,12 @@ idle(cast, {run, Message}, Data) ->
     bc_session:append_message(Data#loop_data.session_pid, UserMsg),
     History   = bc_session:get_history(Data#loop_data.session_pid),
     LoopCfg   = bc_config:get(beamclaw_core, agentic_loop, #{}),
-    Threshold = maps:get(compaction_threshold, LoopCfg, 50),
-    NextState = case length(History) > Threshold of
+    Model     = bc_context:get_model_name(Data#loop_data.provider_mod),
+    Window    = bc_context:context_window(Model),
+    ThreshPct = maps:get(compaction_threshold_pct, LoopCfg, 80),
+    TokenLimit = Window * ThreshPct div 100,
+    HistoryTokens = bc_context:estimate_history_tokens(History),
+    NextState = case HistoryTokens > TokenLimit of
         true  -> compacting;
         false -> streaming
     end,
@@ -140,7 +144,8 @@ compacting(enter, _OldState, Data) ->
 compacting(cast, do_memory_flush, Data) ->
     logger:debug("[loop] pre-compaction memory flush: session=~s",
                  [Data#loop_data.session_id]),
-    try run_memory_flush(Data)
+    try bc_memory_flush:run(Data#loop_data.session_pid, #{
+            provider_mod => Data#loop_data.provider_mod})
     catch Class:Reason:Stack ->
         logger:warning("[loop] memory flush failed: ~p:~p ~p",
                        [Class, Reason, Stack])
@@ -638,47 +643,3 @@ auto_context_search(Query, Limit, Data) ->
             end
     end.
 
-%% Pre-compaction memory flush: ask the LLM to save durable memories before
-%% history is compacted. This is a hidden turn — not routed to the user.
-run_memory_flush(Data) ->
-    History    = bc_session:get_history(Data#loop_data.session_pid),
-    SystemMsgs = bc_system_prompt:assemble(Data#loop_data.agent_id),
-    FlushMsg   = #bc_message{
-        id      = generate_id(),
-        role    = system,
-        content = <<"Session history is about to be compacted. Before the older messages "
-                    "are summarized and trimmed, save any durable facts, observations, or "
-                    "context worth preserving. Use the workspace_memory tool:\n"
-                    "- Identity info → update_bootstrap (file: IDENTITY.md)\n"
-                    "- User info → update_bootstrap (file: USER.md)\n"
-                    "- Session observations → append_daily\n"
-                    "- Long-term facts → append (to MEMORY.md)\n"
-                    "If there is nothing worth saving, respond with just 'ok'.">>,
-        ts      = erlang:system_time(millisecond)
-    },
-    FullHistory = SystemMsgs ++ History ++ [FlushMsg],
-    Tools    = bc_tool_registry:list(),
-    ToolDefs = [Def || {_Name, _Mod, Def} <- Tools],
-    Options  = #{tools => ToolDefs},
-    ProvMod   = Data#loop_data.provider_mod,
-    ProvState = Data#loop_data.provider_state,
-    case ProvMod:complete(FullHistory, Options, ProvState) of
-        {ok, ResponseMsg, _NewProvState} ->
-            ToolCalls = bc_tool_parser:parse(ResponseMsg),
-            execute_flush_tool_calls(ToolCalls, Data);
-        {error, Reason, _NewProvState} ->
-            logger:warning("[loop] memory flush LLM call failed: ~p", [Reason]),
-            ok
-    end.
-
-execute_flush_tool_calls([], _Data) -> ok;
-execute_flush_tool_calls(Calls, Data) ->
-    SessionRef = make_session_ref(Data),
-    lists:foreach(fun(TC) ->
-        logger:debug("[loop] memory flush tool call: ~s", [TC#bc_tool_call.name]),
-        try run_tool(TC, SessionRef)
-        catch Class:Reason ->
-            logger:warning("[loop] memory flush tool ~s failed: ~p:~p",
-                           [TC#bc_tool_call.name, Class, Reason])
-        end
-    end, Calls).

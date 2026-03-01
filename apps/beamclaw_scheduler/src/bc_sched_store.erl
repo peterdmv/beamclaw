@@ -49,14 +49,25 @@ start_link() ->
 init_table() ->
     case mnesia:system_info(is_running) of
         yes ->
-            ensure_table();
+            case mnesia:system_info(use_dir) of
+                true ->
+                    ensure_table();
+                false ->
+                    mnesia:stop(),
+                    ok = ensure_schema(),
+                    ok = mnesia:start(),
+                    ensure_table()
+            end;
         _ ->
-            case mnesia:create_schema([node()]) of
-                ok                                -> ok;
-                {error, {_, {already_exists, _}}} -> ok
-            end,
+            ok = ensure_schema(),
             ok = mnesia:start(),
             ensure_table()
+    end.
+
+ensure_schema() ->
+    case mnesia:create_schema([node()]) of
+        ok                                -> ok;
+        {error, {_, {already_exists, _}}} -> ok
     end.
 
 -doc "Save (upsert) a job record.".

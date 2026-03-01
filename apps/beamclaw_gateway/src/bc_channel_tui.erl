@@ -57,7 +57,9 @@ init(Config) ->
                 user_id    => UserId,
                 agent_id   => AgentId},
     case Enabled of
-        true  -> self() ! start_io;
+        true  ->
+            io:setopts(standard_io, [{encoding, unicode}]),
+            self() ! start_io;
         false -> ok
     end,
     {ok, State}.
@@ -67,9 +69,9 @@ listen(State) ->
 
 send(_, #bc_message{content = Content, attachments = Attachments}, State)
   when is_binary(Content) ->
-    io:format("~n[assistant] ~s~n", [Content]),
+    io:format("~n[assistant] ~ts~n", [Content]),
     lists:foreach(fun({Mime, _B64}) ->
-        io:format("[Attachment: ~s]~n", [Mime])
+        io:format("[Attachment: ~ts]~n", [Mime])
     end, Attachments),
     io:format("> "),
     {ok, State};
@@ -81,7 +83,7 @@ send_typing(_, _State) ->
     ok.
 
 update_draft(_, _, Content, State) ->
-    io:format("\r~s", [Content]),
+    io:format("\r~ts", [Content]),
     {ok, State}.
 
 finalize_draft(_, _, State) ->
@@ -103,8 +105,9 @@ handle_cast({notify_typing, SessionId}, State) ->
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-handle_info(start_io, State) ->
-    io:format("BeamClaw TUI — type a message and press Enter.~n> "),
+handle_info(start_io, #{session_id := SId, agent_id := AId} = State) ->
+    io:format("BeamClaw TUI (agent: ~ts, session: ~ts) — type a message and press Enter.~n> ",
+              [AId, SId]),
     self() ! read_line,
     {noreply, State};
 handle_info(read_line, State) ->
@@ -127,6 +130,9 @@ handle_info({line_result, Line}, #{session_id := SessionId,
             self() ! read_line;
         <<"/context", _/binary>> ->
             handle_context_command(SessionId, AgentId),
+            self() ! read_line;
+        <<"/new", _/binary>> ->
+            handle_new_command(SessionId),
             self() ! read_line;
         _ ->
             ChannelMsg = #bc_channel_message{
@@ -155,11 +161,46 @@ handle_context_command(SessionId, AgentId) ->
     case bc_session_registry:lookup(SessionId) of
         {ok, Pid} ->
             History = bc_session:get_history(Pid),
-            Info = bc_context:gather(#{agent_id => AgentId, history => History}),
+            Info = bc_context:gather(#{agent_id => AgentId, history => History, session_id => SessionId}),
             Output = bc_context:format_text(Info, #{ansi => true}),
-            io:format("~n~s~n> ", [Output]);
+            io:format("~n~ts~n> ", [Output]);
         {error, not_found} ->
             io:format("No active session.~n> ")
+    end.
+
+handle_new_command(SessionId) ->
+    case bc_session_registry:lookup(SessionId) of
+        {ok, Pid} ->
+            case bc_session:is_busy(Pid) of
+                true ->
+                    io:format("Session is busy — wait for the current response to finish.~n> ");
+                false ->
+                    History = bc_session:get_history(Pid),
+                    case History of
+                        [] ->
+                            io:format("Session is already empty.~n> ");
+                        _ ->
+                            io:format("[...saving memories...]~n"),
+                            maybe_memory_flush(Pid),
+                            bc_session:clear_history(Pid),
+                            bc_obs:emit(session_reset, #{session_id => SessionId}),
+                            io:format("Session cleared. Memories saved.~n> ")
+                    end
+            end;
+        {error, not_found} ->
+            io:format("No active session.~n> ")
+    end.
+
+maybe_memory_flush(SessionPid) ->
+    case bc_config:get(beamclaw_core, agentic_loop, #{}) of
+        #{memory_flush := false} -> ok;
+        _ ->
+            case bc_memory_flush:run(SessionPid) of
+                ok -> ok;
+                {error, Reason} ->
+                    logger:warning("[tui] memory flush failed before /new: ~p",
+                                   [Reason])
+            end
     end.
 
 tui_user_id() ->

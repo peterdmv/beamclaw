@@ -29,21 +29,37 @@ Algorithm:
 
 -include_lib("beamclaw_core/include/bc_types.hrl").
 
--export([compact/1]).
+-export([compact/1, compact/2]).
+%% Exported for reuse by bc_memory_flush and testing
+-export([split_by_tokens/2, provider_mod/1, get_provider_config/1, generate_id/0]).
 
 -define(SUMMARY_PREFIX, <<"[Conversation summary]: ">>).
 
 -doc "Compact the history held in SessionPid. Writes the result back.".
 -spec compact(SessionPid :: pid()) -> ok.
 compact(SessionPid) ->
+    compact(SessionPid, #{}).
+
+-doc """
+Compact with options. Supported:
+  target_pct => integer()  — override compaction_target_pct (e.g. 10 for aggressive)
+""".
+-spec compact(SessionPid :: pid(), Opts :: map()) -> ok.
+compact(SessionPid, Opts) ->
     History = bc_session:get_history(SessionPid),
     Cfg     = bc_config:get(beamclaw_core, agentic_loop, #{}),
-    Target  = maps:get(compaction_target, Cfg, 20),
+    ProvMod = bc_session:get_provider_mod(SessionPid),
+    Model   = bc_context:get_model_name(ProvMod),
+    Window  = bc_context:context_window(Model),
+    TargetPct    = maps:get(target_pct, Opts,
+                            maps:get(compaction_target_pct, Cfg, 40)),
+    TargetTokens = Window * TargetPct div 100,
+    HistoryTokens = bc_context:estimate_history_tokens(History),
     Before  = length(History),
-    case Before =< Target of
+    case HistoryTokens =< TargetTokens orelse Before =< 2 of
         true -> ok;
         false ->
-            {OldMsgs, KeepMsgs} = lists:split(Before - Target, History),
+            {OldMsgs, KeepMsgs} = split_by_tokens(History, TargetTokens),
             {NewHistory, MaybeSummary} = case summarize(OldMsgs) of
                 {ok, Summary} ->
                     SummaryMsg = #bc_message{
@@ -65,6 +81,44 @@ compact(SessionPid) ->
             ok
     end.
 
+%% Split history into {OldMsgs, KeepMsgs} where KeepMsgs are the most recent
+%% messages whose cumulative tokens fit within TargetTokens. Always keeps at
+%% least one message (the most recent) in KeepMsgs.
+-spec split_by_tokens([#bc_message{}], non_neg_integer()) ->
+    {[#bc_message{}], [#bc_message{}]}.
+split_by_tokens(History, TargetTokens) ->
+    %% Walk from the tail (most recent first), accumulate token counts.
+    %% Prepending to the accumulator naturally produces chronological order.
+    Reversed = lists:reverse(History),
+    {KeepMsgs, _Acc} = lists:foldl(fun(Msg, {Keep, Tokens}) ->
+        MsgTokens = msg_tokens(Msg),
+        NewTokens = Tokens + MsgTokens,
+        case NewTokens > TargetTokens andalso Keep =/= [] of
+            true  -> {Keep, NewTokens};  %% stop adding
+            false -> {[Msg | Keep], NewTokens}
+        end
+    end, {[], 0}, Reversed),
+    KeepLen = length(KeepMsgs),
+    TotalLen = length(History),
+    case KeepLen >= TotalLen of
+        true  -> {[], History};
+        false -> {lists:sublist(History, TotalLen - KeepLen), KeepMsgs}
+    end.
+
+msg_tokens(#bc_message{content = Content, tool_calls = TCs}) ->
+    ContentTokens = bc_context:estimate_tokens(Content),
+    TCTokens = lists:foldl(fun(TC, Acc) ->
+        case TC of
+            #bc_tool_call{name = N, args = Args} ->
+                Acc + bc_context:estimate_tokens(N) +
+                    (byte_size(jsx:encode(Args)) div 4);
+            _ when is_map(TC) ->
+                Acc + (byte_size(jsx:encode(TC)) div 4);
+            _ -> Acc
+        end
+    end, 0, TCs),
+    ContentTokens + TCTokens.
+
 summarize(Messages) ->
     SystemPrompt = #bc_message{
         id      = generate_id(),
@@ -81,8 +135,18 @@ summarize(Messages) ->
         content = ConvText,
         ts      = erlang:system_time(millisecond)
     },
-    ProvMod    = bc_config:get(beamclaw_core, default_provider, openrouter),
-    ProvConfig = get_provider_config(ProvMod),
+    LoopCfg = bc_config:get(beamclaw_core, agentic_loop, #{}),
+    CompactionProvider = maps:get(compaction_provider, LoopCfg, undefined),
+    ProviderKey = case CompactionProvider of
+        undefined -> bc_config:get(beamclaw_core, default_provider, openrouter);
+        Key       -> Key
+    end,
+    ProvMod = provider_mod(ProviderKey),
+    ProvConfig0 = get_provider_config(ProvMod),
+    ProvConfig = case maps:get(compaction_model, LoopCfg, undefined) of
+        undefined -> ProvConfig0;
+        M         -> ProvConfig0#{model => M}
+    end,
     case ProvMod:init(ProvConfig) of
         {ok, ProvState} ->
             case ProvMod:complete([SystemPrompt, UserMsg], #{}, ProvState) of
@@ -92,6 +156,10 @@ summarize(Messages) ->
         {error, _} ->
             error
     end.
+
+provider_mod(openrouter) -> bc_provider_openrouter;
+provider_mod(openai)     -> bc_provider_openai;
+provider_mod(_)          -> bc_provider_openrouter.
 
 messages_to_text(Messages) ->
     Parts = lists:map(fun(#bc_message{role = Role, content = Content}) ->

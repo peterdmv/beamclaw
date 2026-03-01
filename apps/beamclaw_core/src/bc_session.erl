@@ -35,8 +35,14 @@ bc_session_registry, fetches history, and announces its new PID here.
          dispatch_run/2,
          get_history/1,
          set_history/2,
+         clear_history/1,
          get_channel_mod/1,
          get_agent_id/1,
+         get_provider_mod/1,
+         get_session_id/1,
+         get_last_activity/1,
+         is_busy/1,
+         get_state_summary/1,
          append_message/2,
          set_loop_pid/2,
          turn_complete/2]).
@@ -57,7 +63,8 @@ bc_session_registry, fetches history, and announces its new PID here.
     memory_mod    :: module(),
     history       :: [#bc_message{}],
     pending_runs  :: queue:queue(),
-    config        :: map()
+    config        :: map(),
+    last_activity :: non_neg_integer()   %% Unix seconds (erlang:system_time(second))
 }).
 
 start_link(Config) ->
@@ -91,6 +98,39 @@ get_channel_mod(Pid) ->
 get_agent_id(Pid) ->
     gen_server:call(Pid, get_agent_id).
 
+-doc "Return the provider module for this session.".
+-spec get_provider_mod(Pid :: pid()) -> module().
+get_provider_mod(Pid) ->
+    gen_server:call(Pid, get_provider_mod).
+
+-doc "Return the session ID.".
+-spec get_session_id(Pid :: pid()) -> binary().
+get_session_id(Pid) ->
+    gen_server:call(Pid, get_session_id).
+
+-doc "Return the last activity timestamp (Unix seconds).".
+-spec get_last_activity(Pid :: pid()) -> non_neg_integer().
+get_last_activity(Pid) ->
+    gen_server:call(Pid, get_last_activity).
+
+-doc "Return whether the loop is currently busy processing a run.".
+-spec is_busy(Pid :: pid()) -> boolean().
+is_busy(Pid) ->
+    gen_server:call(Pid, is_busy).
+
+-doc """
+Batch query returning session summary. Minimizes gen_server round-trips
+during maintenance scans.
+""".
+-spec get_state_summary(Pid :: pid()) -> map().
+get_state_summary(Pid) ->
+    gen_server:call(Pid, get_state_summary).
+
+-doc "Atomically clear history and delete Mnesia persistence.".
+-spec clear_history(Pid :: pid()) -> ok.
+clear_history(Pid) ->
+    gen_server:call(Pid, clear_history).
+
 -doc "Append a single message to history (called by bc_loop).".
 -spec append_message(Pid :: pid(), Message :: #bc_message{}) -> ok.
 append_message(Pid, Message) ->
@@ -116,20 +156,21 @@ init(Config) ->
     DefaultAgent = bc_config:get(beamclaw_core, default_agent, <<"default">>),
     RestoredHistory = maybe_load_history(SessionId),
     State = #state{
-        session_id   = SessionId,
-        user_id      = maps:get(user_id,      Config, <<"anonymous">>),
-        channel_id   = maps:get(channel_id,   Config, <<"default">>),
-        agent_id     = maps:get(agent_id,     Config, DefaultAgent),
-        autonomy     = maps:get(autonomy,      Config,
-                           bc_config:get(beamclaw_core, autonomy_level, supervised)),
-        loop_pid     = undefined,
-        loop_busy    = false,
-        channel_mod  = maps:get(channel_mod,  Config, undefined),
-        provider_mod = maps:get(provider_mod, Config, bc_provider_openrouter),
-        memory_mod   = maps:get(memory_mod,   Config, bc_memory_ets),
-        history      = RestoredHistory,
-        pending_runs = queue:new(),
-        config       = Config
+        session_id    = SessionId,
+        user_id       = maps:get(user_id,      Config, <<"anonymous">>),
+        channel_id    = maps:get(channel_id,   Config, <<"default">>),
+        agent_id      = maps:get(agent_id,     Config, DefaultAgent),
+        autonomy      = maps:get(autonomy,      Config,
+                            bc_config:get(beamclaw_core, autonomy_level, supervised)),
+        loop_pid      = undefined,
+        loop_busy     = false,
+        channel_mod   = maps:get(channel_mod,  Config, undefined),
+        provider_mod  = maps:get(provider_mod, Config, bc_provider_openrouter),
+        memory_mod    = maps:get(memory_mod,   Config, bc_memory_ets),
+        history       = RestoredHistory,
+        pending_runs  = queue:new(),
+        config        = Config,
+        last_activity = erlang:system_time(second)
     },
     {ok, State}.
 
@@ -165,19 +206,21 @@ handle_cast({set_history, NewHistory}, State) ->
     {noreply, NewState};
 
 handle_cast({append_message, Msg}, State) ->
-    NewState = State#state{history = State#state.history ++ [Msg]},
+    NewState = State#state{history = State#state.history ++ [Msg],
+                           last_activity = erlang:system_time(second)},
     maybe_persist(NewState),
     {noreply, NewState};
 
 handle_cast({turn_complete, _Result}, State) ->
+    Now = erlang:system_time(second),
     case queue:out(State#state.pending_runs) of
         {{value, NextMsg}, Rest} ->
             %% Keep loop_pid; dispatch next queued run. Loop stays busy.
             gen_statem:cast(State#state.loop_pid, {run, NextMsg}),
-            {noreply, State#state{pending_runs = Rest}};
+            {noreply, State#state{pending_runs = Rest, last_activity = Now}};
         {empty, _} ->
             %% No pending runs — loop becomes idle (pid retained for next run).
-            {noreply, State#state{loop_busy = false}}
+            {noreply, State#state{loop_busy = false, last_activity = Now}}
     end;
 
 handle_cast(_Msg, State) ->
@@ -189,6 +232,29 @@ handle_call(get_channel_mod, _From, State) ->
     {reply, State#state.channel_mod, State};
 handle_call(get_agent_id, _From, State) ->
     {reply, State#state.agent_id, State};
+handle_call(get_provider_mod, _From, State) ->
+    {reply, State#state.provider_mod, State};
+handle_call(get_session_id, _From, State) ->
+    {reply, State#state.session_id, State};
+handle_call(get_last_activity, _From, State) ->
+    {reply, State#state.last_activity, State};
+handle_call(is_busy, _From, State) ->
+    {reply, State#state.loop_busy, State};
+handle_call(get_state_summary, _From, State) ->
+    Summary = #{session_id    => State#state.session_id,
+                user_id       => State#state.user_id,
+                agent_id      => State#state.agent_id,
+                provider_mod  => State#state.provider_mod,
+                last_activity => State#state.last_activity,
+                loop_busy     => State#state.loop_busy,
+                history_len   => length(State#state.history)},
+    {reply, Summary, State};
+handle_call(clear_history, _From, State) ->
+    case bc_config:get(beamclaw_core, session_persistence, true) of
+        true  -> bc_session_store:delete(State#state.session_id);
+        false -> ok
+    end,
+    {reply, ok, State#state{history = []}};
 handle_call(_Req, _From, State) ->
     {reply, {error, unknown}, State}.
 

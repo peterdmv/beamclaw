@@ -69,7 +69,7 @@ groups() ->
 init_per_suite(Config) ->
     Port = 19000 + (erlang:unique_integer([positive]) rem 1000),
 
-    %% Canonical user ID — bypasses Telegram pairing
+    %% Canonical user ID — shared session identity (dm_policy=open below)
     os:putenv("BEAMCLAW_USER", "ct-context-user"),
     os:putenv("OPENROUTER_API_KEY", "test-dummy-key"),
     os:putenv("TELEGRAM_BOT_TOKEN", "000000000:fake-token-for-ct"),

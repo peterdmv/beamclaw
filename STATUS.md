@@ -8,9 +8,11 @@ Core systems (M0–M10), workspaces (M11–M17), session persistence and sharing
 Docker sandbox (M25–M30), scheduler/heartbeat (M31–M37), Brave Search, bundled
 skills, on-demand skill loading, Telegram markdown-to-HTML formatting,
 BM25-based skill auto-injection, `/context` command, outgoing photo delivery,
-per-user agent mapping, voice message transcription, and A2A protocol
-(Post-M37) are all complete.
-668 EUnit tests + 41 CT tests pass (709 total).
+per-user agent mapping, voice message transcription, token-based compaction,
+webhook secret token validation, smart session memory maintenance,
+Telegram bot command registration, `/new` session reset,
+v0.1.0 release preparation, and A2A protocol (Post-M37) are all complete.
+710 EUnit tests + 41 CT tests pass (751 total).
 
 ---
 
@@ -71,50 +73,46 @@ per-user agent mapping, voice message transcription, and A2A protocol
 | Post-M37 | Outgoing Photo Delivery (Telegram + TUI) |
 | Post-M37 | Per-User Agent Mapping (Telegram Pairing) |
 | Post-M37 | Voice Message Transcription (Telegram → Groq Whisper) |
+| Post-M37 | Token-Based Automatic Compaction Trigger |
+| Post-M37 | Per-Session Provider Model for Compaction |
+| Post-M37 | Telegram Webhook Secret Token Validation |
+| Post-M37 | Fix Docker Cyclic Restarts (Webhook Env Vars) |
+| Post-M37 | Fix /context Compaction Buffer Display |
+| Post-M37 | Fix /context Grid Clipping Compaction Buffer Cells |
+| Post-M37 | Smart Session Memory Maintenance |
+| Post-M37 | Fix Mnesia Session Persistence Across Docker Rebuilds |
+| Post-M37 | Fix Mnesia Tables Always Created as ram_copies |
+| Post-M37 | Fix /context Header Token Count Including Compaction Buffer |
+| Post-M37 | Telegram Bot Commands Registration + `/new` Session Reset |
+| Post-M37 | v0.1.0 Release Preparation |
 | Post-M37 | A2A (Agent2Agent) Protocol |
 
 ---
 
 ## Recent Milestones
 
-### Post-M37 — Voice Message Transcription ✅
+### Post-M37 — Telegram Bot Commands Registration + `/new` Session Reset ✅
 
 | Task | Status | Notes |
 |------|--------|-------|
-| Create `bc_telegram_audio.erl` | ✅ | Pure-function: `extract_voice/1` (voice → audio fallback), `download/2` (delegates to `bc_telegram_photo:download/2`) |
-| Create `bc_stt.erl` | ✅ | Pure-function STT client: hackney multipart POST to OpenAI-compatible `/audio/transcriptions`, `transcribe/2,3` |
-| Voice branch in `extract_content_and_attachments/2` | ✅ | Falls through to `maybe_extract_voice/2` when no photo; works even if photo disabled |
-| `try_transcribe_voice/4` in `bc_channel_telegram.erl` | ✅ | Duration check → download → transcribe → `[Voice] ` prefix; graceful fallback on errors |
-| Voice config helpers | ✅ | `voice_enabled/0` (default false), `voice_max_duration/0` (120s), `voice_stt_config/0` |
-| Config: `voice` block in `sys.config` + `sys.docker.config` | ✅ | `{env, "GROQ_API_KEY"}`, `whisper-large-v3-turbo`, Groq base URL |
-| `gsk_` pattern in `bc_scrubber` | ✅ | Groq API keys scrubbed; `GROQ_API_KEY` added to sandbox `env_blocklist` |
-| EUnit tests | ✅ | 24 new: 11 audio extraction + 13 STT (multipart body, filenames, config, opts) |
-| Update CLAUDE.md + STATUS.md + docs | ✅ | File Layout, Configuration, Credential Scrubbing, milestone |
+| `bc_session.erl` — `clear_history/1` | ✅ | Atomic history clear + Mnesia delete |
+| `bc_channel_telegram.erl` — `setMyCommands` | ✅ | Registers `/context`, `/new` in bot menu on init |
+| `bc_channel_telegram.erl` — `/new` dispatch + handler | ✅ | Busy guard, memory flush, typing indicator |
+| `bc_channel_tui.erl` — `/new` dispatch + handler | ✅ | Same logic, `io:format` output |
+| `beamclaw_cli.erl` — `/new` in remote TUI | ✅ | All operations via `rpc:call/4` |
+| Documentation | ✅ | CLAUDE.md (obs event), docs/running.md, STATUS.md |
+| All tests pass | ✅ | 683 EUnit tests pass, 0 warnings |
 
-### Post-M37 — Per-User Agent Mapping ✅
+### Post-M37 — v0.1.0 Release Preparation ✅
 
 | Task | Status | Notes |
 |------|--------|-------|
-| v2 storage format in `bc_pairing.erl` | ✅ | `{"version": 2, "allowed": [{"id": "...", "agent_id": "..."}]}` with v1 auto-migration |
-| `approve/3` with agent_id | ✅ | New arity stores specified agent; `approve/2` defaults to `default_agent` config |
-| `get_agent_id/2` lookup | ✅ | Returns `{ok, AgentId}` or `{error, not_found}` |
-| `resolve_agent_id/1` in `bc_channel_telegram.erl` | ✅ | Both `do_dispatch` clauses use pairing lookup → config fallback |
-| `--agent NAME` flag in CLI `pair` command | ✅ | `beamclaw pair telegram CODE --agent mom` |
-| `pair list` shows agent column | ✅ | `telegram  12345  agent=mom` format |
-| EUnit tests | ✅ | 8 new: default/custom agent, get_agent_id, v1 migration, list/revoke/is_allowed v2 |
-| Update CLAUDE.md + STATUS.md | ✅ | CLI commands, milestone |
-
-### Post-M37 — Outgoing Photo Delivery ✅
-
-| Task | Status | Notes |
-|------|--------|-------|
-| `MEDIA:` token extraction in `bc_loop.erl` | ✅ | `extract_media/1`: parse `MEDIA: /path` from tool results, read file, base64-encode, attach to message |
-| `pending_media` field in loop state | ✅ | Accumulated across tool iterations, attached to final assistant message |
-| `sendPhoto` in `bc_channel_telegram.erl` | ✅ | Multipart form-data upload via `/sendPhoto` API, caption truncation (1024 char limit), text fallback on failure |
-| `is_image_mime/1` + `truncate_caption/1` | ✅ | Pure helpers for attachment routing and Telegram caption limits |
-| TUI attachment display in `bc_channel_tui.erl` | ✅ | `[Attachment: image/png]` indicator for terminal users |
-| EUnit tests | ✅ | 32 new: 18 media extraction (tokens, mime types, file I/O) + 14 Telegram photo (mime check, caption, multipart) |
-| Update CLAUDE.md + STATUS.md | ✅ | Obs events, file layout, milestone |
+| `bc_context.erl` — `version/0` + display in all formats | ✅ | Exported; shows "BeamClaw 0.1.0" in TUI, Telegram, SVG |
+| `CHANGELOG.md` — release notes | ✅ | New file, feature inventory for v0.1.0 |
+| `README.md` — fix stale content | ✅ | Repo URL, Docker image ref, app count (6→9), dep graph |
+| `docs/building.md` — fix stale counts | ✅ | App count (8→9), test count (407→683) |
+| Tests | ✅ | 1 new test (version_returns_binary_test), updated existing |
+| Git tag + GitHub Release | ✅ | Annotated `v0.1.0` tag, release from CHANGELOG.md |
 
 ---
 
@@ -132,4 +130,4 @@ _None at this time._
 
 ## Last Updated
 
-2026-02-28
+2026-03-05

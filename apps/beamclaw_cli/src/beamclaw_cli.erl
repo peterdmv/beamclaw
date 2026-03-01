@@ -138,6 +138,7 @@ cmd_local_tui(AgentId) ->
 
 -doc "Attach a remote TUI to a running daemon via Erlang distribution.".
 cmd_remote_tui(AgentId) ->
+    io:setopts(standard_io, [{encoding, unicode}]),
     erlang:monitor_node(daemon_node(), true),
     UserId = cli_user_id(),
     SessionId = case rpc:call(daemon_node(), bc_session_registry,
@@ -148,8 +149,8 @@ cmd_remote_tui(AgentId) ->
             halt(1);
         Id -> Id
     end,
-    io:format("BeamClaw TUI (remote) — connected to ~s (agent: ~s)~n",
-              [daemon_node(), AgentId]),
+    io:format("BeamClaw TUI (remote) — connected to ~ts (agent: ~ts, session: ~ts)~n",
+              [daemon_node(), AgentId, SessionId]),
     io:format("Type a message and press Enter. Ctrl+D to disconnect.~n~n> "),
     remote_tui_loop(SessionId, AgentId, UserId).
 
@@ -170,6 +171,9 @@ remote_tui_loop(SessionId, AgentId, UserId) ->
                 "/context" ++ _ ->
                     handle_remote_context(SessionId, AgentId),
                     remote_tui_loop(SessionId, AgentId, UserId);
+                "/new" ++ _ ->
+                    handle_remote_new(SessionId),
+                    remote_tui_loop(SessionId, AgentId, UserId);
                 _ ->
                     dispatch_remote(SessionId, iolist_to_binary(Text), AgentId, UserId),
                     receive_remote_response(SessionId),
@@ -182,9 +186,56 @@ handle_remote_context(SessionId, AgentId) ->
     case rpc:call(Node, bc_session_registry, lookup, [SessionId]) of
         {ok, Pid} ->
             History = rpc:call(Node, bc_session, get_history, [Pid]),
-            Info = bc_context:gather(#{agent_id => AgentId, history => History}),
+            Info = rpc:call(Node, bc_context, gather,
+                           [#{agent_id => AgentId, history => History, session_id => SessionId}]),
             Output = bc_context:format_text(Info, #{ansi => true}),
-            io:format("~n~s~n> ", [Output]);
+            io:format("~n~ts~n> ", [Output]);
+        _ ->
+            io:format("No active session.~n> ")
+    end.
+
+handle_remote_new(SessionId) ->
+    Node = daemon_node(),
+    case rpc:call(Node, bc_session_registry, lookup, [SessionId]) of
+        {ok, Pid} ->
+            case rpc:call(Node, bc_session, is_busy, [Pid]) of
+                {badrpc, Reason} ->
+                    io:format("RPC error: ~p~n> ", [Reason]);
+                true ->
+                    io:format("Session is busy — wait for the current response to finish.~n> ");
+                false ->
+                    case rpc:call(Node, bc_session, get_history, [Pid]) of
+                        {badrpc, Reason} ->
+                            io:format("RPC error: ~p~n> ", [Reason]);
+                        [] ->
+                            io:format("Session is already empty.~n> ");
+                        _ ->
+                            io:format("[...saving memories...]~n"),
+                            LoopCfg = rpc:call(Node, bc_config, get,
+                                               [beamclaw_core, agentic_loop, #{}]),
+                            DoFlush = case LoopCfg of
+                                #{memory_flush := false} -> false;
+                                _ -> true
+                            end,
+                            case DoFlush of
+                                true ->
+                                    case rpc:call(Node, bc_memory_flush, run, [Pid]) of
+                                        ok -> ok;
+                                        {error, R} ->
+                                            io:format("[warning] memory flush failed: ~p~n", [R]);
+                                        {badrpc, R} ->
+                                            io:format("[warning] memory flush RPC failed: ~p~n", [R])
+                                    end;
+                                false -> ok
+                            end,
+                            rpc:call(Node, bc_session, clear_history, [Pid]),
+                            rpc:call(Node, bc_obs, emit,
+                                     [session_reset, #{session_id => SessionId}]),
+                            io:format("Session cleared. Memories saved.~n> ")
+                    end
+            end;
+        {badrpc, Reason} ->
+            io:format("RPC error: ~p~n> ", [Reason]);
         _ ->
             io:format("No active session.~n> ")
     end.
@@ -243,7 +294,7 @@ dispatch_remote(SessionId, Text, AgentId, UserId) ->
 receive_remote_response(SessionId) ->
     receive
         {bc_chunk, SessionId, Chunk} ->
-            io:format("~s", [Chunk]),
+            io:format("~ts", [Chunk]),
             receive_remote_response(SessionId);
         {bc_done, SessionId, _Msg} ->
             io:format("~n"),

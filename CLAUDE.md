@@ -228,6 +228,7 @@ beamclaw_gateway → beamclaw_core → beamclaw_sandbox    → beamclaw_tools �
 beamclaw_core_sup  (one_for_one)
   ├── bc_session_registry     (gen_server, named — ETS: session_id → pid)
   ├── bc_session_cleaner      (gen_server, permanent — periodic expired session cleanup)
+  ├── bc_session_maintenance  (gen_server, permanent — idle compaction, nightly flush, pre-expiry)
   └── bc_sessions_sup         (simple_one_for_one)
         └── [per session] bc_session_sup  (one_for_one)
               ├── bc_session     (gen_server, permanent — the "lane")
@@ -459,7 +460,7 @@ idle → compacting (optional) → streaming → awaiting_approval (optional)
 ```
 
 State transition rules:
-- Enter `compacting` from `idle` when `length(History) > compaction_threshold`
+- Enter `compacting` from `idle` when history tokens exceed `compaction_threshold_pct`% of the model's context window
 - In `compacting`: if `memory_flush` is enabled (default), fire a hidden LLM turn to save durable memories before compaction
 - Enter `awaiting_approval` from `streaming` when any tool call requires approval and autonomy ≠ `full`
 - Loop back to `streaming` after `executing_tools` until no tool calls remain
@@ -508,12 +509,15 @@ Security rule: parsers only match structured delimiters. **Never** extract arbit
 
 Triggered in `compacting` state:
 
-1. Check: `length(History) > compaction_threshold` (default: 50)
-2. Split: keep last `compaction_target` (default: 20) messages verbatim
+1. Check: history tokens > `compaction_threshold_pct`% of context window (default: 80%)
+2. Split: keep most recent messages whose cumulative tokens fit within `compaction_target_pct`% of the context window (default: 40%)
 3. Summarize older messages via LLM: system prompt instructs concise factual summary
 4. Summary becomes a `system` role message: `"[Conversation summary]: <text>"`
-5. Fallback on LLM failure: deterministic trim to last `compaction_target` messages
+5. Fallback on LLM failure: deterministic trim to kept messages only
 6. Emit `compaction_complete` obs event with `{before, After}` message counts
+
+Token estimation: `byte_size(Content) div 4` (~4 chars/token). Context window
+sizes are looked up from the model name via `bc_context:context_window/1`.
 
 ---
 
@@ -569,6 +573,7 @@ Non-blocking cast; backends receive events asynchronously via `pg` process group
 | `session_start` | `session_id` |
 | `session_end` | `session_id` |
 | `session_restored` | `session_id`, `message_count` |
+| `session_reset` | `session_id` |
 | `sandbox_reaped` | `container_name` |
 | `sched_job_created` | `job_id`, `schedule_type`, `agent_id` |
 | `sched_job_fired` | `job_id`, `session_id`, `heartbeat` |
@@ -576,6 +581,10 @@ Non-blocking cast; backends receive events asynchronously via `pg` process group
 | `sched_job_failed` | `job_id`, `error`, `error_count` |
 | `sched_job_paused` | `job_id`, `reason` (manual \| auto) |
 | `sched_suppressed` | `job_id`, `session_id` |
+| `maintenance_compact_complete` | `session_id`, `reason` (idle \| nightly) |
+| `maintenance_nightly_start` | `session_count` |
+| `maintenance_nightly_complete` | `flushed_count` |
+| `maintenance_pre_expiry_flush` | `session_id` |
 | `a2a_task_created` | `task_id`, `session_id` |
 | `a2a_task_updated` | `task_id`, `state` |
 | `a2a_request` | `method`, `path`, `rpc_method` |
@@ -584,7 +593,7 @@ Usage: `bc_obs:emit(tool_call_start, #{tool_name => Name, args => Args, session_
 
 ---
 
-## Configuration (`config/sys.config`)
+## Configuration (`config/sys.config` + `config/vm.args`)
 
 `bc_config:get(App, Key)` resolves `{env, "VAR"}` tuples at runtime via `os:getenv/1`.
 
@@ -613,19 +622,31 @@ as the user_id, enabling cross-channel session sharing for single-user deploymen
                    base_url => "https://api.openai.com/v1",
                    model    => "gpt-4o"}}
     ]},
-    {agentic_loop, #{max_tool_iterations => 10,
-                     compaction_threshold => 50,
-                     compaction_target    => 20,
-                     stream_chunk_size    => 80,
-                     memory_flush         => true,
-                     auto_context         => false,
-                     auto_context_limit   => 3}},
+    {agentic_loop, #{max_tool_iterations      => 10,
+                     compaction_threshold_pct => 80,
+                     compaction_target_pct    => 40,
+                     compaction_provider      => openrouter,
+                     compaction_model         => "moonshotai/kimi-k2.5",
+                     stream_chunk_size        => 80,
+                     memory_flush             => true,
+                     auto_context             => false,
+                     auto_context_limit       => 3}},
     {autonomy_level, supervised},
     {session_ttl_seconds, 3600},
     {default_agent, <<"default">>},
     {session_persistence, true},
     {session_sharing, shared},
     {session_cleanup_interval_ms, 300000},
+    {maintenance, #{
+        enabled                       => false,   %% opt-in proactive maintenance
+        scan_interval_ms              => 300000,   %% 5 min scan interval
+        idle_compaction_minutes       => 15,       %% min idle before compaction
+        idle_compaction_threshold_pct => 20,       %% trigger: >20% of window
+        idle_compaction_target_pct    => 10,       %% compact to 10% of window
+        quiet_hours                   => {2, 4},   %% UTC hour range for nightly
+        nightly_min_messages          => 10,       %% min history for nightly
+        pre_expiry_minutes            => 10        %% flush window before TTL
+    }},
     {skills, #{}}
 ]},
 {beamclaw_mcp, [
@@ -635,6 +656,10 @@ as the user_id, enabling cross-channel session sharing for single-user deploymen
     {http, #{port => 18800}},
     {channels, [
         {telegram, #{token => {env, "TELEGRAM_BOT_TOKEN"}, mode => long_poll,
+                     %% Webhook mode settings (only used when mode => webhook):
+                     %% TELEGRAM_WEBHOOK_URL and TELEGRAM_WEBHOOK_SECRET are
+                     %% read directly from env vars at runtime (not via config)
+                     %% to avoid crashes when unset in long_poll mode.
                      dm_policy => pairing, allow_from => [],
                      photo => #{enabled => true,
                                 max_size_bytes => 5242880},   %% 5 MB
@@ -668,7 +693,7 @@ as the user_id, enabling cross-channel session sharing for single-user deploymen
     {env_allowlist, [<<"PATH">>, <<"HOME">>, <<"LANG">>, <<"TERM">>]},
     {env_blocklist, [<<"OPENROUTER_API_KEY">>, <<"OPENAI_API_KEY">>,
                      <<"TELEGRAM_BOT_TOKEN">>, <<"AWS_SECRET_ACCESS_KEY">>,
-                     <<"GROQ_API_KEY">>]}
+                     <<"GROQ_API_KEY">>, <<"TELEGRAM_WEBHOOK_SECRET">>]}
 ]},
 {beamclaw_tools, [
     {web_search, #{api_key => {env, "BRAVE_API_KEY"},
@@ -699,6 +724,13 @@ as the user_id, enabling cross-channel session sharing for single-user deploymen
                daily_log_lookback => 7}}
 ]}
 ```
+
+Key `vm.args` flags:
+
+| Flag | Value | Description |
+|---|---|---|
+| `-sname` | `beamclaw` | Local node name |
+| `-mnesia dir` | `'"/home/beamclaw/.beamclaw/mnesia"'` | Mnesia data directory on the persistent volume. Required for Docker session persistence across container rebuilds. |
 
 ---
 
@@ -866,6 +898,8 @@ beamclaw/
         bc_loop.erl           %% gen_statem agentic loop
         bc_approval.erl
         bc_compactor.erl
+        bc_memory_flush.erl       %% extracted pre-compaction memory flush
+        bc_session_maintenance.erl  %% periodic idle/nightly/pre-expiry maintenance
         bc_scrubber.erl
         bc_thinking.erl       %% strip LLM thinking/reasoning tags
         bc_tool_parser.erl

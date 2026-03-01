@@ -1,9 +1,12 @@
 #!/bin/sh
 set -e
 
+# Ensure Mnesia directory exists (first run with fresh volume)
+mkdir -p /home/beamclaw/.beamclaw/mnesia
+
 # Fix ownership of bind-mounted directories that Docker may create as root.
 # This is the standard Docker entrypoint pattern (cf. PostgreSQL, Redis).
-for dir in /tmp/beamclaw-bridges /home/beamclaw/.beamclaw; do
+for dir in /tmp/beamclaw-bridges /home/beamclaw/.beamclaw /home/beamclaw/.beamclaw/mnesia; do
     if [ -d "$dir" ]; then
         chown -R beamclaw:beamclaw "$dir" 2>/dev/null || true
     fi
@@ -21,6 +24,10 @@ if [ -S /var/run/docker.sock ]; then
     DOCKER_GROUP=$(getent group "$DOCKER_SOCK_GID" | cut -d: -f1)
     addgroup beamclaw "$DOCKER_GROUP" 2>/dev/null || true
 fi
+
+# Ensure UTF-8 locale survives privilege drop via su-exec
+export LANG="${LANG:-C.UTF-8}"
+export LC_ALL="${LC_ALL:-C.UTF-8}"
 
 # Drop to beamclaw user and exec the OTP release
 exec su-exec beamclaw /opt/beamclaw/bin/beamclaw "$@"

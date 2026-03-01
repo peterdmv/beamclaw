@@ -34,9 +34,9 @@ Or install via a package manager that provides rebar3 ≥ 3.23.
 rebar3 compile
 ```
 
-All eight OTP apps (`beamclaw_obs`, `beamclaw_memory`, `beamclaw_tools`, `beamclaw_sandbox`,
-`beamclaw_mcp`, `beamclaw_core`, `beamclaw_gateway`, `beamclaw_cli`) must compile with zero
-warnings.
+All nine OTP apps (`beamclaw_obs`, `beamclaw_memory`, `beamclaw_tools`, `beamclaw_sandbox`,
+`beamclaw_mcp`, `beamclaw_core`, `beamclaw_scheduler`, `beamclaw_gateway`, `beamclaw_cli`) must
+compile with zero warnings.
 
 ---
 
@@ -52,7 +52,7 @@ Produces a self-contained binary at:
 _build/default/bin/beamclaw
 ```
 
-The binary embeds all eight app `.beam` files plus deps in a single zip-based escript.
+The binary embeds all nine app `.beam` files plus deps in a single zip-based escript.
 It requires a compatible OTP installation on the target machine (same major version).
 
 ```bash
@@ -76,7 +76,7 @@ rebar3 eunit                        # all apps
 rebar3 eunit --module=bc_scrubber   # single module
 ```
 
-Expected: 407+ tests passing, 0 failures. Runs in < 5 seconds, no external deps.
+Expected: 683+ tests passing, 0 failures. Runs in < 5 seconds, no external deps.
 
 ### Integration Tests (Common Test)
 

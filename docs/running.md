@@ -48,6 +48,21 @@ _build/default/bin/beamclaw
 
 Type a message and press Enter. Use Ctrl+D (EOF) to quit.
 
+### In-session commands
+
+| Command | Description |
+|---------|-------------|
+| `/context` | Show context window usage (token counts, compaction status) |
+| `/new` | Start a fresh session (saves memories first, then clears history) |
+
+These commands work in all TUI modes (local, remote) and in Telegram.
+In Telegram, commands appear in the bot's command menu automatically.
+
+The `/new` command performs a memory flush before clearing: the LLM is asked
+to save any durable facts to workspace memory (MEMORY.md, daily logs, bootstrap
+files). This mirrors the pre-compaction memory flush. The flush respects the
+`memory_flush` config flag and is skipped if the session has fewer than 2 messages.
+
 ### Daemon mode
 
 ```bash
@@ -655,6 +670,7 @@ docker compose logs -f
 ```bash
 docker run -d \
   --name beamclaw \
+  --hostname beamclaw \
   --restart unless-stopped \
   -v beamclaw_data:/home/beamclaw/.beamclaw \
   -e OPENROUTER_API_KEY=sk-or-... \
@@ -664,8 +680,15 @@ docker run -d \
 ```
 
 The named volume `beamclaw_data` persists agent workspaces (bootstrap files,
-daily logs, skills) and Mnesia session history across container restarts.
-Omit the `-v` flag if you don't need persistence.
+daily logs, skills), Mnesia session history, pairing data, and scheduled jobs
+across container restarts and rebuilds. Omit the `-v` flag if you don't need
+persistence.
+
+**Important**: When using `docker run`, add `--hostname beamclaw` to ensure the
+Erlang node name (`beamclaw@beamclaw`) is stable across container recreations.
+Without a fixed hostname, Docker assigns a random container ID as hostname,
+causing Mnesia to look for a different data directory on each restart. The
+`docker-compose.yml` already includes this setting.
 
 ### Health check
 
