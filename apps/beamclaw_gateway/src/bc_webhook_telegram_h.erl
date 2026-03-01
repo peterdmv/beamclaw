@@ -18,11 +18,54 @@
 -moduledoc "Telegram webhook handler — POST /webhook/telegram".
 
 -export([init/2]).
+%% Exported for testing
+-export([verify_token/2]).
 
 init(Req, State) ->
-    {ok, Body, Req2} = cowboy_req:read_body(Req),
-    Update = jsx:decode(Body, [return_maps]),
-    %% Forward to telegram channel for processing
-    bc_channel_telegram:handle_webhook(Update),
-    Req3 = cowboy_req:reply(200, #{}, <<>>, Req2),
-    {ok, Req3, State}.
+    case validate_secret(Req) of
+        ok ->
+            {ok, Body, Req2} = cowboy_req:read_body(Req),
+            Update = jsx:decode(Body, [return_maps]),
+            bc_channel_telegram:handle_webhook(Update),
+            Req3 = cowboy_req:reply(200, #{}, <<>>, Req2),
+            {ok, Req3, State};
+        {error, Reason} ->
+            logger:warning("[webhook_telegram] rejected: ~s", [Reason]),
+            Req2 = cowboy_req:reply(401, #{}, <<>>, Req),
+            {ok, Req2, State}
+    end.
+
+%% Internal
+
+validate_secret(Req) ->
+    Header = cowboy_req:header(<<"x-telegram-bot-api-secret-token">>, Req),
+    Secret = resolve_webhook_secret(),
+    verify_token(Header, Secret).
+
+-spec verify_token(Provided :: binary() | undefined,
+                   Configured :: binary() | undefined) ->
+    ok | {error, binary()}.
+verify_token(undefined, _) ->
+    {error, <<"missing header">>};
+verify_token(_, undefined) ->
+    {error, <<"no secret configured">>};
+verify_token(Provided, Configured) ->
+    ProvBin = iolist_to_binary(Provided),
+    ConfBin = iolist_to_binary(Configured),
+    case constant_time_equals(ProvBin, ConfBin) of
+        true  -> ok;
+        false -> {error, <<"invalid token">>}
+    end.
+
+constant_time_equals(A, B) when byte_size(A) =:= byte_size(B) ->
+    crypto:hash_equals(A, B);
+constant_time_equals(_, _) ->
+    false.
+
+resolve_webhook_secret() ->
+    Channels = bc_config:get(beamclaw_gateway, channels, []),
+    TgConfig = proplists:get_value(telegram, Channels, #{}),
+    case maps:get(webhook_secret, TgConfig, undefined) of
+        undefined -> undefined;
+        Val       -> iolist_to_binary(bc_config:resolve(Val))
+    end.

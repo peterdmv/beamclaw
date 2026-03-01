@@ -17,6 +17,8 @@ resolved at runtime by `bc_config:get/2` via `os:getenv/1`.
 | `OPENROUTER_API_KEY` | Yes (if using OpenRouter) | OpenRouter API key (`sk-or-...`) |
 | `OPENAI_API_KEY` | Yes (if using OpenAI) | OpenAI API key (`sk-...`) |
 | `TELEGRAM_BOT_TOKEN` | Only if using Telegram | Telegram bot token from @BotFather |
+| `TELEGRAM_WEBHOOK_URL` | Only if mode => webhook | Public HTTPS URL for Telegram webhook delivery |
+| `TELEGRAM_WEBHOOK_SECRET` | Only if mode => webhook | Secret token for webhook request validation (fail-closed: webhook endpoint rejects all requests when unset) |
 | `BEAMCLAW_PORT` | No | Override gateway HTTP port (default: `18800`) |
 | `BEAMCLAW_COOKIE` | No | Erlang cluster cookie (default: `beamclaw_dev`) |
 | `BEAMCLAW_HOME` | No | Override workspace base directory (default: `~/.beamclaw`) |
@@ -173,6 +175,13 @@ to the agentic loop.
         {telegram, #{
             token => {env, "TELEGRAM_BOT_TOKEN"},
             mode  => long_poll,  %% or: webhook
+            %% Webhook mode settings (only used when mode => webhook):
+            %% When mode => webhook, set_webhook is called on startup to
+            %% register the URL and secret with Telegram. The webhook
+            %% handler (POST /webhook/telegram) validates the secret
+            %% header on every request (fail-closed: rejects if unset).
+            webhook_url    => {env, "TELEGRAM_WEBHOOK_URL"},
+            webhook_secret => {env, "TELEGRAM_WEBHOOK_SECRET"},
             %% Access control policy for direct messages.
             %% pairing   — unknown users get a code; blocked until approved (default)
             %% allowlist — unknown users silently dropped; no codes issued

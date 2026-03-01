@@ -65,7 +65,7 @@ init(Config) ->
             delete_webhook(State),
             self() ! poll;
         webhook ->
-            ok
+            set_webhook(State)
     end,
     {ok, State}.
 
@@ -430,6 +430,45 @@ resolve_token() ->
     Channels = bc_config:get(beamclaw_gateway, channels, []),
     TgConfig = proplists:get_value(telegram, Channels, #{}),
     bc_config:resolve(maps:get(token, TgConfig, {env, "TELEGRAM_BOT_TOKEN"})).
+
+resolve_webhook_secret() ->
+    Channels = bc_config:get(beamclaw_gateway, channels, []),
+    TgConfig = proplists:get_value(telegram, Channels, #{}),
+    case maps:get(webhook_secret, TgConfig, undefined) of
+        undefined -> undefined;
+        Val       -> bc_config:resolve(Val)
+    end.
+
+resolve_webhook_url() ->
+    Channels = bc_config:get(beamclaw_gateway, channels, []),
+    TgConfig = proplists:get_value(telegram, Channels, #{}),
+    case maps:get(webhook_url, TgConfig, undefined) of
+        undefined -> undefined;
+        Val       -> bc_config:resolve(Val)
+    end.
+
+set_webhook(#{token := Token}) ->
+    case {resolve_webhook_url(), resolve_webhook_secret()} of
+        {undefined, _} ->
+            logger:error("[telegram] webhook mode requires webhook_url config");
+        {_, undefined} ->
+            logger:error("[telegram] webhook mode requires webhook_secret config");
+        {WebhookUrl, Secret} ->
+            Url = make_api_url(Token, "/setWebhook"),
+            Body = jsx:encode(#{url => iolist_to_binary(WebhookUrl),
+                                secret_token => iolist_to_binary(Secret)}),
+            case hackney:request(post, Url,
+                                 [{<<"content-type">>, <<"application/json">>}],
+                                 Body, [{recv_timeout, 10000}, with_body]) of
+                {ok, 200, _, _} ->
+                    logger:info("[telegram] webhook set: url=~s", [WebhookUrl]);
+                {ok, Code, _, RBody} ->
+                    logger:warning("[telegram] setWebhook failed: ~p ~s",
+                                   [Code, RBody]);
+                {error, Reason} ->
+                    logger:warning("[telegram] setWebhook error: ~p", [Reason])
+            end
+    end.
 
 resolve_agent_id(TgUserId) ->
     case bc_pairing:get_agent_id(telegram, TgUserId) of

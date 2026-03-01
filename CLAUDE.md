@@ -622,6 +622,9 @@ as the user_id, enabling cross-channel session sharing for single-user deploymen
     {http, #{port => 18800}},
     {channels, [
         {telegram, #{token => {env, "TELEGRAM_BOT_TOKEN"}, mode => long_poll,
+                     %% Webhook mode settings (only used when mode => webhook):
+                     webhook_url    => {env, "TELEGRAM_WEBHOOK_URL"},
+                     webhook_secret => {env, "TELEGRAM_WEBHOOK_SECRET"},
                      dm_policy => pairing, allow_from => [],
                      photo => #{enabled => true,
                                 max_size_bytes => 5242880},   %% 5 MB
@@ -655,7 +658,7 @@ as the user_id, enabling cross-channel session sharing for single-user deploymen
     {env_allowlist, [<<"PATH">>, <<"HOME">>, <<"LANG">>, <<"TERM">>]},
     {env_blocklist, [<<"OPENROUTER_API_KEY">>, <<"OPENAI_API_KEY">>,
                      <<"TELEGRAM_BOT_TOKEN">>, <<"AWS_SECRET_ACCESS_KEY">>,
-                     <<"GROQ_API_KEY">>]}
+                     <<"GROQ_API_KEY">>, <<"TELEGRAM_WEBHOOK_SECRET">>]}
 ]},
 {beamclaw_tools, [
     {web_search, #{api_key => {env, "BRAVE_API_KEY"},

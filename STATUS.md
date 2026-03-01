@@ -8,9 +8,9 @@ Core systems (M0–M10), workspaces (M11–M17), session persistence and sharing
 Docker sandbox (M25–M30), scheduler/heartbeat (M31–M37), Brave Search, bundled
 skills, on-demand skill loading, Telegram markdown-to-HTML formatting,
 BM25-based skill auto-injection, `/context` command, outgoing photo delivery,
-per-user agent mapping, voice message transcription, and token-based compaction
-(Post-M37) are all complete.
-649 EUnit tests + 37 CT tests pass (686 total).
+per-user agent mapping, voice message transcription, token-based compaction,
+and webhook secret token validation (Post-M37) are all complete.
+664 EUnit tests + 37 CT tests pass (701 total).
 
 ---
 
@@ -73,6 +73,7 @@ per-user agent mapping, voice message transcription, and token-based compaction
 | Post-M37 | Voice Message Transcription (Telegram → Groq Whisper) |
 | Post-M37 | Token-Based Automatic Compaction Trigger |
 | Post-M37 | Per-Session Provider Model for Compaction |
+| Post-M37 | Telegram Webhook Secret Token Validation |
 
 ---
 
@@ -140,6 +141,17 @@ per-user agent mapping, voice message transcription, and token-based compaction
 | TUI attachment display in `bc_channel_tui.erl` | ✅ | `[Attachment: image/png]` indicator for terminal users |
 | EUnit tests | ✅ | 32 new: 18 media extraction (tokens, mime types, file I/O) + 14 Telegram photo (mime check, caption, multipart) |
 | Update CLAUDE.md + STATUS.md | ✅ | Obs events, file layout, milestone |
+
+### Post-M37 — Telegram Webhook Secret Token Validation ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| `bc_webhook_telegram_h.erl` secret validation | ✅ | `validate_secret/1`, `verify_token/2`, `constant_time_equals/2` via `crypto:hash_equals/2` |
+| `bc_channel_telegram.erl` `set_webhook/1` | ✅ | Calls Telegram `setWebhook` API with `secret_token`; `resolve_webhook_secret/0`, `resolve_webhook_url/0` |
+| Config: `webhook_url`, `webhook_secret` | ✅ | `sys.config`, `sys.docker.config`; `TELEGRAM_WEBHOOK_SECRET` in sandbox `env_blocklist` |
+| Fail-closed design | ✅ | Webhook endpoint returns 401 unless `webhook_secret` is explicitly configured |
+| EUnit tests | ✅ | 11 new: `verify_token/2` (valid, wrong, missing header, no config, different lengths, empty) |
+| Update CLAUDE.md + docs + STATUS.md | ✅ | Configuration section, `docs/configuration.md` env vars table + telegram config block |
 
 ---
 
