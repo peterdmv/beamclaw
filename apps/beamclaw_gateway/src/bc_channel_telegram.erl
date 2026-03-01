@@ -195,31 +195,30 @@ dispatch_telegram_message(Update) ->
     ChatId   = integer_to_binary(maps:get(<<"id">>, Chat, 0)),
     Username = maps:get(<<"username">>, From, <<>>),
     {Content, Attachments} = extract_content_and_attachments(Msg, Text),
-    case bc_config:canonical_user_id() of
-        Canonical when Canonical =/= undefined ->
-            do_dispatch(Canonical, TgUserId, ChatId, Content, Msg, Attachments);
-        undefined ->
-            DmPolicy = get_dm_policy(),
-            case DmPolicy of
-                open ->
-                    do_dispatch(<<"tg:", TgUserId/binary>>, TgUserId, ChatId, Content, Msg, Attachments);
-                _ ->
-                    case is_user_allowed(TgUserId) of
-                        true ->
-                            do_dispatch(<<"tg:", TgUserId/binary>>, TgUserId, ChatId, Content, Msg, Attachments);
-                        false when DmPolicy =:= pairing ->
-                            Meta = #{<<"username">> => Username},
-                            {ok, Code, Status} = bc_pairing:request_pairing(telegram, TgUserId, Meta),
-                            case Status of
-                                created -> send_pairing_reply(ChatId, TgUserId, Code);
-                                existing -> ok
-                            end,
-                            ok;
-                        false ->
-                            %% allowlist mode — silently drop
-                            ok
-                    end
-            end
+    %% Access control runs FIRST, regardless of BEAMCLAW_USER.
+    DmPolicy = get_dm_policy(),
+    Allowed = case DmPolicy of
+        open -> true;
+        _    -> is_user_allowed(TgUserId)
+    end,
+    case Allowed of
+        true ->
+            UserId = case bc_config:canonical_user_id() of
+                Canonical when Canonical =/= undefined -> Canonical;
+                undefined -> <<"tg:", TgUserId/binary>>
+            end,
+            do_dispatch(UserId, TgUserId, ChatId, Content, Msg, Attachments);
+        false when DmPolicy =:= pairing ->
+            Meta = #{<<"username">> => Username},
+            {ok, Code, Status} = bc_pairing:request_pairing(telegram, TgUserId, Meta),
+            case Status of
+                created -> send_pairing_reply(ChatId, TgUserId, Code);
+                existing -> ok
+            end,
+            ok;
+        false ->
+            %% allowlist mode — silently drop
+            ok
     end.
 
 do_dispatch(UserId, TgUserId, ChatId, <<"/context", _/binary>>, _Msg, _Attachments) ->
