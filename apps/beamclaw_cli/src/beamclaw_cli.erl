@@ -138,6 +138,7 @@ cmd_local_tui(AgentId) ->
 
 -doc "Attach a remote TUI to a running daemon via Erlang distribution.".
 cmd_remote_tui(AgentId) ->
+    io:setopts(standard_io, [{encoding, unicode}]),
     erlang:monitor_node(daemon_node(), true),
     UserId = cli_user_id(),
     SessionId = case rpc:call(daemon_node(), bc_session_registry,
@@ -148,7 +149,7 @@ cmd_remote_tui(AgentId) ->
             halt(1);
         Id -> Id
     end,
-    io:format("BeamClaw TUI (remote) — connected to ~s (agent: ~s, session: ~s)~n",
+    io:format("BeamClaw TUI (remote) — connected to ~ts (agent: ~ts, session: ~ts)~n",
               [daemon_node(), AgentId, SessionId]),
     io:format("Type a message and press Enter. Ctrl+D to disconnect.~n~n> "),
     remote_tui_loop(SessionId, AgentId, UserId).
@@ -184,7 +185,7 @@ handle_remote_context(SessionId, AgentId) ->
             History = rpc:call(Node, bc_session, get_history, [Pid]),
             Info = bc_context:gather(#{agent_id => AgentId, history => History, session_id => SessionId}),
             Output = bc_context:format_text(Info, #{ansi => true}),
-            io:format("~n~s~n> ", [Output]);
+            io:format("~n~ts~n> ", [Output]);
         _ ->
             io:format("No active session.~n> ")
     end.
@@ -243,7 +244,7 @@ dispatch_remote(SessionId, Text, AgentId, UserId) ->
 receive_remote_response(SessionId) ->
     receive
         {bc_chunk, SessionId, Chunk} ->
-            io:format("~s", [Chunk]),
+            io:format("~ts", [Chunk]),
             receive_remote_response(SessionId);
         {bc_done, SessionId, _Msg} ->
             io:format("~n"),

@@ -23,6 +23,10 @@
 ## Appropriate for latency-tolerant workloads (AI chat is bursty, not HFT).
 +sbwt none
 
+## Enable Unicode printable character detection.
+## Required for io:format("~ts") to correctly handle non-Latin-1 codepoints.
++pc unicode
+
 ## Reduce memory footprint for idle schedulers.
 +scl false
 

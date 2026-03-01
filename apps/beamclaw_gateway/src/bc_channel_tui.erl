@@ -57,7 +57,9 @@ init(Config) ->
                 user_id    => UserId,
                 agent_id   => AgentId},
     case Enabled of
-        true  -> self() ! start_io;
+        true  ->
+            io:setopts(standard_io, [{encoding, unicode}]),
+            self() ! start_io;
         false -> ok
     end,
     {ok, State}.
@@ -67,9 +69,9 @@ listen(State) ->
 
 send(_, #bc_message{content = Content, attachments = Attachments}, State)
   when is_binary(Content) ->
-    io:format("~n[assistant] ~s~n", [Content]),
+    io:format("~n[assistant] ~ts~n", [Content]),
     lists:foreach(fun({Mime, _B64}) ->
-        io:format("[Attachment: ~s]~n", [Mime])
+        io:format("[Attachment: ~ts]~n", [Mime])
     end, Attachments),
     io:format("> "),
     {ok, State};
@@ -81,7 +83,7 @@ send_typing(_, _State) ->
     ok.
 
 update_draft(_, _, Content, State) ->
-    io:format("\r~s", [Content]),
+    io:format("\r~ts", [Content]),
     {ok, State}.
 
 finalize_draft(_, _, State) ->
@@ -104,7 +106,7 @@ handle_cast(_Msg, State) ->
     {noreply, State}.
 
 handle_info(start_io, #{session_id := SId, agent_id := AId} = State) ->
-    io:format("BeamClaw TUI (agent: ~s, session: ~s) — type a message and press Enter.~n> ",
+    io:format("BeamClaw TUI (agent: ~ts, session: ~ts) — type a message and press Enter.~n> ",
               [AId, SId]),
     self() ! read_line,
     {noreply, State};
@@ -158,7 +160,7 @@ handle_context_command(SessionId, AgentId) ->
             History = bc_session:get_history(Pid),
             Info = bc_context:gather(#{agent_id => AgentId, history => History, session_id => SessionId}),
             Output = bc_context:format_text(Info, #{ansi => true}),
-            io:format("~n~s~n> ", [Output]);
+            io:format("~n~ts~n> ", [Output]);
         {error, not_found} ->
             io:format("No active session.~n> ")
     end.
