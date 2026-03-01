@@ -2,7 +2,7 @@
 
 ## Current Phase: Implementation
 
-Scaffolding is complete. All nine OTP apps compile clean with zero warnings.
+Scaffolding is complete. All ten OTP apps compile clean with zero warnings.
 Core systems (M0–M10), workspaces (M11–M17), session persistence and sharing
 (M18–M19), Telegram pairing (M20), memory search (M21–M23), photo/vision (M24),
 Docker sandbox (M25–M30), scheduler/heartbeat (M31–M37), Brave Search, bundled
@@ -10,9 +10,9 @@ skills, on-demand skill loading, Telegram markdown-to-HTML formatting,
 BM25-based skill auto-injection, `/context` command, outgoing photo delivery,
 per-user agent mapping, voice message transcription, token-based compaction,
 webhook secret token validation, smart session memory maintenance,
-Telegram bot command registration, `/new` session reset, and
-v0.1.0 release preparation (Post-M37) are all complete.
-684 EUnit tests + 37 CT tests pass (721 total).
+Telegram bot command registration, `/new` session reset,
+v0.1.0 release preparation, and A2A protocol (Post-M37) are all complete.
+710 EUnit tests + 41 CT tests pass (751 total).
 
 ---
 
@@ -85,6 +85,7 @@ v0.1.0 release preparation (Post-M37) are all complete.
 | Post-M37 | Fix /context Header Token Count Including Compaction Buffer |
 | Post-M37 | Telegram Bot Commands Registration + `/new` Session Reset |
 | Post-M37 | v0.1.0 Release Preparation |
+| Post-M37 | A2A (Agent2Agent) Protocol |
 
 ---
 
