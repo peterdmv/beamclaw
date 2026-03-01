@@ -44,6 +44,15 @@ version() ->
         undefined  -> <<"dev">>
     end.
 
+%% ---- Version ----
+
+-spec version() -> binary().
+version() ->
+    case application:get_key(beamclaw_core, vsn) of
+        {ok, Vsn} -> list_to_binary(Vsn);
+        undefined  -> <<"dev">>
+    end.
+
 %% ---- Layer 1: Gather raw data ----
 
 -spec gather(map()) -> map().

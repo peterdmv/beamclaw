@@ -1,9 +1,26 @@
-%% @doc A2A Task Manager — ETS-backed task store with agent loop bridge.
 %%
-%% Each inbound A2A message creates a task which is dispatched to a BeamClaw
-%% session via bc_session_registry. Task state is updated as the agentic loop
-%% processes the request.
+%% Copyright Péter Dimitrov 2026, All Rights Reserved.
+%%
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
+%%
 -module(bc_a2a_task_manager).
+-moduledoc """
+A2A Task Manager — ETS-backed task store with agent loop bridge.
+
+Each inbound A2A message creates a task which is dispatched to a BeamClaw
+session via bc_session_registry. Task state is updated as the agentic loop
+processes the request.
+""".
 -behaviour(gen_server).
 
 -include("bc_a2a_types.hrl").
@@ -15,11 +32,13 @@
          cancel_task/1,
          update_task/2, update_task/3,
          add_artifact/2,
-         list_tasks/0, list_tasks/1]).
+         list_tasks/0, list_tasks/1,
+         task_id_for_session/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2]).
 
 -define(TABLE, bc_a2a_tasks).
+-define(SESSION_TABLE, bc_a2a_sessions).
 
 %% --- Public API ---
 
@@ -69,26 +88,39 @@ list_tasks(Opts) ->
     Limit = maps:get(limit, Opts, 50),
     Tasks = [T || {_, T} <- ets:tab2list(?TABLE)],
     Filtered = filter_context(filter_status(Tasks, Status), ContextId),
-    %% Sort by timestamp descending, take limit
     Sorted = lists:sort(fun(A, B) ->
         (A#a2a_task.status)#a2a_status.timestamp >=
         (B#a2a_task.status)#a2a_status.timestamp
     end, Filtered),
     lists:sublist(Sorted, Limit).
 
+-spec task_id_for_session(binary()) -> {ok, binary()} | {error, not_found}.
+task_id_for_session(SessionId) ->
+    case ets:lookup(?SESSION_TABLE, SessionId) of
+        [{_, TaskId}] -> {ok, TaskId};
+        []            -> {error, not_found}
+    end.
+
 %% --- gen_server callbacks ---
 
 init([]) ->
-    ets:new(?TABLE, [named_table, set, public, {read_concurrency, true}]),
+    ets:new(?TABLE, [named_table, set, protected, {read_concurrency, true}]),
+    ets:new(?SESSION_TABLE, [named_table, set, protected, {read_concurrency, true}]),
     {ok, #{}}.
 
 handle_call({create_task, Message, Metadata}, _From, State) ->
-    Task = bc_a2a_task:new(Message, Metadata),
+    Task = bc_a2a_task:new_with_metadata(Message, Metadata),
     ets:insert(?TABLE, {Task#a2a_task.id, Task}),
     case bc_a2a_task:transition(Task, working) of
         {ok, Working} ->
             ets:insert(?TABLE, {Working#a2a_task.id, Working}),
-            dispatch_to_session(Working),
+            SessionId = derive_session_id(Working),
+            ets:insert(?SESSION_TABLE, {SessionId, Working#a2a_task.id}),
+            bc_obs:emit(a2a_task_created, #{
+                task_id => Working#a2a_task.id,
+                session_id => SessionId
+            }),
+            try dispatch_to_session(Working) catch _:_ -> ok end,
             {reply, {ok, Working}, State};
         {error, Reason} ->
             {reply, {error, Reason}, State}
@@ -100,6 +132,10 @@ handle_call({cancel_task, TaskId}, _From, State) ->
             case bc_a2a_task:transition(Task, canceled) of
                 {ok, Canceled} ->
                     ets:insert(?TABLE, {TaskId, Canceled}),
+                    bc_obs:emit(a2a_task_updated, #{
+                        task_id => TaskId,
+                        state => canceled
+                    }),
                     {reply, {ok, Canceled}, State};
                 {error, Reason} ->
                     {reply, {error, Reason}, State}
@@ -114,6 +150,10 @@ handle_call({update_task, TaskId, NewState, Message}, _From, State) ->
             case bc_a2a_task:transition(Task, NewState, Message) of
                 {ok, Updated} ->
                     ets:insert(?TABLE, {TaskId, Updated}),
+                    bc_obs:emit(a2a_task_updated, #{
+                        task_id => TaskId,
+                        state => NewState
+                    }),
                     {reply, {ok, Updated}, State};
                 {error, Reason} ->
                     {reply, {error, Reason}, State}
@@ -143,7 +183,6 @@ handle_info(_Info, State) ->
 
 %% --- Internal ---
 
-%% @doc Dispatch an A2A task to a BeamClaw session via bc_channel_message.
 dispatch_to_session(#a2a_task{} = Task) ->
     Text = extract_text(Task),
     case Text of
@@ -151,6 +190,8 @@ dispatch_to_session(#a2a_task{} = Task) ->
         _ ->
             SessionId = derive_session_id(Task),
             UserId = <<"a2a:", (Task#a2a_task.id)/binary>>,
+            AgentId = maps:get(<<"agentId">>, Task#a2a_task.metadata,
+                               bc_config:get(beamclaw_core, default_agent, <<"default">>)),
             Msg = #bc_channel_message{
                 session_id = SessionId,
                 user_id    = UserId,
@@ -159,12 +200,26 @@ dispatch_to_session(#a2a_task{} = Task) ->
                 raw        = Task,
                 ts         = erlang:system_time(millisecond)
             },
-            %% Dispatch to session — same pattern as Telegram/TUI channels
-            bc_session_registry:ensure_session(Msg)
+            ensure_session_and_dispatch(SessionId, Msg, UserId, AgentId)
     end.
 
-extract_text(#a2a_task{history = History}) ->
-    case lists:last(History) of
+ensure_session_and_dispatch(SessionId, Msg, UserId, AgentId) ->
+    case bc_session_registry:lookup(SessionId) of
+        {ok, Pid} ->
+            bc_session:dispatch_run(Pid, Msg);
+        {error, not_found} ->
+            Config = #{session_id  => SessionId,
+                       user_id     => UserId,
+                       channel_id  => SessionId,
+                       channel_mod => bc_channel_a2a,
+                       agent_id    => AgentId},
+            {ok, _} = bc_sessions_sup:start_session(Config),
+            {ok, Pid} = bc_session_registry:lookup(SessionId),
+            bc_session:dispatch_run(Pid, Msg)
+    end.
+
+extract_text(#a2a_task{history = [Latest | _]}) ->
+    case Latest of
         #a2a_message{parts = Parts} ->
             case [T || #{type := text, text := T} <- Parts] of
                 [First | _] -> First;
@@ -172,7 +227,9 @@ extract_text(#a2a_task{history = History}) ->
             end;
         _ ->
             undefined
-    end.
+    end;
+extract_text(#a2a_task{history = []}) ->
+    undefined.
 
 derive_session_id(#a2a_task{context_id = undefined, id = Id}) ->
     bc_session_registry:derive_session_id(<<"a2a:", Id/binary>>, <<"default">>);

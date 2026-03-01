@@ -1,19 +1,35 @@
-%% @doc A2A JSON-RPC 2.0 server handler.
 %%
-%% Implements the A2A protocol operations:
-%%   message/send  — send a message to the agent, creating a task
-%%   tasks/get     — retrieve task status and history
-%%   tasks/cancel  — cancel a running task
-%%   tasks/list    — list tasks with filters
+%% Copyright Péter Dimitrov 2026, All Rights Reserved.
 %%
-%% Transport-agnostic: processes decoded JSON maps, returns JSON-encodable maps.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
+%%
 -module(bc_a2a_server).
+-moduledoc """
+A2A JSON-RPC 2.0 server handler.
+
+Implements the A2A protocol operations:
+  message/send  — send a message to the agent, creating a task
+  tasks/get     — retrieve task status and history
+  tasks/cancel  — cancel a running task
+  tasks/list    — list tasks with filters
+
+Transport-agnostic: processes decoded JSON maps, returns JSON-encodable maps.
+""".
 
 -include("bc_a2a_types.hrl").
 
 -export([handle_request/1, agent_card/0]).
 
-%% @doc Handle a JSON-RPC 2.0 request (already decoded from JSON).
 -spec handle_request(map()) -> map() | undefined.
 handle_request(#{<<"jsonrpc">> := <<"2.0">>, <<"method">> := Method, <<"id">> := Id} = Req) ->
     Params = maps:get(<<"params">>, Req, #{}),
@@ -28,7 +44,6 @@ handle_request(#{<<"jsonrpc">> := <<"2.0">>, <<"method">> := _}) ->
 handle_request(_) ->
     json_rpc_error(null, -32600, <<"Invalid Request">>).
 
-%% @doc Return the agent card as a JSON-compatible map.
 -spec agent_card() -> map().
 agent_card() ->
     bc_a2a_agent_card:to_json(bc_a2a_agent_card:build()).
@@ -106,11 +121,15 @@ parse_part(#{<<"type">> := <<"data">>, <<"data">> := Data}) ->
 parse_part(_) ->
     undefined.
 
-parse_status(undefined) -> undefined;
-parse_status(S) when is_binary(S) ->
-    try binary_to_existing_atom(S, utf8)
-    catch _:_ -> undefined
-    end.
+parse_status(undefined)            -> undefined;
+parse_status(<<"submitted">>)      -> submitted;
+parse_status(<<"working">>)        -> working;
+parse_status(<<"input_required">>) -> input_required;
+parse_status(<<"completed">>)      -> completed;
+parse_status(<<"failed">>)         -> failed;
+parse_status(<<"canceled">>)       -> canceled;
+parse_status(<<"rejected">>)       -> rejected;
+parse_status(_)                    -> undefined.
 
 json_rpc_response(Id, Result) ->
     #{<<"jsonrpc">> => <<"2.0">>, <<"id">> => Id, <<"result">> => Result}.

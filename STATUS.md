@@ -2,7 +2,7 @@
 
 ## Current Phase: Implementation
 
-Scaffolding is complete. All nine OTP apps compile clean with zero warnings.
+Scaffolding is complete. All ten OTP apps compile clean with zero warnings.
 Core systems (M0–M10), workspaces (M11–M17), session persistence and sharing
 (M18–M19), Telegram pairing (M20), memory search (M21–M23), photo/vision (M24),
 Docker sandbox (M25–M30), scheduler/heartbeat (M31–M37), Brave Search, bundled
@@ -13,7 +13,7 @@ webhook secret token validation, smart session memory maintenance,
 Telegram bot command registration, `/new` session reset,
 v0.1.0 release preparation, user environment context injection,
 per-agent weather location, timezone abbreviations + UTC offset display,
-and UTF-8 Hungarian USER.md field regex fix
+UTF-8 Hungarian USER.md field regex fix, and A2A protocol
 (Post-M37) are all complete.
 746 EUnit tests + 37 CT tests pass (783 total).
 
@@ -95,6 +95,7 @@ and UTF-8 Hungarian USER.md field regex fix
 | Post-M37 | Per-Agent Weather Location |
 | Post-M37 | Timezone Abbreviations + UTC Offset Display |
 | Post-M37 | Fix UTF-8 Hungarian USER.md Field Regex Matching |
+| Post-M37 | A2A (Agent2Agent) Protocol |
 
 ---
 
