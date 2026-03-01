@@ -32,7 +32,8 @@ Token estimation: byte_size(Content) div 4 (~4 chars/token approximation).
 
 %% Exported for testing and use by bc_loop / bc_compactor
 -export([estimate_tokens/1, context_window/1, format_size/1,
-         get_model_name/0, get_model_name/1, estimate_history_tokens/1]).
+         get_model_name/0, get_model_name/1, estimate_history_tokens/1,
+         build_grid/1]).
 
 %% ---- Layer 1: Gather raw data ----
 
@@ -532,32 +533,28 @@ estimate_history_tokens(History) ->
 build_grid(#{context_window := Window, bootstrap_tokens := BootTok,
              daily_tokens := DailyTok, skill_tokens := SkillTok,
              tool_tokens := ToolTok, message_tokens := MsgTok,
-             compaction_buffer := CompBuf, free_space := FreeTok}) ->
-    %% Each cell = Window / 100 tokens
+             compaction_buffer := CompBuf}) ->
     CellSize = max(1, Window div 100),
-    %% Fill cells in order: bootstrap, daily, skills, tools, messages, free, compaction
-    Segments = [
-        {bootstrap,  BootTok},
-        {daily,      DailyTok},
-        {skills,     SkillTok},
-        {tools,      ToolTok},
-        {messages,   MsgTok},
-        {free,       FreeTok},
-        {compaction, CompBuf}
-    ],
-    fill_grid(Segments, CellSize, []).
+    %% Used segments: ceiling division (at least 1 cell when non-zero)
+    BootCells = ceil_cells(BootTok, CellSize),
+    DailyCells = ceil_cells(DailyTok, CellSize),
+    SkillCells = ceil_cells(SkillTok, CellSize),
+    ToolCells = ceil_cells(ToolTok, CellSize),
+    MsgCells = ceil_cells(MsgTok, CellSize),
+    CompCells = ceil_cells(CompBuf, CellSize),
+    UsedCells = BootCells + DailyCells + SkillCells + ToolCells + MsgCells,
+    %% Free space = remainder; absorbs ceiling-division rounding from used segments
+    FreeCells = max(0, 100 - UsedCells - CompCells),
+    lists:duplicate(BootCells, bootstrap) ++
+    lists:duplicate(DailyCells, daily) ++
+    lists:duplicate(SkillCells, skills) ++
+    lists:duplicate(ToolCells, tools) ++
+    lists:duplicate(MsgCells, messages) ++
+    lists:duplicate(FreeCells, free) ++
+    lists:duplicate(CompCells, compaction).
 
-fill_grid([], _CellSize, Acc) ->
-    Grid = lists:reverse(Acc),
-    %% Pad or trim to exactly 100 cells
-    case length(Grid) of
-        N when N >= 100 -> lists:sublist(Grid, 100);
-        N -> Grid ++ lists:duplicate(100 - N, free)
-    end;
-fill_grid([{Type, Tokens} | Rest], CellSize, Acc) ->
-    Cells = max(0, (Tokens + CellSize - 1) div CellSize),  %% ceiling division
-    NewAcc = lists:duplicate(Cells, Type) ++ Acc,
-    fill_grid(Rest, CellSize, NewAcc).
+ceil_cells(0, _CellSize) -> 0;
+ceil_cells(Tokens, CellSize) -> max(0, (Tokens + CellSize - 1) div CellSize).
 
 %% ---- Internal: Grid row formatting ----
 

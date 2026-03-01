@@ -366,6 +366,38 @@ format_telegram_emoji_grid_test() ->
     %% Black circle (compaction)
     ?assertNotEqual(nomatch, binary:match(Output, <<"\xe2\x9a\xab">>)).
 
+%% ---- Grid: no clipping regression ----
+
+grid_no_clipping_test() ->
+    %% Regression: ceiling division on small segments caused total > 100 cells,
+    %% clipping the compaction buffer via lists:sublist(Grid, 100).
+    Info = #{context_window => 256000,
+             bootstrap_tokens => 2100,
+             daily_tokens => 0,
+             skill_tokens => 473,
+             tool_tokens => 1000,
+             message_tokens => 43,
+             compaction_buffer => 51200,    %% 20% of 256k
+             free_space => 201184},
+    Grid = bc_context:build_grid(Info),
+    ?assertEqual(100, length(Grid)),
+    CompCells = length([C || C <- Grid, C =:= compaction]),
+    ?assertEqual(20, CompCells).
+
+grid_all_zero_test() ->
+    %% All segments zero — grid should be 100 free cells
+    Info = #{context_window => 128000,
+             bootstrap_tokens => 0,
+             daily_tokens => 0,
+             skill_tokens => 0,
+             tool_tokens => 0,
+             message_tokens => 0,
+             compaction_buffer => 0,
+             free_space => 128000},
+    Grid = bc_context:build_grid(Info),
+    ?assertEqual(100, length(Grid)),
+    ?assertEqual(100, length([C || C <- Grid, C =:= free])).
+
 %% ---- Test setup/teardown ----
 
 setup_gather() ->
