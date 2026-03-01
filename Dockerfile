@@ -42,6 +42,8 @@ RUN addgroup -S beamclaw && adduser -S beamclaw -G beamclaw -h /home/beamclaw
 # Ensure all processes (root via `docker exec`, beamclaw via daemon) resolve
 # the same agent/pairing path regardless of HOME.
 ENV BEAMCLAW_HOME=/home/beamclaw/.beamclaw
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
 
 # Copy the self-contained OTP release (includes ERTS, no other Erlang needed)
 COPY --from=builder --chown=beamclaw:beamclaw \

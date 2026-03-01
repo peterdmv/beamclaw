@@ -22,5 +22,9 @@ if [ -S /var/run/docker.sock ]; then
     addgroup beamclaw "$DOCKER_GROUP" 2>/dev/null || true
 fi
 
+# Ensure UTF-8 locale survives privilege drop via su-exec
+export LANG="${LANG:-C.UTF-8}"
+export LC_ALL="${LC_ALL:-C.UTF-8}"
+
 # Drop to beamclaw user and exec the OTP release
 exec su-exec beamclaw /opt/beamclaw/bin/beamclaw "$@"
