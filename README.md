@@ -58,7 +58,7 @@ docker run -d \
   -e OPENROUTER_API_KEY=sk-or-... \
   -e TELEGRAM_BOT_TOKEN=...      \
   -p 18800:18800                 \
-  ghcr.io/beamclaw/beamclaw:latest
+  beamclaw:latest
 ```
 
 </details>
@@ -71,7 +71,7 @@ server configuration.
 Requires: Erlang/OTP 28, rebar3
 
 ```bash
-git clone https://github.com/beamclaw/beamclaw.git
+git clone https://github.com/peterdmv/beamclaw.git
 cd beamclaw
 
 # Set secrets in your shell (never commit these)
@@ -110,17 +110,23 @@ Full instructions: [docs/building.md](docs/building.md)
 | [docs/building.md](docs/building.md) | Prerequisites, compile, test, release, Docker build |
 | [docs/running.md](docs/running.md) | rebar3 shell, OTP release, Docker run, channel setup |
 | [docs/configuration.md](docs/configuration.md) | All env vars, sys.config keys, MCP servers |
-| [docs/architecture.md](docs/architecture.md) | Six-app design, supervision trees, agentic loop |
+| [docs/architecture.md](docs/architecture.md) | Nine-app design, supervision trees, agentic loop |
 
 The full architectural decision log lives in [DECISIONS.md](DECISIONS.md).
 
 ## Architecture (overview)
 
-Six OTP applications with a strictly acyclic dependency graph:
+Nine OTP applications with a strictly acyclic dependency graph:
 
 ```
-beamclaw_obs  ←  beamclaw_memory  ←  beamclaw_tools  ←  beamclaw_mcp
-                                                      ←  beamclaw_core  ←  beamclaw_gateway
+beamclaw_gateway → beamclaw_core → beamclaw_sandbox    → beamclaw_tools → beamclaw_obs
+                                 → beamclaw_scheduler  → beamclaw_tools
+                                                        → beamclaw_obs
+                                 → beamclaw_mcp        → beamclaw_tools
+                                 → beamclaw_memory     → beamclaw_obs
+                                 → beamclaw_tools
+                                 → beamclaw_obs
+                 → beamclaw_obs
 ```
 
 The agentic loop (`bc_loop`, a `gen_statem`) drives the conversation through states:

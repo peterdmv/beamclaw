@@ -28,12 +28,21 @@ Token estimation: byte_size(Content) div 4 (~4 chars/token approximation).
 -include_lib("beamclaw_core/include/bc_types.hrl").
 
 -export([gather/1, format_text/1, format_text/2, format_telegram/1,
-         render_svg/1, render_png/1]).
+         render_svg/1, render_png/1, version/0]).
 
 %% Exported for testing and use by bc_loop / bc_compactor
 -export([estimate_tokens/1, context_window/1, format_size/1,
          get_model_name/0, get_model_name/1, estimate_history_tokens/1,
          build_grid/1]).
+
+%% ---- Version ----
+
+-spec version() -> binary().
+version() ->
+    case application:get_key(beamclaw_core, vsn) of
+        {ok, Vsn} -> list_to_binary(Vsn);
+        undefined  -> <<"dev">>
+    end.
 
 %% ---- Layer 1: Gather raw data ----
 
@@ -64,7 +73,8 @@ gather(#{agent_id := AgentId, history := History} = Opts) ->
     Total = BootstrapTokens + DailyTokens + SkillTokens + ToolTokens + MessageTokens,
     FreeSpace = max(0, Window - Total - CompactionBuffer),
 
-    #{model            => Model,
+    #{version          => version(),
+      model            => Model,
       session_id       => SessionId,
       context_window   => Window,
       total            => Total,
@@ -96,7 +106,7 @@ format_text(Info) ->
 -spec format_text(map(), map()) -> binary().
 format_text(Info, Opts) ->
     Ansi = maps:get(ansi, Opts, false),
-    #{model := Model, context_window := Window, total := Total,
+    #{version := Vsn, model := Model, context_window := Window, total := Total,
       categories := Categories, bootstrap_files := BootstrapFiles} = Info,
 
     Pct = case Window of 0 -> 0; _ -> (Total * 100) div Window end,
@@ -117,7 +127,7 @@ format_text(Info, Opts) ->
     },
 
     %% Format header
-    Header = <<"Context Usage">>,
+    Header = iolist_to_binary([<<"BeamClaw ">>, Vsn, <<" — Context Usage">>]),
 
     %% Format the grid rows with legend on the right
     ModelLine = iolist_to_binary([Model, " \xC2\xB7 ",
@@ -182,7 +192,7 @@ format_text(Info, Opts) ->
 
 -spec format_telegram(map()) -> binary().
 format_telegram(Info) ->
-    #{model := Model, context_window := Window, total := Total,
+    #{version := Vsn, model := Model, context_window := Window, total := Total,
       categories := Categories, bootstrap_files := BootstrapFiles} = Info,
 
     Pct = case Window of 0 -> 0; _ -> (Total * 100) div Window end,
@@ -199,7 +209,7 @@ format_telegram(Info) ->
         SId -> iolist_to_binary([<<"\nSession: ">>, SId])
     end,
     Header = iolist_to_binary([
-        <<"<b>">>, <<"\xf0\x9f\x93\x8a">>, <<" Context Usage</b>\n">>,
+        <<"<b>">>, <<"\xf0\x9f\x93\x8a">>, <<" BeamClaw ">>, Vsn, <<" — Context Usage</b>\n">>,
         bc_telegram_format:escape_html(ModelBin), <<"\n">>,
         format_size(Total), <<"/">>, format_size(Window),
         <<" tokens (">>, integer_to_list(Pct), <<"%)">>,
@@ -260,7 +270,7 @@ telegram_legend(Categories, Window) ->
 
 -spec render_svg(map()) -> binary().
 render_svg(Info) ->
-    #{model := Model, context_window := Window, total := Total,
+    #{version := Vsn, model := Model, context_window := Window, total := Total,
       categories := Categories, bootstrap_files := BootstrapFiles} = Info,
 
     Pct = case Window of 0 -> 0; _ -> (Total * 100) div Window end,
@@ -279,7 +289,10 @@ render_svg(Info) ->
     ],
 
     %% Title
-    Title = <<"  <text x=\"20\" y=\"25\" fill=\"#e0e0e0\" font-size=\"16\">Context Usage</text>\n">>,
+    Title = iolist_to_binary([
+        <<"  <text x=\"20\" y=\"25\" fill=\"#e0e0e0\" font-size=\"16\">BeamClaw ">>,
+        Vsn, <<" \xe2\x80\x94 Context Usage</text>\n">>
+    ]),
 
     %% Model + summary text (below title)
     ModelText = iolist_to_binary([

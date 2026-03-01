@@ -10,9 +10,9 @@ skills, on-demand skill loading, Telegram markdown-to-HTML formatting,
 BM25-based skill auto-injection, `/context` command, outgoing photo delivery,
 per-user agent mapping, voice message transcription, token-based compaction,
 webhook secret token validation, smart session memory maintenance,
-Telegram bot command registration, and `/new` session reset
-(Post-M37) are all complete.
-683 EUnit tests + 37 CT tests pass (720 total).
+Telegram bot command registration, `/new` session reset, and
+v0.1.0 release preparation (Post-M37) are all complete.
+684 EUnit tests + 37 CT tests pass (721 total).
 
 ---
 
@@ -84,6 +84,7 @@ Telegram bot command registration, and `/new` session reset
 | Post-M37 | Fix Mnesia Tables Always Created as ram_copies |
 | Post-M37 | Fix /context Header Token Count Including Compaction Buffer |
 | Post-M37 | Telegram Bot Commands Registration + `/new` Session Reset |
+| Post-M37 | v0.1.0 Release Preparation |
 
 ---
 
@@ -101,28 +102,16 @@ Telegram bot command registration, and `/new` session reset
 | Documentation | ✅ | CLAUDE.md (obs event), docs/running.md, STATUS.md |
 | All tests pass | ✅ | 683 EUnit tests pass, 0 warnings |
 
-### Post-M37 — Smart Session Memory Maintenance ✅
+### Post-M37 — v0.1.0 Release Preparation ✅
 
 | Task | Status | Notes |
 |------|--------|-------|
-| `bc_session.erl` — `last_activity` field + 4 new APIs | ✅ | `get_session_id/1`, `get_last_activity/1`, `is_busy/1`, `get_state_summary/1` |
-| `bc_memory_flush.erl` — extracted flush logic | ✅ | Standalone module callable from `bc_loop` and `bc_session_maintenance` |
-| `bc_compactor.erl` — `compact/2` with target override | ✅ | Export `provider_mod/1`, `get_provider_config/1`, `generate_id/0` for reuse |
-| `bc_loop.erl` — delegate to `bc_memory_flush` | ✅ | Removed inline `run_memory_flush/1` + `execute_flush_tool_calls/2` |
-| `bc_session_maintenance.erl` — periodic gen_server | ✅ | Idle compaction, nightly flush, pre-expiry extraction |
-| Supervisor + config | ✅ | Added to `beamclaw_core_sup`, `sys.config`, `sys.docker.config` |
-| Tests | ✅ | 17 new tests (bc_session_api_tests, bc_memory_flush_tests, bc_session_maintenance_tests) |
-| Documentation | ✅ | CLAUDE.md, STATUS.md, docs/configuration.md |
-| All tests pass | ✅ | 683 EUnit tests pass (was 666) |
-
-### Post-M37 — Fix Mnesia Session Persistence Across Docker Rebuilds ✅
-
-| Task | Status | Notes |
-|------|--------|-------|
-| Configure Mnesia data dir on persistent volume | ✅ | `-mnesia dir` in `vm.args` → `/home/beamclaw/.beamclaw/mnesia` |
-| Fix container hostname for stable node name | ✅ | `hostname: beamclaw` in `docker-compose.yml` → node `beamclaw@beamclaw` |
-| Create Mnesia dir in Docker entrypoint | ✅ | Added to ownership-fix loop in `docker-entrypoint.sh` |
-| Documentation | ✅ | CLAUDE.md, docs/configuration.md, docs/running.md |
+| `bc_context.erl` — `version/0` + display in all formats | ✅ | Exported; shows "BeamClaw 0.1.0" in TUI, Telegram, SVG |
+| `CHANGELOG.md` — release notes | ✅ | New file, feature inventory for v0.1.0 |
+| `README.md` — fix stale content | ✅ | Repo URL, Docker image ref, app count (6→9), dep graph |
+| `docs/building.md` — fix stale counts | ✅ | App count (8→9), test count (407→683) |
+| Tests | ✅ | 1 new test (version_returns_binary_test), updated existing |
+| Git tag + GitHub Release | ✅ | Annotated `v0.1.0` tag, release from CHANGELOG.md |
 
 ---
 
