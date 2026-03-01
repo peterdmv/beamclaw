@@ -9,8 +9,9 @@ Docker sandbox (M25–M30), scheduler/heartbeat (M31–M37), Brave Search, bundl
 skills, on-demand skill loading, Telegram markdown-to-HTML formatting,
 BM25-based skill auto-injection, `/context` command, outgoing photo delivery,
 per-user agent mapping, voice message transcription, token-based compaction,
-and webhook secret token validation (Post-M37) are all complete.
-666 EUnit tests + 37 CT tests pass (703 total).
+webhook secret token validation, and smart session memory maintenance
+(Post-M37) are all complete.
+683 EUnit tests + 37 CT tests pass (720 total).
 
 ---
 
@@ -77,27 +78,32 @@ and webhook secret token validation (Post-M37) are all complete.
 | Post-M37 | Fix Docker Cyclic Restarts (Webhook Env Vars) |
 | Post-M37 | Fix /context Compaction Buffer Display |
 | Post-M37 | Fix /context Grid Clipping Compaction Buffer Cells |
+| Post-M37 | Smart Session Memory Maintenance |
 
 ---
 
 ## Recent Milestones
 
-### Post-M37 — Fix /context compaction buffer display ✅
-
-| Task | Status | Notes |
-|------|--------|-------|
-| Fix `bc_context.erl` buffer calc | ✅ | Read `compaction_threshold_pct` (80), compute `100 - 80 = 20%` instead of using `compaction_target_pct` (40%) |
-| Update `bc_context_tests.erl` | ✅ | Test setup uses `compaction_threshold_pct => 80` instead of `compaction_target_pct => 40` |
-| All tests pass | ✅ | 664 EUnit tests pass |
-
 ### Post-M37 — Fix /context Grid Clipping Compaction Buffer Cells ✅
 
 | Task | Status | Notes |
 |------|--------|-------|
-| Fix `build_grid/1` in `bc_context.erl` | ✅ | Compute free cells as remainder (`100 - used - compaction`) instead of ceiling division; add `ceil_cells/2` helper; remove `fill_grid/3` |
-| Export `build_grid/1` for testing | ✅ | Added to `-export` list |
-| Regression test `grid_no_clipping_test` | ✅ | Verifies grid = 100 cells and compaction = 20 cells with small used segments |
+| Fix `build_grid/1` in `bc_context.erl` | ✅ | Compute free cells as remainder (`100 - used - compaction`) instead of ceiling division |
 | All tests pass | ✅ | 666 EUnit tests pass |
+
+### Post-M37 — Smart Session Memory Maintenance ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| `bc_session.erl` — `last_activity` field + 4 new APIs | ✅ | `get_session_id/1`, `get_last_activity/1`, `is_busy/1`, `get_state_summary/1` |
+| `bc_memory_flush.erl` — extracted flush logic | ✅ | Standalone module callable from `bc_loop` and `bc_session_maintenance` |
+| `bc_compactor.erl` — `compact/2` with target override | ✅ | Export `provider_mod/1`, `get_provider_config/1`, `generate_id/0` for reuse |
+| `bc_loop.erl` — delegate to `bc_memory_flush` | ✅ | Removed inline `run_memory_flush/1` + `execute_flush_tool_calls/2` |
+| `bc_session_maintenance.erl` — periodic gen_server | ✅ | Idle compaction, nightly flush, pre-expiry extraction |
+| Supervisor + config | ✅ | Added to `beamclaw_core_sup`, `sys.config`, `sys.docker.config` |
+| Tests | ✅ | 17 new tests (bc_session_api_tests, bc_memory_flush_tests, bc_session_maintenance_tests) |
+| Documentation | ✅ | CLAUDE.md, STATUS.md, docs/configuration.md |
+| All tests pass | ✅ | 683 EUnit tests pass (was 666) |
 
 ---
 
@@ -115,4 +121,4 @@ _None at this time._
 
 ## Last Updated
 
-2026-03-01
+2026-03-02

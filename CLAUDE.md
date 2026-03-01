@@ -224,6 +224,7 @@ beamclaw_gateway → beamclaw_core → beamclaw_sandbox    → beamclaw_tools �
 beamclaw_core_sup  (one_for_one)
   ├── bc_session_registry     (gen_server, named — ETS: session_id → pid)
   ├── bc_session_cleaner      (gen_server, permanent — periodic expired session cleanup)
+  ├── bc_session_maintenance  (gen_server, permanent — idle compaction, nightly flush, pre-expiry)
   └── bc_sessions_sup         (simple_one_for_one)
         └── [per session] bc_session_sup  (one_for_one)
               ├── bc_session     (gen_server, permanent — the "lane")
@@ -564,6 +565,10 @@ Non-blocking cast; backends receive events asynchronously via `pg` process group
 | `sched_job_failed` | `job_id`, `error`, `error_count` |
 | `sched_job_paused` | `job_id`, `reason` (manual \| auto) |
 | `sched_suppressed` | `job_id`, `session_id` |
+| `maintenance_compact_complete` | `session_id`, `reason` (idle \| nightly) |
+| `maintenance_nightly_start` | `session_count` |
+| `maintenance_nightly_complete` | `flushed_count` |
+| `maintenance_pre_expiry_flush` | `session_id` |
 
 Usage: `bc_obs:emit(tool_call_start, #{tool_name => Name, args => Args, session_id => SId})`.
 
@@ -613,6 +618,16 @@ as the user_id, enabling cross-channel session sharing for single-user deploymen
     {session_persistence, true},
     {session_sharing, shared},
     {session_cleanup_interval_ms, 300000},
+    {maintenance, #{
+        enabled                       => false,   %% opt-in proactive maintenance
+        scan_interval_ms              => 300000,   %% 5 min scan interval
+        idle_compaction_minutes       => 15,       %% min idle before compaction
+        idle_compaction_threshold_pct => 20,       %% trigger: >20% of window
+        idle_compaction_target_pct    => 10,       %% compact to 10% of window
+        quiet_hours                   => {2, 4},   %% UTC hour range for nightly
+        nightly_min_messages          => 10,       %% min history for nightly
+        pre_expiry_minutes            => 10        %% flush window before TTL
+    }},
     {skills, #{}}
 ]},
 {beamclaw_mcp, [
@@ -855,6 +870,8 @@ beamclaw/
         bc_loop.erl           %% gen_statem agentic loop
         bc_approval.erl
         bc_compactor.erl
+        bc_memory_flush.erl       %% extracted pre-compaction memory flush
+        bc_session_maintenance.erl  %% periodic idle/nightly/pre-expiry maintenance
         bc_scrubber.erl
         bc_thinking.erl       %% strip LLM thinking/reasoning tags
         bc_tool_parser.erl

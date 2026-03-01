@@ -29,21 +29,30 @@ Algorithm:
 
 -include_lib("beamclaw_core/include/bc_types.hrl").
 
--export([compact/1]).
-%% Exported for testing
--export([split_by_tokens/2]).
+-export([compact/1, compact/2]).
+%% Exported for reuse by bc_memory_flush and testing
+-export([split_by_tokens/2, provider_mod/1, get_provider_config/1, generate_id/0]).
 
 -define(SUMMARY_PREFIX, <<"[Conversation summary]: ">>).
 
 -doc "Compact the history held in SessionPid. Writes the result back.".
 -spec compact(SessionPid :: pid()) -> ok.
 compact(SessionPid) ->
+    compact(SessionPid, #{}).
+
+-doc """
+Compact with options. Supported:
+  target_pct => integer()  — override compaction_target_pct (e.g. 10 for aggressive)
+""".
+-spec compact(SessionPid :: pid(), Opts :: map()) -> ok.
+compact(SessionPid, Opts) ->
     History = bc_session:get_history(SessionPid),
     Cfg     = bc_config:get(beamclaw_core, agentic_loop, #{}),
     ProvMod = bc_session:get_provider_mod(SessionPid),
     Model   = bc_context:get_model_name(ProvMod),
     Window  = bc_context:context_window(Model),
-    TargetPct    = maps:get(compaction_target_pct, Cfg, 40),
+    TargetPct    = maps:get(target_pct, Opts,
+                            maps:get(compaction_target_pct, Cfg, 40)),
     TargetTokens = Window * TargetPct div 100,
     HistoryTokens = bc_context:estimate_history_tokens(History),
     Before  = length(History),
