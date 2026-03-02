@@ -176,21 +176,29 @@ def main():
         method="POST",
     )
 
-    try:
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            result = json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
-        body = e.read().decode("utf-8", errors="replace")
-        print(f"Error: OpenRouter API returned {e.code}: {body}", file=sys.stderr)
-        sys.exit(1)
-    except Exception as e:
-        print(f"Error generating image: {e}", file=sys.stderr)
-        sys.exit(1)
-
-    # Parse response
+    # Retry loop: Gemini models sometimes return text-only responses (no image)
+    # on the first attempt. Retry up to 3 times for this specific case only.
+    MAX_ATTEMPTS = 3
     image_saved = False
-    try:
-        message = result["choices"][0]["message"]
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                result = json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            body = e.read().decode("utf-8", errors="replace")
+            print(f"Error: OpenRouter API returned {e.code}: {body}", file=sys.stderr)
+            sys.exit(1)
+        except Exception as e:
+            print(f"Error generating image: {e}", file=sys.stderr)
+            sys.exit(1)
+
+        # Parse response
+        try:
+            message = result["choices"][0]["message"]
+        except (KeyError, IndexError) as e:
+            print(f"Error parsing response: {e}", file=sys.stderr)
+            print(f"Response: {json.dumps(result, indent=2)}", file=sys.stderr)
+            sys.exit(1)
 
         # Print any text content
         if message.get("content"):
@@ -198,37 +206,39 @@ def main():
 
         # Extract images from response
         images = message.get("images", [])
-        for img_entry in images:
-            image_url = img_entry.get("image_url", {}).get("url", "")
-            if not image_url:
-                continue
+        if images:
+            for img_entry in images:
+                image_url = img_entry.get("image_url", {}).get("url", "")
+                if not image_url:
+                    continue
 
-            # Parse base64 data URL: "data:image/png;base64,..."
-            if image_url.startswith("data:"):
-                header, b64 = image_url.split(",", 1)
-                image_data = base64.b64decode(b64)
-            else:
-                # Fallback: treat as raw base64
-                image_data = base64.b64decode(image_url)
+                # Parse base64 data URL: "data:image/png;base64,..."
+                if image_url.startswith("data:"):
+                    header, b64 = image_url.split(",", 1)
+                    image_data = base64.b64decode(b64)
+                else:
+                    # Fallback: treat as raw base64
+                    image_data = base64.b64decode(image_url)
 
-            image = PILImage.open(BytesIO(image_data))
+                image = PILImage.open(BytesIO(image_data))
 
-            # Ensure RGB mode for PNG
-            if image.mode == "RGBA":
-                rgb_image = PILImage.new("RGB", image.size, (255, 255, 255))
-                rgb_image.paste(image, mask=image.split()[3])
-                rgb_image.save(str(output_path), "PNG")
-            elif image.mode == "RGB":
-                image.save(str(output_path), "PNG")
-            else:
-                image.convert("RGB").save(str(output_path), "PNG")
-            image_saved = True
-            break  # Save first image only
+                # Ensure RGB mode for PNG
+                if image.mode == "RGBA":
+                    rgb_image = PILImage.new("RGB", image.size, (255, 255, 255))
+                    rgb_image.paste(image, mask=image.split()[3])
+                    rgb_image.save(str(output_path), "PNG")
+                elif image.mode == "RGB":
+                    image.save(str(output_path), "PNG")
+                else:
+                    image.convert("RGB").save(str(output_path), "PNG")
+                image_saved = True
+                break  # Save first image only
+            if image_saved:
+                break
 
-    except (KeyError, IndexError) as e:
-        print(f"Error parsing response: {e}", file=sys.stderr)
-        print(f"Response: {json.dumps(result, indent=2)}", file=sys.stderr)
-        sys.exit(1)
+        # Text-only response — retry if attempts remain
+        if attempt < MAX_ATTEMPTS:
+            print(f"No image in response, retrying ({attempt + 1}/{MAX_ATTEMPTS})...", file=sys.stderr)
 
     if image_saved:
         full_path = output_path.resolve()
