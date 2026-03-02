@@ -42,3 +42,4 @@ Notes
 - Use timestamps in filenames: `yyyy-mm-dd-hh-mm-ss-name.png`.
 - The script prints a `MEDIA:` line for auto-attachment on supported chat providers.
 - Do not read the image back; report the saved path only.
+- When editing a user-provided image, use the file path from the `[Attached image saved to ...]` line in the chat message (e.g., `-i /tmp/bc_attach_12345.jpg`).

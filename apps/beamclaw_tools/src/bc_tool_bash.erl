@@ -33,6 +33,16 @@ definition() ->
       source => builtin}.
 
 execute(#{<<"script">> := Script}, _Session, _Context) ->
+    run_script(Script);
+execute(#{<<"command">> := Script}, _Session, _Context) ->
+    %% LLM sometimes confuses bash/terminal arg names — accept both
+    run_script(Script);
+execute(Args, _Session, _Context) ->
+    {error, iolist_to_binary(io_lib:format(
+        "Missing required parameter 'script'. Got keys: ~p",
+        [maps:keys(Args)]))}.
+
+run_script(Script) ->
     %% Write script to temp file, execute with bash, return output
     TmpFile = "/tmp/bc_bash_" ++ integer_to_list(erlang:unique_integer([positive])),
     ok = file:write_file(TmpFile, Script),

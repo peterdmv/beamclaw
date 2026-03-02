@@ -331,12 +331,21 @@ extract_content_and_attachments(Msg, Text) ->
             case bc_telegram_photo:extract_photo(Msg) of
                 {ok, FileId} ->
                     Caption = bc_telegram_photo:extract_caption(Msg),
-                    Content = case {Caption, Text} of
+                    BaseContent = case {Caption, Text} of
                         {undefined, <<>>} -> <<"[Photo]">>;
                         {undefined, _}    -> Text;
                         {Cap, _}          -> Cap
                     end,
-                    Attachments = try_download_photo(FileId),
+                    Downloaded = try_download_photo(FileId),
+                    %% Downloaded is [{TmpPath, Attachment}] or []
+                    Attachments = [Att || {_Path, Att} <- Downloaded],
+                    Content = case Downloaded of
+                        [{TmpPath, _} | _] ->
+                            PathLine = <<"[Attached image saved to ", TmpPath/binary, "]">>,
+                            <<PathLine/binary, "\n", BaseContent/binary>>;
+                        [] ->
+                            BaseContent
+                    end,
                     {Content, Attachments};
                 no_photo ->
                     maybe_extract_voice(Msg, Text)
@@ -352,7 +361,8 @@ try_download_photo(FileId) ->
                 ok ->
                     logger:debug("[telegram] photo downloaded: file_id=~s size=~B",
                                  [FileId, byte_size(ImageBin)]),
-                    [bc_telegram_photo:to_attachment(Mime, ImageBin)];
+                    TmpPath = save_attachment_to_disk(Mime, ImageBin),
+                    [{TmpPath, bc_telegram_photo:to_attachment(Mime, ImageBin)}];
                 {error, too_large} ->
                     logger:warning("[telegram] photo too large: file_id=~s size=~B max=~B",
                                    [FileId, byte_size(ImageBin), photo_max_size()]),
@@ -363,6 +373,20 @@ try_download_photo(FileId) ->
                            [FileId, Reason]),
             []
     end.
+
+save_attachment_to_disk(Mime, ImageBin) ->
+    Ext = mime_to_ext(Mime),
+    Unique = integer_to_list(erlang:unique_integer([positive])),
+    Path = "/tmp/bc_attach_" ++ Unique ++ Ext,
+    ok = file:write_file(Path, ImageBin),
+    logger:info("[telegram] attachment saved to disk: path=~s size=~B", [Path, byte_size(ImageBin)]),
+    list_to_binary(Path).
+
+mime_to_ext(<<"image/jpeg">>) -> ".jpg";
+mime_to_ext(<<"image/png">>)  -> ".png";
+mime_to_ext(<<"image/gif">>)  -> ".gif";
+mime_to_ext(<<"image/webp">>) -> ".webp";
+mime_to_ext(_)                -> ".jpg".
 
 maybe_extract_voice(Msg, Text) ->
     case voice_enabled() of

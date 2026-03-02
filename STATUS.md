@@ -12,7 +12,7 @@ per-user agent mapping, voice message transcription, token-based compaction,
 webhook secret token validation, smart session memory maintenance,
 Telegram bot command registration, `/new` session reset, and
 v0.1.0 release preparation (Post-M37) are all complete.
-684 EUnit tests + 37 CT tests pass (721 total).
+689 EUnit tests + 37 CT tests pass (726 total).
 
 ---
 
@@ -85,6 +85,7 @@ v0.1.0 release preparation (Post-M37) are all complete.
 | Post-M37 | Fix /context Header Token Count Including Compaction Buffer |
 | Post-M37 | Telegram Bot Commands Registration + `/new` Session Reset |
 | Post-M37 | v0.1.0 Release Preparation |
+| Post-M37 | Incoming Image Attachment Disk Save + bash Tool Arg Fix |
 
 ---
 
@@ -113,6 +114,18 @@ v0.1.0 release preparation (Post-M37) are all complete.
 | Tests | ✅ | 1 new test (version_returns_binary_test), updated existing |
 | Git tag + GitHub Release | ✅ | Annotated `v0.1.0` tag, release from CHANGELOG.md |
 
+### Post-M37 — Incoming Image Attachment Disk Save + bash Tool Arg Fix ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| `bc_channel_telegram.erl` — save photo to `/tmp/bc_attach_*.jpg` | ✅ | Agent gets file path in message text |
+| `bc_channel_telegram.erl` — prepend `[Attached image saved to ...]` | ✅ | Agent knows disk path for tools |
+| `bc_tool_bash.erl` — accept `<<"command">>` fallback | ✅ | Prevents function_clause crash |
+| `bc_tool_bash.erl` — catch-all error clause | ✅ | Helpful error instead of crash |
+| `bc_tool_bash_tests.erl` — 5 new EUnit tests | ✅ | script, command, missing key, empty, definition |
+| `SKILL.md` (nano-banana-pro) — attachment path guidance | ✅ | Documents `-i /tmp/bc_attach_*.jpg` usage |
+| All tests pass | ✅ | 689 EUnit tests pass, 0 warnings |
+
 ---
 
 ## Active Work
@@ -129,4 +142,4 @@ _None at this time._
 
 ## Last Updated
 
-2026-03-05
+2026-03-06
