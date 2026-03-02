@@ -12,7 +12,7 @@ per-user agent mapping, voice message transcription, token-based compaction,
 webhook secret token validation, smart session memory maintenance,
 Telegram bot command registration, `/new` session reset, and
 v0.1.0 release preparation (Post-M37) are all complete.
-689 EUnit tests + 37 CT tests pass (726 total).
+699 EUnit tests + 37 CT tests pass (736 total).
 
 ---
 
@@ -86,33 +86,11 @@ v0.1.0 release preparation (Post-M37) are all complete.
 | Post-M37 | Telegram Bot Commands Registration + `/new` Session Reset |
 | Post-M37 | v0.1.0 Release Preparation |
 | Post-M37 | Incoming Image Attachment Disk Save + bash Tool Arg Fix |
+| Post-M37 | Skill Prompt Fix + Strip Old Image Attachments |
 
 ---
 
 ## Recent Milestones
-
-### Post-M37 — Telegram Bot Commands Registration + `/new` Session Reset ✅
-
-| Task | Status | Notes |
-|------|--------|-------|
-| `bc_session.erl` — `clear_history/1` | ✅ | Atomic history clear + Mnesia delete |
-| `bc_channel_telegram.erl` — `setMyCommands` | ✅ | Registers `/context`, `/new` in bot menu on init |
-| `bc_channel_telegram.erl` — `/new` dispatch + handler | ✅ | Busy guard, memory flush, typing indicator |
-| `bc_channel_tui.erl` — `/new` dispatch + handler | ✅ | Same logic, `io:format` output |
-| `beamclaw_cli.erl` — `/new` in remote TUI | ✅ | All operations via `rpc:call/4` |
-| Documentation | ✅ | CLAUDE.md (obs event), docs/running.md, STATUS.md |
-| All tests pass | ✅ | 683 EUnit tests pass, 0 warnings |
-
-### Post-M37 — v0.1.0 Release Preparation ✅
-
-| Task | Status | Notes |
-|------|--------|-------|
-| `bc_context.erl` — `version/0` + display in all formats | ✅ | Exported; shows "BeamClaw 0.1.0" in TUI, Telegram, SVG |
-| `CHANGELOG.md` — release notes | ✅ | New file, feature inventory for v0.1.0 |
-| `README.md` — fix stale content | ✅ | Repo URL, Docker image ref, app count (6→9), dep graph |
-| `docs/building.md` — fix stale counts | ✅ | App count (8→9), test count (407→683) |
-| Tests | ✅ | 1 new test (version_returns_binary_test), updated existing |
-| Git tag + GitHub Release | ✅ | Annotated `v0.1.0` tag, release from CHANGELOG.md |
 
 ### Post-M37 — Incoming Image Attachment Disk Save + bash Tool Arg Fix ✅
 
@@ -125,6 +103,16 @@ v0.1.0 release preparation (Post-M37) are all complete.
 | `bc_tool_bash_tests.erl` — 5 new EUnit tests | ✅ | script, command, missing key, empty, definition |
 | `SKILL.md` (nano-banana-pro) — attachment path guidance | ✅ | Documents `-i /tmp/bc_attach_*.jpg` usage |
 | All tests pass | ✅ | 689 EUnit tests pass, 0 warnings |
+
+### Post-M37 — Skill Prompt Fix + Strip Old Image Attachments ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| `SKILL.md` (nano-banana-pro) — add "do NOT verify" instruction | ✅ | Prevents unnecessary `ls`/`cat` after image generation |
+| `bc_loop.erl` — `strip_old_attachments/2` | ✅ | Strips vision data from user messages older than last 5 |
+| `bc_loop.erl` — apply stripping before LLM call | ✅ | Non-destructive: session history retains full attachments |
+| `bc_loop_attachment_tests.erl` — 10 EUnit tests | ✅ | Edge cases: keep count, non-user msgs, content preserved |
+| All tests pass | ✅ | 699 EUnit tests pass, 0 warnings |
 
 ---
 
@@ -142,4 +130,4 @@ _None at this time._
 
 ## Last Updated
 
-2026-03-06
+2026-03-07

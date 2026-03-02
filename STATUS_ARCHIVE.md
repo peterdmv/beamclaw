@@ -810,3 +810,30 @@ All six OTP apps created, supervision trees defined, behaviours declared,
 | Intercept `/context` in `bc_channel_tui.erl` | ✅ | ANSI-colored output with model name + category breakdown |
 | Intercept `/context` in `bc_channel_telegram.erl` | ✅ | Emoji grid via `format_telegram/1`, plain-text fallback |
 | EUnit tests | ✅ | 17 total: tokens, context windows, format_size, gather, text/ANSI/SVG/PNG, telegram (emoji/legend/bootstrap/grid) |
+
+---
+
+## Post-M37 — Telegram Bot Commands Registration + `/new` Session Reset ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| `bc_session.erl` — `clear_history/1` | ✅ | Atomic history clear + Mnesia delete |
+| `bc_channel_telegram.erl` — `setMyCommands` | ✅ | Registers `/context`, `/new` in bot menu on init |
+| `bc_channel_telegram.erl` — `/new` dispatch + handler | ✅ | Busy guard, memory flush, typing indicator |
+| `bc_channel_tui.erl` — `/new` dispatch + handler | ✅ | Same logic, `io:format` output |
+| `beamclaw_cli.erl` — `/new` in remote TUI | ✅ | All operations via `rpc:call/4` |
+| Documentation | ✅ | CLAUDE.md (obs event), docs/running.md, STATUS.md |
+| All tests pass | ✅ | 683 EUnit tests pass, 0 warnings |
+
+---
+
+## Post-M37 — v0.1.0 Release Preparation ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| `bc_context.erl` — `version/0` + display in all formats | ✅ | Exported; shows "BeamClaw 0.1.0" in TUI, Telegram, SVG |
+| `CHANGELOG.md` — release notes | ✅ | New file, feature inventory for v0.1.0 |
+| `README.md` — fix stale content | ✅ | Repo URL, Docker image ref, app count (6→9), dep graph |
+| `docs/building.md` — fix stale counts | ✅ | App count (8→9), test count (407→683) |
+| Tests | ✅ | 1 new test (version_returns_binary_test), updated existing |
+| Git tag + GitHub Release | ✅ | Annotated `v0.1.0` tag, release from CHANGELOG.md |

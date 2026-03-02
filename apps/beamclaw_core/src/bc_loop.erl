@@ -40,7 +40,7 @@ Response routing (route_response/2):
 -export([idle/3, compacting/3, streaming/3,
          awaiting_approval/3, executing_tools/3, finalizing/3]).
 %% Exported for testing
--export([extract_media/1, mime_from_path/1]).
+-export([extract_media/1, mime_from_path/1, strip_old_attachments/2]).
 
 -record(loop_data, {
     session_pid    :: pid(),
@@ -173,18 +173,19 @@ streaming(cast, do_stream, Data) ->
     SystemMsgs = bc_system_prompt:assemble(Data#loop_data.agent_id, #{}, UserText),
     AutoCtxMsgs = maybe_auto_context(History, Data),
     FullHistory = SystemMsgs ++ AutoCtxMsgs ++ History,
+    LLMHistory = strip_old_attachments(FullHistory),
     LoopCfg   = bc_config:get(beamclaw_core, agentic_loop, #{}),
     ChunkSize = maps:get(stream_chunk_size, LoopCfg, 80),
     Tools     = bc_tool_registry:list(),
     ToolDefs  = [Def || {_Name, _Mod, Def} <- Tools],
     T0 = erlang:monotonic_time(millisecond),
     bc_obs:emit(llm_request, #{session_id    => Data#loop_data.session_id,
-                                message_count => length(FullHistory)}),
+                                message_count => length(LLMHistory)}),
     ProvMod   = Data#loop_data.provider_mod,
     ProvState = Data#loop_data.provider_state,
     Options   = #{chunk_size => ChunkSize, tools => ToolDefs},
     TickRef = schedule_typing_tick(),
-    case ProvMod:stream(FullHistory, Options, self(), ProvState) of
+    case ProvMod:stream(LLMHistory, Options, self(), ProvState) of
         {ok, NewProvState} ->
             receive_stream(Data#loop_data{provider_state = NewProvState}, T0, TickRef);
         {error, Reason, NewProvState} ->
@@ -577,6 +578,29 @@ get_provider_config(ProviderMod) ->
 generate_id() ->
     <<N:128>> = crypto:strong_rand_bytes(16),
     iolist_to_binary(io_lib:format("~32.16.0b", [N])).
+
+-define(ATTACHMENT_KEEP_USER_MSGS, 5).
+
+%% Strip attachments from user messages older than the last N user messages.
+%% Preserves text content (including file path lines). Non-destructive: only
+%% affects the list sent to the LLM, not stored session history.
+strip_old_attachments(Msgs) ->
+    strip_old_attachments(Msgs, ?ATTACHMENT_KEEP_USER_MSGS).
+
+strip_old_attachments(Msgs, KeepN) ->
+    %% Count user messages from the end to find the cutoff.
+    Reversed = lists:reverse(Msgs),
+    {Stripped, _Count} = lists:foldl(fun
+        (M = #bc_message{role = user, attachments = [_|_]}, {Acc, N}) when N < KeepN ->
+            {[M | Acc], N + 1};            %% recent: keep attachments
+        (M = #bc_message{role = user, attachments = [_|_]}, {Acc, N}) ->
+            {[M#bc_message{attachments = []} | Acc], N + 1};  %% old: strip
+        (M = #bc_message{role = user}, {Acc, N}) ->
+            {[M | Acc], N + 1};            %% user msg without attachments
+        (M, {Acc, N}) ->
+            {[M | Acc], N}                 %% non-user: pass through
+    end, {[], 0}, Reversed),
+    Stripped.
 
 %% Optional auto-context: BM25-only search of structured memory using
 %% user's latest message, prepended as a system message.
