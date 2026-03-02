@@ -1,6 +1,6 @@
 {application, beamclaw_gateway,
  [{description,  "BeamClaw gateway: channels, HTTP, rate limiting"},
-  {vsn,          "0.1.0"},
+  {vsn,          "0.1.1"},
   {registered,   [bc_rate_limiter, beamclaw_gateway_sup]},
   {mod,          {beamclaw_gateway_app, []}},
   {applications, [kernel, stdlib, crypto, jsx, cowboy, hackney,

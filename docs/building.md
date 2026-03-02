@@ -76,7 +76,7 @@ rebar3 eunit                        # all apps
 rebar3 eunit --module=bc_scrubber   # single module
 ```
 
-Expected: 683+ tests passing, 0 failures. Runs in < 5 seconds, no external deps.
+Expected: 699+ tests passing, 0 failures. Runs in < 5 seconds, no external deps.
 
 ### Integration Tests (Common Test)
 
@@ -152,7 +152,7 @@ _build/default/rel/beamclaw/
 ├── erts-*/             ← bundled Erlang runtime (no system Erlang needed)
 ├── lib/                ← compiled OTP apps + deps
 └── releases/
-    └── 0.1.0/
+    └── 0.1.1/
         ├── sys.config  ← copied from config/sys.config
         └── vm.args     ← copied from config/vm.args
 ```
@@ -239,7 +239,7 @@ See `docs/running.md` "Sandbox in Docker deployments" for the full setup guide.
 
 ```bash
 rebar3 release tar
-ls _build/default/rel/beamclaw/releases/0.1.0/*.tar.gz
+ls _build/default/rel/beamclaw/releases/0.1.1/*.tar.gz
 ```
 
 The tarball can be copied to any compatible Linux host and extracted without installing

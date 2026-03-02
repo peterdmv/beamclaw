@@ -1,6 +1,6 @@
 {application, beamclaw_core,
  [{description,  "BeamClaw core: sessions, agentic loop, LLM providers"},
-  {vsn,          "0.1.0"},
+  {vsn,          "0.1.1"},
   {registered,   [bc_session_registry, beamclaw_core_sup, bc_sessions_sup]},
   {mod,          {beamclaw_core_app, []}},
   {applications, [kernel, stdlib, crypto, mnesia, jsx, hackney,

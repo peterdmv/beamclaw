@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.1.1] — 2026-03-07
+
+### Fixed
+- BEAMCLAW_USER bypassing Telegram pairing access control
+
+### Changed
+- Route Nano Banana Pro image generation through OpenRouter
+- Add retry logic for Gemini text-only responses in generate_image.py
+- Strip old image attachments from LLM context to reduce token usage
+- Strengthen skill prompt to prevent unnecessary file verification
+
+### Added
+- Save incoming Telegram photo attachments to disk for tool access
+
+---
+
 ## [0.1.0] — 2026-03-05
 
 First public release.
@@ -39,4 +55,4 @@ First public release.
 - Nine OTP apps in rebar3 umbrella
 - Docker image (Alpine, multi-stage, <100 MB)
 - CLI escript (30 commands)
-- 720 automated tests (683 EUnit + 37 CT)
+- 736 automated tests (699 EUnit + 37 CT)

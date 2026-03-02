@@ -1,6 +1,6 @@
 {application, beamclaw_tools,
  [{description,  "BeamClaw built-in tools and tool registry"},
-  {vsn,          "0.1.0"},
+  {vsn,          "0.1.1"},
   {registered,   [bc_tool_registry]},
   {mod,          {beamclaw_tools_app, []}},
   {applications, [kernel, stdlib, hackney, beamclaw_obs]},

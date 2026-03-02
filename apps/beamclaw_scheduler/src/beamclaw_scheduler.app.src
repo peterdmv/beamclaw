@@ -1,6 +1,6 @@
 {application, beamclaw_scheduler,
  [{description,  "BeamClaw scheduler and heartbeat system"},
-  {vsn,          "0.1.0"},
+  {vsn,          "0.1.1"},
   {registered,   [bc_sched_store, bc_sched_runner, bc_sched_executor,
                   beamclaw_scheduler_sup]},
   {mod,          {beamclaw_scheduler_app, []}},

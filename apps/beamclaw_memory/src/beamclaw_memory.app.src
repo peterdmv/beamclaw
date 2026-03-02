@@ -1,6 +1,6 @@
 {application, beamclaw_memory,
  [{description,  "BeamClaw memory backends"},
-  {vsn,          "0.1.0"},
+  {vsn,          "0.1.1"},
   {registered,   []},
   {mod,          {beamclaw_memory_app, []}},
   {applications, [kernel, stdlib, mnesia, crypto, hackney,
