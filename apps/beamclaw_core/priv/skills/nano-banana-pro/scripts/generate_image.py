@@ -2,12 +2,11 @@
 # /// script
 # requires-python = ">=3.10"
 # dependencies = [
-#     "google-genai>=1.0.0",
 #     "pillow>=10.0.0",
 # ]
 # ///
 """
-Generate images using Google's Nano Banana Pro (Gemini 3 Pro Image) API.
+Generate images using Gemini image models on OpenRouter.
 
 Usage:
     uv run generate_image.py --prompt "your image description" --filename "output.png" [--resolution 1K|2K|4K] [--api-key KEY]
@@ -17,8 +16,12 @@ Multi-image editing (up to 14 images):
 """
 
 import argparse
+import base64
+import json
 import os
 import sys
+import urllib.request
+from io import BytesIO
 from pathlib import Path
 
 
@@ -26,12 +29,29 @@ def get_api_key(provided_key: str | None) -> str | None:
     """Get API key from argument first, then environment."""
     if provided_key:
         return provided_key
-    return os.environ.get("GEMINI_API_KEY")
+    return os.environ.get("OPENROUTER_API_KEY")
+
+
+def encode_image_base64(image_path: str) -> tuple[str, str]:
+    """Read an image file and return (mime_type, base64_data)."""
+    path = Path(image_path)
+    suffix = path.suffix.lower()
+    mime_map = {
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".gif": "image/gif",
+        ".webp": "image/webp",
+    }
+    mime_type = mime_map.get(suffix, "image/png")
+    with open(path, "rb") as f:
+        data = base64.b64encode(f.read()).decode("ascii")
+    return mime_type, data
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Generate images using Nano Banana Pro (Gemini 3 Pro Image)"
+        description="Generate images using Gemini image models on OpenRouter (Nano Banana Pro)"
     )
     parser.add_argument(
         "--prompt", "-p",
@@ -58,12 +78,12 @@ def main():
     )
     parser.add_argument(
         "--api-key", "-k",
-        help="Gemini API key (overrides GEMINI_API_KEY env var)"
+        help="OpenRouter API key (overrides OPENROUTER_API_KEY env var)"
     )
     parser.add_argument(
         "--model", "-m",
-        default=os.environ.get("GEMINI_MODEL", "gemini-3-pro-image-preview"),
-        help="Gemini model name (default: GEMINI_MODEL env or gemini-3-pro-image-preview)"
+        default="google/gemini-2.5-flash-image",
+        help="OpenRouter model ID (default: google/gemini-2.5-flash-image)"
     )
 
     args = parser.parse_args()
@@ -74,24 +94,21 @@ def main():
         print("Error: No API key provided.", file=sys.stderr)
         print("Please either:", file=sys.stderr)
         print("  1. Provide --api-key argument", file=sys.stderr)
-        print("  2. Set GEMINI_API_KEY environment variable", file=sys.stderr)
+        print("  2. Set OPENROUTER_API_KEY environment variable", file=sys.stderr)
         sys.exit(1)
 
-    # Import here after checking API key to avoid slow import on error
-    from google import genai
-    from google.genai import types
+    # Import PIL here after checking API key to avoid slow import on error
     from PIL import Image as PILImage
-
-    # Initialise client
-    client = genai.Client(api_key=api_key)
 
     # Set up output path
     output_path = Path(args.filename)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Load input images if provided (up to 14 supported by Nano Banana Pro)
-    input_images = []
+    # Build message content parts
+    content_parts = []
     output_resolution = args.resolution
+
+    # Load input images if provided (up to 14 supported by Nano Banana Pro)
     if args.input_images:
         if len(args.input_images) > 14:
             print(f"Error: Too many input images ({len(args.input_images)}). Maximum is 14.", file=sys.stderr)
@@ -100,13 +117,21 @@ def main():
         max_input_dim = 0
         for img_path in args.input_images:
             try:
+                # Get dimensions for auto-resolution
                 img = PILImage.open(img_path)
-                input_images.append(img)
-                print(f"Loaded input image: {img_path}")
-
-                # Track largest dimension for auto-resolution
                 width, height = img.size
                 max_input_dim = max(max_input_dim, width, height)
+                img.close()
+
+                # Encode as base64 data URL
+                mime_type, b64_data = encode_image_base64(img_path)
+                content_parts.append({
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:{mime_type};base64,{b64_data}"
+                    }
+                })
+                print(f"Loaded input image: {img_path}")
             except Exception as e:
                 print(f"Error loading input image '{img_path}': {e}", file=sys.stderr)
                 sys.exit(1)
@@ -121,67 +146,97 @@ def main():
                 output_resolution = "1K"
             print(f"Auto-detected resolution: {output_resolution} (from max input dimension {max_input_dim})")
 
-    # Build contents (images first if editing, prompt only if generating)
-    if input_images:
-        contents = [*input_images, args.prompt]
-        img_count = len(input_images)
+    # Add text prompt
+    content_parts.append({"type": "text", "text": args.prompt})
+
+    if args.input_images:
+        img_count = len(args.input_images)
         print(f"Processing {img_count} image{'s' if img_count > 1 else ''} with resolution {output_resolution}...")
     else:
-        contents = args.prompt
         print(f"Generating image with resolution {output_resolution}...")
 
+    # Build OpenRouter request
+    request_body = {
+        "model": args.model,
+        "messages": [
+            {"role": "user", "content": content_parts}
+        ],
+        "modalities": ["image", "text"],
+        "image_config": {"image_size": output_resolution},
+    }
+
+    data = json.dumps(request_body).encode("utf-8")
+    req = urllib.request.Request(
+        "https://openrouter.ai/api/v1/chat/completions",
+        data=data,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+
     try:
-        response = client.models.generate_content(
-            model=args.model,
-            contents=contents,
-            config=types.GenerateContentConfig(
-                response_modalities=["TEXT", "IMAGE"],
-                image_config=types.ImageConfig(
-                    image_size=output_resolution
-                )
-            )
-        )
-
-        # Process response and convert to PNG
-        image_saved = False
-        for part in response.parts:
-            if part.text is not None:
-                print(f"Model response: {part.text}")
-            elif part.inline_data is not None:
-                # Convert inline data to PIL Image and save as PNG
-                from io import BytesIO
-
-                # inline_data.data is already bytes, not base64
-                image_data = part.inline_data.data
-                if isinstance(image_data, str):
-                    # If it's a string, it might be base64
-                    import base64
-                    image_data = base64.b64decode(image_data)
-
-                image = PILImage.open(BytesIO(image_data))
-
-                # Ensure RGB mode for PNG (convert RGBA to RGB with white background if needed)
-                if image.mode == 'RGBA':
-                    rgb_image = PILImage.new('RGB', image.size, (255, 255, 255))
-                    rgb_image.paste(image, mask=image.split()[3])
-                    rgb_image.save(str(output_path), 'PNG')
-                elif image.mode == 'RGB':
-                    image.save(str(output_path), 'PNG')
-                else:
-                    image.convert('RGB').save(str(output_path), 'PNG')
-                image_saved = True
-
-        if image_saved:
-            full_path = output_path.resolve()
-            print(f"\nImage saved: {full_path}")
-            # OpenClaw parses MEDIA tokens and will attach the file on supported providers.
-            print(f"MEDIA: {full_path}")
-        else:
-            print("Error: No image was generated in the response.", file=sys.stderr)
-            sys.exit(1)
-
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            result = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="replace")
+        print(f"Error: OpenRouter API returned {e.code}: {body}", file=sys.stderr)
+        sys.exit(1)
     except Exception as e:
         print(f"Error generating image: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    # Parse response
+    image_saved = False
+    try:
+        message = result["choices"][0]["message"]
+
+        # Print any text content
+        if message.get("content"):
+            print(f"Model response: {message['content']}")
+
+        # Extract images from response
+        images = message.get("images", [])
+        for img_entry in images:
+            image_url = img_entry.get("image_url", {}).get("url", "")
+            if not image_url:
+                continue
+
+            # Parse base64 data URL: "data:image/png;base64,..."
+            if image_url.startswith("data:"):
+                header, b64 = image_url.split(",", 1)
+                image_data = base64.b64decode(b64)
+            else:
+                # Fallback: treat as raw base64
+                image_data = base64.b64decode(image_url)
+
+            image = PILImage.open(BytesIO(image_data))
+
+            # Ensure RGB mode for PNG
+            if image.mode == "RGBA":
+                rgb_image = PILImage.new("RGB", image.size, (255, 255, 255))
+                rgb_image.paste(image, mask=image.split()[3])
+                rgb_image.save(str(output_path), "PNG")
+            elif image.mode == "RGB":
+                image.save(str(output_path), "PNG")
+            else:
+                image.convert("RGB").save(str(output_path), "PNG")
+            image_saved = True
+            break  # Save first image only
+
+    except (KeyError, IndexError) as e:
+        print(f"Error parsing response: {e}", file=sys.stderr)
+        print(f"Response: {json.dumps(result, indent=2)}", file=sys.stderr)
+        sys.exit(1)
+
+    if image_saved:
+        full_path = output_path.resolve()
+        print(f"\nImage saved: {full_path}")
+        # OpenClaw parses MEDIA tokens and will attach the file on supported providers.
+        print(f"MEDIA: {full_path}")
+    else:
+        print("Error: No image was generated in the response.", file=sys.stderr)
         sys.exit(1)
 
 

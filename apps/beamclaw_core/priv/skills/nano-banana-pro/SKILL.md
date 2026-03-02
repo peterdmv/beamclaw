@@ -1,11 +1,11 @@
 ---
 name: nano-banana-pro
-description: Generate or edit images via Gemini 3 Pro Image (Nano Banana Pro).
-homepage: https://ai.google.dev/
-metadata: {"beamclaw": {"emoji": "🍌", "requires": {"bins": ["uv"], "env": ["GEMINI_API_KEY"]}, "install": [{"kind": "brew", "formula": "uv"}]}}
+description: Generate or edit images via Gemini image models on OpenRouter (Nano Banana Pro).
+homepage: https://openrouter.ai/google/gemini-2.5-flash-image
+metadata: {"beamclaw": {"emoji": "🍌", "requires": {"bins": ["uv"], "env": ["OPENROUTER_API_KEY"]}, "install": [{"kind": "brew", "formula": "uv"}]}}
 ---
 
-# Nano Banana Pro (Gemini 3 Pro Image)
+# Nano Banana Pro (Gemini Image via OpenRouter)
 
 Use the bundled script to generate or edit images.
 
@@ -29,12 +29,12 @@ uv run {baseDir}/scripts/generate_image.py --prompt "combine these into one scen
 
 API key
 
-- `GEMINI_API_KEY` env var
+- `OPENROUTER_API_KEY` env var (same key used for LLM providers)
 
 Models
 
-- Default: `gemini-2.5-flash-image` (fast, cheap). No extra flags needed.
-- Pro: `gemini-3-pro-image-preview` (higher quality). Use `--model gemini-3-pro-image-preview` when the user asks for pro/high-quality output.
+- Default: `google/gemini-2.5-flash-image` (fast, cheap). No extra flags needed.
+- Pro: `google/gemini-3-pro-image-preview` (higher quality). Use `--model google/gemini-3-pro-image-preview` when the user asks for pro/high-quality output.
 
 Notes
 

@@ -141,11 +141,11 @@ bundled_nano_banana_pro_test() ->
     {ok, Bin} = file:read_file(SkillFile),
     {ok, Skill} = bc_skill_parser:parse(Bin, global, SkillFile),
     ?assertEqual(<<"nano-banana-pro">>, Skill#bc_skill.name),
-    ?assertEqual(<<"https://ai.google.dev/">>, Skill#bc_skill.homepage),
+    ?assertEqual(<<"https://openrouter.ai/google/gemini-2.5-flash-image">>, Skill#bc_skill.homepage),
     ?assertMatch(#{<<"beamclaw">> := #{<<"requires">> := _}},
                  Skill#bc_skill.metadata),
     #{<<"beamclaw">> := #{<<"requires">> := Reqs}} = Skill#bc_skill.metadata,
     ?assert(lists:member(<<"uv">>, maps:get(<<"bins">>, Reqs))),
-    ?assert(lists:member(<<"GEMINI_API_KEY">>, maps:get(<<"env">>, Reqs))),
+    ?assert(lists:member(<<"OPENROUTER_API_KEY">>, maps:get(<<"env">>, Reqs))),
     %% Content should contain {baseDir} template (not yet resolved)
     ?assert(binary:match(Skill#bc_skill.content, <<"{baseDir}">>) =/= nomatch).
