@@ -273,8 +273,8 @@ default_location(Config) ->
 -spec parse_location_from_user_md(binary()) -> {binary(), float(), float()} | undefined.
 parse_location_from_user_md(Content) ->
     %% Match **Location:** or **Helyszín:** (Hungarian)
-    Pattern = <<"\\*\\*(Location|Helyszín):\\*\\*\\s*(.+)">>,
-    case re:run(Content, Pattern, [{capture, [2], binary}]) of
+    Pattern = <<"\\*\\*(Location|Helyszín):\\*\\*\\s*(.+)"/utf8>>,
+    case re:run(Content, Pattern, [{capture, [2], binary}, unicode]) of
         {match, [Raw]} ->
             parse_location_value(string:trim(Raw));
         nomatch ->
@@ -546,8 +546,8 @@ parse_news_json(Json) ->
 -doc "Extract timezone from USER.md content. Returns undefined if not found.".
 -spec parse_timezone_from_user_md(binary()) -> binary() | undefined.
 parse_timezone_from_user_md(Content) ->
-    case re:run(Content, <<"\\*\\*(Timezone|Időzóna):\\*\\*\\s*(.+)">>,
-                [{capture, [2], binary}]) of
+    case re:run(Content, <<"\\*\\*(Timezone|Időzóna):\\*\\*\\s*(.+)"/utf8>>,
+                [{capture, [2], binary}, unicode]) of
         {match, [Tz]} ->
             Trimmed = string:trim(Tz),
             case Trimmed of

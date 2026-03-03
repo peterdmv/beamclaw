@@ -194,7 +194,7 @@ parse_location_missing_test() ->
     ?assertEqual(undefined, bc_user_env:parse_location_from_user_md(Md)).
 
 parse_location_hungarian_test() ->
-    Md = <<"# Felhasználó\n\n- **Helyszín:** Budapest, 47.50, 19.04\n">>,
+    Md = <<"# Felhasználó\n\n- **Helyszín:** Budapest, 47.50, 19.04\n"/utf8>>,
     ?assertEqual({<<"Budapest">>, 47.50, 19.04}, bc_user_env:parse_location_from_user_md(Md)).
 
 parse_location_bad_format_test() ->
@@ -247,8 +247,18 @@ parse_tz_with_parenthetical_test() ->
     ?assertEqual(<<"CET">>, bc_user_env:parse_timezone_from_user_md(Md)).
 
 parse_tz_hungarian_with_value_test() ->
-    Md = <<"# Felhasználó\n\n- **Időzóna:** CET\n">>,
+    Md = <<"# Felhasználó\n\n- **Időzóna:** CET\n"/utf8>>,
     ?assertEqual(<<"CET">>, bc_user_env:parse_timezone_from_user_md(Md)).
+
+parse_tz_hungarian_utf8_file_test() ->
+    %% Simulate real file content: UTF-8 bytes for "Időzóna" as read by file:read_file/1
+    %% I (plain), d, ő = <<197,145>>, z, ó = <<195,179>>, n, a
+    Md = <<"# User\n\n- **Id",
+           16#C5, 16#91,       %% ő
+           "z",
+           16#C3, 16#B3,       %% ó
+           "na:** Europe/Budapest\n">>,
+    ?assertEqual(<<"Europe/Budapest">>, bc_user_env:parse_timezone_from_user_md(Md)).
 
 %% ---- time section UTC offset display tests ----
 

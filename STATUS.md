@@ -12,9 +12,10 @@ per-user agent mapping, voice message transcription, token-based compaction,
 webhook secret token validation, smart session memory maintenance,
 Telegram bot command registration, `/new` session reset,
 v0.1.0 release preparation, user environment context injection,
-per-agent weather location, and timezone abbreviations + UTC offset display
+per-agent weather location, timezone abbreviations + UTC offset display,
+and UTF-8 Hungarian USER.md field regex fix
 (Post-M37) are all complete.
-745 EUnit tests + 37 CT tests pass (782 total).
+746 EUnit tests + 37 CT tests pass (783 total).
 
 ---
 
@@ -93,6 +94,7 @@ per-agent weather location, and timezone abbreviations + UTC offset display
 | Post-M37 | Fix User Env: Async Refresh + Open-Meteo |
 | Post-M37 | Per-Agent Weather Location |
 | Post-M37 | Timezone Abbreviations + UTC Offset Display |
+| Post-M37 | Fix UTF-8 Hungarian USER.md Field Regex Matching |
 
 ---
 
@@ -137,6 +139,18 @@ per-agent weather location, and timezone abbreviations + UTC offset display
 | Container: default agent USER.md | ✅ | `CET (Central European Time)` → `Europe/Stockholm` |
 | Container: mom agent USER.md | ✅ | `CET` → `Europe/Budapest` |
 | All tests pass | ✅ | 745 EUnit tests pass, 0 warnings |
+
+---
+
+### Post-M37 — Fix UTF-8 Hungarian USER.md Field Regex Matching ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| `bc_user_env.erl` — add `/utf8` + `unicode` to `parse_timezone_from_user_md/1` | ✅ | Regex now matches real UTF-8 file content |
+| `bc_user_env.erl` — add `/utf8` + `unicode` to `parse_location_from_user_md/1` | ✅ | Same fix for Helyszín field |
+| `bc_user_env_tests.erl` — `/utf8` suffix on Hungarian test data | ✅ | Tests now exercise real UTF-8 matching |
+| `bc_user_env_tests.erl` — new `parse_tz_hungarian_utf8_file_test` | ✅ | Explicit UTF-8 bytes simulating `file:read_file/1` |
+| All tests pass | ✅ | 746 EUnit tests, 0 warnings |
 
 ---
 
