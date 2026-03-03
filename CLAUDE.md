@@ -111,6 +111,7 @@ CT suites:
 | `bc_sandbox_docker_SUITE` | `beamclaw_sandbox` | 3 | Docker container lifecycle, script execution, bridge |
 | `bc_scheduler_SUITE` | `beamclaw_scheduler` | 2 | Scheduler timer fire, delivery, heartbeat, tool actions |
 | `bc_context_integration_SUITE` | `beamclaw_gateway` | 2 | /context command dispatch (TUI + Telegram) |
+| `bc_a2a_http_integration_SUITE` | `beamclaw_a2a` | 2 | A2A Agent Card, JSON-RPC, Bearer auth |
 
 **When to run**:
 - Before every commit: `rebar3 eunit`
@@ -129,7 +130,7 @@ CT suites:
 
 - **Language/Runtime**: Erlang/OTP 28
 - **Build Tool**: rebar3
-- **Project Structure**: Umbrella project — nine OTP apps under `apps/`
+- **Project Structure**: Umbrella project — ten OTP apps under `apps/`
 - **HTTP server**: Cowboy 2.x
 - **HTTP client**: Hackney
 - **JSON**: jsx
@@ -187,7 +188,7 @@ beamclaw pair revoke telegram <ID>  # revoke user from allowlist
 
 ## Application Dependency Graph
 
-Nine OTP apps under `apps/`. Dependency direction (arrow = "depends on"):
+Ten OTP apps under `apps/`. Dependency direction (arrow = "depends on"):
 
 ```
 beamclaw_gateway → beamclaw_core → beamclaw_sandbox    → beamclaw_tools → beamclaw_obs
@@ -196,6 +197,8 @@ beamclaw_gateway → beamclaw_core → beamclaw_sandbox    → beamclaw_tools �
                                  → beamclaw_mcp        → beamclaw_tools
                                  → beamclaw_memory     → beamclaw_obs
                                  → beamclaw_tools
+                                 → beamclaw_obs
+                 → beamclaw_a2a  → beamclaw_core
                                  → beamclaw_obs
                  → beamclaw_obs
 ```
@@ -209,7 +212,8 @@ beamclaw_gateway → beamclaw_core → beamclaw_sandbox    → beamclaw_tools �
 | `beamclaw_scheduler` | Scheduled tasks, heartbeat, cron-like jobs | obs, tools, core |
 | `beamclaw_mcp` | MCP server connections (stdio/HTTP), tool discovery | obs, tools |
 | `beamclaw_core` | Sessions, agentic loop, LLM providers, approval, compaction | obs, memory, tools, mcp, sandbox |
-| `beamclaw_gateway` | Channels (Telegram, TUI), HTTP gateway, rate limiter | core, obs |
+| `beamclaw_a2a` | A2A (Agent2Agent) protocol: task manager, JSON-RPC server, agent card | core, obs |
+| `beamclaw_gateway` | Channels (Telegram, TUI), HTTP gateway, rate limiter | core, a2a, obs |
 | `beamclaw_cli` | CLI escript (`beamclaw` binary); not a daemon OTP app | all (bundled via `rebar3 escriptize`) |
 
 **Rule**: never introduce a dependency cycle. `beamclaw_obs` must have zero sibling deps.
@@ -286,6 +290,17 @@ beamclaw_scheduler_sup  (one_for_one)
 ```
 
 Runner manages timers (lightweight, never blocks). Executor does heavy work (session creation, LLM dispatch, HTTP delivery). A crash in execution doesn't lose timer state.
+
+### `beamclaw_a2a`
+
+```
+beamclaw_a2a_sup  (one_for_one)
+  └── bc_a2a_task_manager     (gen_server, permanent — ETS-backed task store)
+```
+
+`bc_a2a_task_manager` owns two ETS tables: `bc_a2a_tasks` (task state) and
+`bc_a2a_sessions` (session → task reverse mapping). `bc_channel_a2a` is a
+stateless module for response routing (no supervised process).
 
 ### `beamclaw_obs`
 
@@ -572,6 +587,10 @@ Non-blocking cast; backends receive events asynchronously via `pg` process group
 | `maintenance_nightly_complete` | `flushed_count` |
 | `maintenance_pre_expiry_flush` | `session_id` |
 | `env_refresh` | `section`, `success`, `duration_ms` |
+| `a2a_task_created` | `task_id`, `session_id` |
+| `a2a_task_updated` | `task_id`, `state` |
+| `a2a_request` | `method`, `path`, `rpc_method` |
+| `a2a_auth_failed` | `client_ip`, `reason` |
 
 Usage: `bc_obs:emit(tool_call_start, #{tool_name => Name, args => Args, session_id => SId})`.
 
@@ -690,7 +709,7 @@ as the user_id, enabling cross-channel session sharing for single-user deploymen
     {env_blocklist, [<<"OPENROUTER_API_KEY">>, <<"OPENAI_API_KEY">>,
                      <<"TELEGRAM_BOT_TOKEN">>, <<"AWS_SECRET_ACCESS_KEY">>,
                      <<"GROQ_API_KEY">>, <<"TELEGRAM_WEBHOOK_SECRET">>,
-                     <<"FINNHUB_TOKEN">>]}
+                     <<"FINNHUB_TOKEN">>, <<"A2A_BEARER_TOKEN">>]}
 ]},
 {beamclaw_tools, [
     {web_search, #{api_key => {env, "BRAVE_API_KEY"},
@@ -719,8 +738,17 @@ as the user_id, enabling cross-channel session sharing for single-user deploymen
                chunk_size => 400, chunk_overlap => 80,
                workspace_files => [<<"MEMORY.md">>, ...],
                daily_log_lookback => 7}}
+]},
+{beamclaw_a2a, [
+    {agent_card, #{
+        name => <<"BeamClaw">>,
+        url  => <<"http://localhost:18800">>
+    }}
 ]}
 ```
+
+`A2A_BEARER_TOKEN` env var: when set, Bearer token authentication is required on `POST /a2a`.
+Agent Card advertises `bearer` scheme when token is configured; no auth advertised otherwise.
 
 Key `vm.args` flags:
 
@@ -739,6 +767,8 @@ GET  /metrics                → bc_http_metrics_h        (Prometheus scrape)
 POST /v1/chat/completions    → bc_http_completions_h    (OpenAI-compatible, SSE streaming)
 GET  /ws                     → bc_ws_h                  (WebSocket)
 POST /webhook/telegram       → bc_webhook_telegram_h
+GET  /.well-known/agent.json → bc_a2a_http_h            (A2A Agent Card discovery)
+POST /a2a                    → bc_a2a_http_h            (A2A JSON-RPC 2.0, Bearer token auth)
 ```
 
 Rate limiting (`bc_rate_limiter`): sliding-window per client IP, ETS-backed, pruned every 60 s. Checked in every handler before dispatch.
@@ -916,6 +946,19 @@ beamclaw/
           nano-banana-pro/
             scripts/
               generate_image.py     %% Gemini image generation script
+    beamclaw_a2a/
+      include/
+        bc_a2a_types.hrl          %% A2A records: a2a_task, a2a_message, a2a_status, a2a_artifact
+      src/
+        beamclaw_a2a.app.src
+        beamclaw_a2a_app.erl
+        beamclaw_a2a_sup.erl
+        bc_a2a_task.erl           %% task state machine + serialization
+        bc_a2a_task_manager.erl   %% gen_server: ETS-backed task store + session dispatch
+        bc_a2a_server.erl         %% JSON-RPC 2.0 method dispatch (stateless)
+        bc_a2a_http_h.erl         %% Cowboy handler: agent card + /a2a endpoint
+        bc_a2a_agent_card.erl     %% agent card builder + serialization
+        bc_channel_a2a.erl        %% stateless response routing for A2A sessions
     beamclaw_gateway/src/
       beamclaw_gateway.app.src
       beamclaw_gateway_app.erl
