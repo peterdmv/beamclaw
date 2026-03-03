@@ -10,9 +10,10 @@ skills, on-demand skill loading, Telegram markdown-to-HTML formatting,
 BM25-based skill auto-injection, `/context` command, outgoing photo delivery,
 per-user agent mapping, voice message transcription, token-based compaction,
 webhook secret token validation, smart session memory maintenance,
-Telegram bot command registration, `/new` session reset, and
-v0.1.0 release preparation (Post-M37) are all complete.
-699 EUnit tests + 37 CT tests pass (736 total).
+Telegram bot command registration, `/new` session reset,
+v0.1.0 release preparation, and user environment context injection
+(Post-M37) are all complete.
+733 EUnit tests + 37 CT tests pass (770 total).
 
 ---
 
@@ -87,6 +88,8 @@ v0.1.0 release preparation (Post-M37) are all complete.
 | Post-M37 | v0.1.0 Release Preparation |
 | Post-M37 | Incoming Image Attachment Disk Save + bash Tool Arg Fix |
 | Post-M37 | Skill Prompt Fix + Strip Old Image Attachments |
+| Post-M37 | User Environment Context Injection |
+| Post-M37 | Fix User Env: Async Refresh + Open-Meteo |
 
 ---
 
@@ -114,6 +117,32 @@ v0.1.0 release preparation (Post-M37) are all complete.
 | `bc_loop_attachment_tests.erl` — 10 EUnit tests | ✅ | Edge cases: keep count, non-user msgs, content preserved |
 | All tests pass | ✅ | 699 EUnit tests pass, 0 warnings |
 
+### Post-M37 — User Environment Context Injection ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| `bc_user_env.erl` — singleton gen_server with weather/news caching | ✅ | wttr.in + Finnhub APIs, configurable TTLs |
+| `beamclaw_core_sup.erl` — add `bc_user_env` child spec | ✅ | Permanent worker after `bc_session_maintenance` |
+| `bc_loop.erl` — inject `EnvMsgs` via `maybe_user_env/1` | ✅ | Ephemeral, never stored in history |
+| `config/sys.config` — `user_env` config block | ✅ | Opt-in (`enabled => false`), FINNHUB_TOKEN to blocklist |
+| `bc_workspace_templates.erl` — SOUL.md environment awareness | ✅ | Guidance for time-of-day, weather, idle references |
+| `bc_user_env_tests.erl` — 26 EUnit tests | ✅ | Pure functions + gen_server disabled test |
+| CLAUDE.md, docs updates | ✅ | File layout, sup tree, config, obs events |
+| All tests pass | ✅ | 725 EUnit tests pass, 0 warnings |
+
+### Post-M37 — Fix User Env: Async Refresh + Open-Meteo ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| `bc_user_env.erl` — switch weather API from wttr.in to Open-Meteo | ✅ | No API key needed, works from Docker |
+| `bc_user_env.erl` — async periodic refresh via `handle_info` | ✅ | `handle_call` never blocks on HTTP |
+| `bc_user_env.erl` — `wmo_description/1` WMO weather code mapper | ✅ | 28 WMO codes → human-readable strings |
+| `bc_user_env.erl` — enable by default | ✅ | `enabled => true`, Stockholm lat/lon |
+| Config — new shape: `latitude`/`longitude`/`location_name`/`refresh_interval_ms` | ✅ | sys.config + sys.docker.config |
+| `bc_user_env_tests.erl` — Open-Meteo JSON + WMO tests | ✅ | 8 new tests (wmo, open-meteo format) |
+| CLAUDE.md, docs/configuration.md updates | ✅ | New config keys documented |
+| All tests pass | ✅ | 733 EUnit tests pass, 0 warnings |
+
 ---
 
 ## Active Work
@@ -130,4 +159,4 @@ _None at this time._
 
 ## Last Updated
 
-2026-03-07
+2026-03-09

@@ -225,6 +225,7 @@ beamclaw_core_sup  (one_for_one)
   ├── bc_session_registry     (gen_server, named — ETS: session_id → pid)
   ├── bc_session_cleaner      (gen_server, permanent — periodic expired session cleanup)
   ├── bc_session_maintenance  (gen_server, permanent — idle compaction, nightly flush, pre-expiry)
+  ├── bc_user_env             (gen_server, permanent — user environment context injection)
   └── bc_sessions_sup         (simple_one_for_one)
         └── [per session] bc_session_sup  (one_for_one)
               ├── bc_session     (gen_server, permanent — the "lane")
@@ -570,6 +571,7 @@ Non-blocking cast; backends receive events asynchronously via `pg` process group
 | `maintenance_nightly_start` | `session_count` |
 | `maintenance_nightly_complete` | `flushed_count` |
 | `maintenance_pre_expiry_flush` | `session_id` |
+| `env_refresh` | `section`, `success`, `duration_ms` |
 
 Usage: `bc_obs:emit(tool_call_start, #{tool_name => Name, args => Args, session_id => SId})`.
 
@@ -629,7 +631,19 @@ as the user_id, enabling cross-channel session sharing for single-user deploymen
         nightly_min_messages          => 10,       %% min history for nightly
         pre_expiry_minutes            => 10        %% flush window before TTL
     }},
-    {skills, #{}}
+    {skills, #{}},
+    {user_env, #{
+        enabled          => true,               %% real-time environment context
+        timezone         => undefined,          %% override USER.md; IANA name string
+        utc_offset_hours => undefined,          %% override; integer hours from UTC
+        latitude         => 59.33,              %% for open-meteo weather (Stockholm)
+        longitude        => 18.07,
+        location_name    => "Stockholm",        %% display name in output
+        weather          => #{enabled => true, ttl_seconds => 3600},
+        news             => #{enabled => true, ttl_seconds => 3600},
+        finnhub_token    => {env, "FINNHUB_TOKEN"},
+        refresh_interval_ms => 1800000          %% 30 min async refresh interval
+    }}
 ]},
 {beamclaw_mcp, [
     {servers, []}
@@ -675,7 +689,8 @@ as the user_id, enabling cross-channel session sharing for single-user deploymen
     {env_allowlist, [<<"PATH">>, <<"HOME">>, <<"LANG">>, <<"TERM">>]},
     {env_blocklist, [<<"OPENROUTER_API_KEY">>, <<"OPENAI_API_KEY">>,
                      <<"TELEGRAM_BOT_TOKEN">>, <<"AWS_SECRET_ACCESS_KEY">>,
-                     <<"GROQ_API_KEY">>, <<"TELEGRAM_WEBHOOK_SECRET">>]}
+                     <<"GROQ_API_KEY">>, <<"TELEGRAM_WEBHOOK_SECRET">>,
+                     <<"FINNHUB_TOKEN">>]}
 ]},
 {beamclaw_tools, [
     {web_search, #{api_key => {env, "BRAVE_API_KEY"},
@@ -880,6 +895,7 @@ beamclaw/
         bc_compactor.erl
         bc_memory_flush.erl       %% extracted pre-compaction memory flush
         bc_session_maintenance.erl  %% periodic idle/nightly/pre-expiry maintenance
+        bc_user_env.erl             %% user environment context injection (time, weather, news)
         bc_scrubber.erl
         bc_thinking.erl       %% strip LLM thinking/reasoning tags
         bc_tool_parser.erl

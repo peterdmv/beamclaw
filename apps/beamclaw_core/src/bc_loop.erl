@@ -170,9 +170,10 @@ streaming(enter, _OldState, Data) ->
 streaming(cast, do_stream, Data) ->
     History    = bc_session:get_history(Data#loop_data.session_pid),
     UserText   = last_user_content(History),
-    SystemMsgs = bc_system_prompt:assemble(Data#loop_data.agent_id, #{}, UserText),
+    SystemMsgs  = bc_system_prompt:assemble(Data#loop_data.agent_id, #{}, UserText),
     AutoCtxMsgs = maybe_auto_context(History, Data),
-    FullHistory = SystemMsgs ++ AutoCtxMsgs ++ History,
+    EnvMsgs     = maybe_user_env(Data),
+    FullHistory = SystemMsgs ++ AutoCtxMsgs ++ EnvMsgs ++ History,
     LLMHistory = strip_old_attachments(FullHistory),
     LoopCfg   = bc_config:get(beamclaw_core, agentic_loop, #{}),
     ChunkSize = maps:get(stream_chunk_size, LoopCfg, 80),
@@ -601,6 +602,15 @@ strip_old_attachments(Msgs, KeepN) ->
             {[M | Acc], N}                 %% non-user: pass through
     end, {[], 0}, Reversed),
     Stripped.
+
+%% Optional user environment context injection.
+%% Gated by `user_env => #{enabled => true}` in beamclaw_core config.
+maybe_user_env(Data) ->
+    try bc_user_env:get_env_message(
+            Data#loop_data.agent_id,
+            Data#loop_data.session_pid)
+    catch _:_ -> []
+    end.
 
 %% Optional auto-context: BM25-only search of structured memory using
 %% user's latest message, prepended as a system message.

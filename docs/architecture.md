@@ -52,6 +52,8 @@ The rule: no dependency cycle. `beamclaw_obs` never imports from any sibling.
 beamclaw_core_sup  (one_for_one)
   ├── bc_session_registry     (gen_server, named — ETS: session_id → pid)
   ├── bc_session_cleaner      (gen_server, permanent — periodic expired session cleanup)
+  ├── bc_session_maintenance  (gen_server, permanent — idle compaction, nightly flush, pre-expiry)
+  ├── bc_user_env             (gen_server, permanent — user environment context injection)
   └── bc_sessions_sup         (simple_one_for_one)
         └── [per session] bc_session_sup  (one_for_one)
               ├── bc_session     (gen_server, permanent — conversation history)

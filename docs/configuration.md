@@ -28,6 +28,7 @@ resolved at runtime by `bc_config:get/2` via `os:getenv/1`.
 | `BEAMCLAW_EMBEDDING_API_KEY` | No | API key for the embedding service (OpenAI-compatible). When unset, semantic/hybrid search degrades to BM25 keyword-only. |
 | `BEAMCLAW_EMBEDDING_URL` | No | Base URL for the embedding API (default: `https://api.openai.com/v1`). Supports OpenAI, Azure OpenAI, Ollama, or any OpenAI-compatible endpoint. |
 | `BEAMCLAW_EMBEDDING_MODEL` | No | Embedding model name (default: `text-embedding-3-small`). |
+| `FINNHUB_TOKEN` | No | Finnhub API token for news headlines in the user environment context. Get one at [finnhub.io](https://finnhub.io/). When unset, the news section is silently omitted. |
 
 At least one of `OPENROUTER_API_KEY` or `OPENAI_API_KEY` must be set, depending on
 `default_provider`.
@@ -402,6 +403,48 @@ When enabled, `bc_session_maintenance` runs three tasks on each scan tick:
 1. **Idle compaction**: sessions idle > `idle_compaction_minutes` with history tokens > `idle_compaction_threshold_pct`% of the context window get a memory flush + aggressive compaction (down to `idle_compaction_target_pct`%).
 2. **Nightly maintenance**: during `quiet_hours` (once per day), all non-busy sessions with sufficient history get a memory flush + aggressive compaction.
 3. **Pre-expiry flush**: sessions approaching TTL expiry get a memory flush to extract knowledge before deletion.
+
+### beamclaw_core — User Environment Context
+
+```erlang
+{user_env, #{
+    enabled          => true,               %% real-time environment context
+    timezone         => undefined,          %% override USER.md; IANA name string
+    utc_offset_hours => undefined,          %% override; integer hours from UTC
+    latitude         => 59.33,              %% for open-meteo weather (Stockholm)
+    longitude        => 18.07,
+    location_name    => "Stockholm",        %% display name in output
+    weather          => #{enabled => true, ttl_seconds => 3600},
+    news             => #{enabled => true, ttl_seconds => 3600},
+    finnhub_token    => {env, "FINNHUB_TOKEN"},
+    refresh_interval_ms => 1800000          %% 30 min async refresh interval
+}}
+```
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | boolean | `true` | Enable user environment context injection into LLM calls |
+| `timezone` | string \| `undefined` | `undefined` | IANA timezone name (overrides USER.md `**Timezone:**` field) |
+| `utc_offset_hours` | integer \| `undefined` | `undefined` | UTC offset in hours (overrides timezone lookup) |
+| `latitude` | float | `59.33` | Latitude for Open-Meteo weather API |
+| `longitude` | float | `18.07` | Longitude for Open-Meteo weather API |
+| `location_name` | string | `"Stockholm"` | Display name for the location in weather output |
+| `weather.enabled` | boolean | `true` | Enable weather section |
+| `weather.ttl_seconds` | integer | `3600` | Weather cache TTL (1 hour) |
+| `news.enabled` | boolean | `true` | Enable news headlines section |
+| `news.ttl_seconds` | integer | `3600` | News cache TTL (1 hour) |
+| `finnhub_token` | `{env, Var}` | `{env, "FINNHUB_TOKEN"}` | Finnhub API token for news headlines |
+| `refresh_interval_ms` | integer | `1800000` | Async refresh interval for weather + news (30 min) |
+
+When enabled, `bc_user_env` assembles a `[user:environment]` system message injected into
+every LLM call. The message contains up to four sections: current local time, time since
+last interaction, weather conditions, and news headlines. Each section degrades gracefully
+when its data source is unavailable. The timezone is parsed from the agent's USER.md file
+(`**Timezone:** Europe/Budapest`) unless overridden via config.
+
+Weather data is fetched from [Open-Meteo](https://open-meteo.com/) (free, no API key
+required). Fetches happen asynchronously on a periodic timer — `handle_call` never blocks
+on HTTP.
 
 ### beamclaw_obs
 
