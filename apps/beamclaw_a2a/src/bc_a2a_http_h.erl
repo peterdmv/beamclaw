@@ -23,6 +23,8 @@ Routes (mounted in bc_gateway_cowboy):
 """.
 
 -export([init/2]).
+%% Exported for testing
+-export([verify_bearer/2, resolve_bearer_token/0]).
 
 init(Req0, State) ->
     ClientIp = peer_ip(Req0),
@@ -48,8 +50,32 @@ handle(<<"GET">>, <<"/.well-known/agent.json">>, Req0, State) ->
     bc_obs:emit(a2a_request, #{method => <<"GET">>, path => <<"/.well-known/agent.json">>}),
     {ok, Req, State};
 
-%% A2A JSON-RPC endpoint
+%% A2A JSON-RPC endpoint (Bearer token auth on POST only)
 handle(<<"POST">>, <<"/a2a">>, Req0, State) ->
+    case authenticate(Req0) of
+        ok ->
+            handle_jsonrpc(Req0, State);
+        {error, Reason} ->
+            bc_obs:emit(a2a_auth_failed, #{client_ip => peer_ip(Req0),
+                                           reason => Reason}),
+            Req = cowboy_req:reply(401,
+                #{<<"content-type">> => <<"application/json">>,
+                  <<"www-authenticate">> => <<"Bearer">>},
+                jsx:encode(#{<<"jsonrpc">> => <<"2.0">>,
+                             <<"id">> => null,
+                             <<"error">> => #{<<"code">> => -32000,
+                                              <<"message">> => <<"Authentication required">>}}),
+                Req0),
+            {ok, Req, State}
+    end;
+
+handle(_, _, Req0, State) ->
+    Req = cowboy_req:reply(404, #{}, <<"Not Found">>, Req0),
+    {ok, Req, State}.
+
+%% --- Internal ---
+
+handle_jsonrpc(Req0, State) ->
     {ok, RawBody, Req1} = cowboy_req:read_body(Req0),
     case catch jsx:decode(RawBody, [return_maps]) of
         Request when is_map(Request) ->
@@ -79,13 +105,46 @@ handle(<<"POST">>, <<"/a2a">>, Req0, State) ->
                 #{<<"content-type">> => <<"application/json">>},
                 Error, Req1),
             {ok, Req, State}
-    end;
+    end.
 
-handle(_, _, Req0, State) ->
-    Req = cowboy_req:reply(404, #{}, <<"Not Found">>, Req0),
-    {ok, Req, State}.
+%% Bearer token authentication — only on POST /a2a, not GET agent card
+authenticate(Req) ->
+    case resolve_bearer_token() of
+        undefined -> ok;  %% No token configured = open access
+        Configured ->
+            case cowboy_req:header(<<"authorization">>, Req) of
+                undefined ->
+                    {error, <<"missing authorization header">>};
+                <<"Bearer ", Token/binary>> ->
+                    verify_bearer(Token, Configured);
+                <<"bearer ", Token/binary>> ->
+                    verify_bearer(Token, Configured);
+                _ ->
+                    {error, <<"invalid authorization scheme">>}
+            end
+    end.
 
-%% --- Internal ---
+-spec verify_bearer(binary(), binary()) -> ok | {error, binary()}.
+verify_bearer(Provided, Configured) ->
+    ProvBin = iolist_to_binary(Provided),
+    ConfBin = iolist_to_binary(Configured),
+    case constant_time_equals(ProvBin, ConfBin) of
+        true  -> ok;
+        false -> {error, <<"invalid bearer token">>}
+    end.
+
+constant_time_equals(A, B) when byte_size(A) =:= byte_size(B) ->
+    crypto:hash_equals(A, B);
+constant_time_equals(_, _) ->
+    false.
+
+-spec resolve_bearer_token() -> binary() | undefined.
+resolve_bearer_token() ->
+    case os:getenv("A2A_BEARER_TOKEN") of
+        false -> undefined;
+        ""    -> undefined;
+        Val   -> list_to_binary(Val)
+    end.
 
 peer_ip(Req) ->
     {IP, _Port} = cowboy_req:peer(Req),

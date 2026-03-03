@@ -34,7 +34,12 @@ discovery and JSON-RPC endpoints end-to-end.
 -export([agent_card_endpoint/1,
          a2a_jsonrpc_method_not_found/1,
          a2a_malformed_json/1,
-         a2a_rate_limit/1]).
+         a2a_rate_limit/1,
+         a2a_auth_missing_header/1,
+         a2a_auth_invalid_token/1,
+         a2a_auth_valid_token/1,
+         a2a_no_auth_when_unconfigured/1,
+         agent_card_shows_auth_when_configured/1]).
 
 suite() ->
     [{timetrap, {seconds, 30}}].
@@ -43,6 +48,11 @@ all() ->
     [agent_card_endpoint,
      a2a_jsonrpc_method_not_found,
      a2a_malformed_json,
+     a2a_auth_missing_header,
+     a2a_auth_invalid_token,
+     a2a_auth_valid_token,
+     a2a_no_auth_when_unconfigured,
+     agent_card_shows_auth_when_configured,
      a2a_rate_limit].
 
 %% ---------------------------------------------------------------------------
@@ -79,10 +89,23 @@ end_per_suite(Config) ->
     os:unsetenv("OPENROUTER_API_KEY"),
     ok.
 
+init_per_testcase(TC, Config) when TC =:= a2a_auth_missing_header;
+                                   TC =:= a2a_auth_invalid_token;
+                                   TC =:= a2a_auth_valid_token;
+                                   TC =:= agent_card_shows_auth_when_configured ->
+    os:putenv("A2A_BEARER_TOKEN", "ct-test-secret"),
+    Config;
+init_per_testcase(a2a_no_auth_when_unconfigured, Config) ->
+    os:unsetenv("A2A_BEARER_TOKEN"),
+    Config;
 init_per_testcase(_TC, Config) ->
+    os:unsetenv("A2A_BEARER_TOKEN"),
     Config.
 
 end_per_testcase(_TC, _Config) ->
+    os:unsetenv("A2A_BEARER_TOKEN"),
+    %% Reset rate limiter to avoid test ordering issues
+    catch ets:delete_all_objects(bc_rate_limiter),
     ok.
 
 %% ---------------------------------------------------------------------------
@@ -141,4 +164,68 @@ a2a_rate_limit(Config) ->
     end, lists:seq(1, 62)),
     Has429 = lists:member(429, Results),
     ?assert(Has429),
+    ok.
+
+%% --- Auth test cases ---
+
+a2a_auth_missing_header(Config) ->
+    BaseUrl = proplists:get_value(base_url, Config),
+    Url = BaseUrl ++ "/a2a",
+    ReqBody = jsx:encode(#{<<"jsonrpc">> => <<"2.0">>, <<"id">> => 1,
+                           <<"method">> => <<"tasks/list">>}),
+    {ok, {{_, 401, _}, Headers, _RespBody}} =
+        httpc:request(post,
+            {Url, [], "application/json", binary_to_list(ReqBody)},
+            [{timeout, 5000}], []),
+    %% RFC 6750: WWW-Authenticate header present
+    ?assertNotEqual(false, lists:keyfind("www-authenticate", 1, Headers)),
+    ok.
+
+a2a_auth_invalid_token(Config) ->
+    BaseUrl = proplists:get_value(base_url, Config),
+    Url = BaseUrl ++ "/a2a",
+    ReqBody = jsx:encode(#{<<"jsonrpc">> => <<"2.0">>, <<"id">> => 1,
+                           <<"method">> => <<"tasks/list">>}),
+    {ok, {{_, 401, _}, _, RespBody}} =
+        httpc:request(post,
+            {Url, [{"Authorization", "Bearer wrong-token"}],
+             "application/json", binary_to_list(ReqBody)},
+            [{timeout, 5000}], []),
+    Decoded = jsx:decode(iolist_to_binary(RespBody), [return_maps]),
+    Error = maps:get(<<"error">>, Decoded),
+    ?assertEqual(-32000, maps:get(<<"code">>, Error)),
+    ok.
+
+a2a_auth_valid_token(Config) ->
+    BaseUrl = proplists:get_value(base_url, Config),
+    Url = BaseUrl ++ "/a2a",
+    ReqBody = jsx:encode(#{<<"jsonrpc">> => <<"2.0">>, <<"id">> => 1,
+                           <<"method">> => <<"tasks/list">>}),
+    {ok, {{_, 200, _}, _, _RespBody}} =
+        httpc:request(post,
+            {Url, [{"Authorization", "Bearer ct-test-secret"}],
+             "application/json", binary_to_list(ReqBody)},
+            [{timeout, 5000}], []),
+    ok.
+
+a2a_no_auth_when_unconfigured(Config) ->
+    BaseUrl = proplists:get_value(base_url, Config),
+    Url = BaseUrl ++ "/a2a",
+    ReqBody = jsx:encode(#{<<"jsonrpc">> => <<"2.0">>, <<"id">> => 1,
+                           <<"method">> => <<"tasks/list">>}),
+    %% No Authorization header, no token configured → should pass through
+    {ok, {{_, 200, _}, _, _RespBody}} =
+        httpc:request(post,
+            {Url, [], "application/json", binary_to_list(ReqBody)},
+            [{timeout, 5000}], []),
+    ok.
+
+agent_card_shows_auth_when_configured(Config) ->
+    BaseUrl = proplists:get_value(base_url, Config),
+    Url = BaseUrl ++ "/.well-known/agent.json",
+    {ok, {{_, 200, _}, _, Body}} = httpc:request(get, {Url, []}, [], []),
+    Decoded = jsx:decode(iolist_to_binary(Body), [return_maps]),
+    Auth = maps:get(<<"authentication">>, Decoded),
+    ?assert(is_map(Auth)),
+    ?assertEqual([<<"bearer">>], maps:get(<<"schemes">>, Auth)),
     ok.

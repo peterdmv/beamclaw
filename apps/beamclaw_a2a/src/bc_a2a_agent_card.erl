@@ -59,7 +59,7 @@ build() ->
             url => <<"https://github.com/peterdmv/beamclaw">>
         },
         documentation_url = <<"https://github.com/peterdmv/beamclaw">>,
-        authentication = undefined
+        authentication = resolve_auth_scheme()
     }.
 
 -spec to_json(#agent_card{}) -> map().
@@ -79,7 +79,7 @@ to_json(#agent_card{} = C) ->
         <<"defaultOutputModes">>=> C#agent_card.default_output_modes,
         <<"provider">>          => provider_to_json(C#agent_card.provider),
         <<"documentationUrl">>  => C#agent_card.documentation_url,
-        <<"authentication">>    => undefined
+        <<"authentication">>    => auth_to_json(C#agent_card.authentication)
     }).
 
 %% --- Internal ---
@@ -101,6 +101,18 @@ skill_to_json(S) ->
         <<"tags">>        => maps:get(tags, S),
         <<"examples">>    => maps:get(examples, S)
     }.
+
+resolve_auth_scheme() ->
+    case os:getenv("A2A_BEARER_TOKEN") of
+        false -> undefined;
+        ""    -> undefined;
+        _     -> #{schemes => [<<"bearer">>],
+                   credentials => <<"Bearer token required in Authorization header">>}
+    end.
+
+auth_to_json(undefined) -> undefined;
+auth_to_json(#{schemes := S, credentials := C}) ->
+    #{<<"schemes">> => S, <<"credentials">> => C}.
 
 provider_to_json(undefined) -> undefined;
 provider_to_json(P) ->

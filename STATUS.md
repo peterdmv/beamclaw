@@ -13,9 +13,10 @@ webhook secret token validation, smart session memory maintenance,
 Telegram bot command registration, `/new` session reset,
 v0.1.0 release preparation, user environment context injection,
 per-agent weather location, timezone abbreviations + UTC offset display,
-UTF-8 Hungarian USER.md field regex fix, and A2A protocol
+UTF-8 Hungarian USER.md field regex fix, A2A protocol,
+and A2A Bearer token authentication
 (Post-M37) are all complete.
-746 EUnit tests + 37 CT tests pass (783 total).
+780 EUnit tests + 46 CT tests pass (826 total).
 
 ---
 
@@ -96,52 +97,11 @@ UTF-8 Hungarian USER.md field regex fix, and A2A protocol
 | Post-M37 | Timezone Abbreviations + UTC Offset Display |
 | Post-M37 | Fix UTF-8 Hungarian USER.md Field Regex Matching |
 | Post-M37 | A2A (Agent2Agent) Protocol |
+| Post-M37 | A2A Bearer Token Authentication |
 
 ---
 
 ## Recent Milestones
-
-### Post-M37 — Fix User Env: Async Refresh + Open-Meteo ✅
-
-| Task | Status | Notes |
-|------|--------|-------|
-| `bc_user_env.erl` — switch weather API from wttr.in to Open-Meteo | ✅ | No API key needed, works from Docker |
-| `bc_user_env.erl` — async periodic refresh via `handle_info` | ✅ | `handle_call` never blocks on HTTP |
-| `bc_user_env.erl` — `wmo_description/1` WMO weather code mapper | ✅ | 28 WMO codes → human-readable strings |
-| `bc_user_env.erl` — enable by default | ✅ | `enabled => true`, Stockholm lat/lon |
-| Config — new shape: `latitude`/`longitude`/`location_name`/`refresh_interval_ms` | ✅ | sys.config + sys.docker.config |
-| `bc_user_env_tests.erl` — Open-Meteo JSON + WMO tests | ✅ | 8 new tests (wmo, open-meteo format) |
-| CLAUDE.md, docs/configuration.md updates | ✅ | New config keys documented |
-| All tests pass | ✅ | 733 EUnit tests pass, 0 warnings |
-
-### Post-M37 — Per-Agent Weather Location ✅
-
-| Task | Status | Notes |
-|------|--------|-------|
-| `bc_workspace_templates.erl` — add `**Location:**` to USER.md template | ✅ | City, lat, lon format |
-| `bc_user_env.erl` — `parse_location_from_user_md/1` | ✅ | English + Hungarian (`**Helyszín:**`) |
-| `bc_user_env.erl` — `resolve_location/2` | ✅ | USER.md → global config fallback |
-| `bc_user_env.erl` — per-location `weather_cache` map | ✅ | `#{LocKey => WeatherText}` |
-| `bc_user_env.erl` — on-demand `fetch_location` for cache miss | ✅ | Async spawn, weather appears next LLM call |
-| `bc_user_env.erl` — refresh fetches all cached locations | ✅ | Periodic timer refreshes all known locations |
-| `bc_user_env.erl` — Hungarian timezone parsing (`**Időzóna:**`) | ✅ | Bonus: mom's USER.md works for timezone too |
-| `bc_user_env_tests.erl` — 6 new location parsing tests | ✅ | Present, missing, Hungarian, bad format, placeholder, integer coords |
-| All tests pass | ✅ | 739 EUnit tests pass, 0 warnings |
-
-### Post-M37 — Timezone Abbreviations + UTC Offset Display ✅
-
-| Task | Status | Notes |
-|------|--------|-------|
-| `bc_workspace_templates.erl` — timezone format hint in USER.md template | ✅ | Guides IANA name or abbreviation |
-| `bc_user_env.erl` — `strip_parenthetical/1` in `parse_timezone_from_user_md` | ✅ | `CET (Central European Time)` → `CET` |
-| `bc_user_env.erl` — 30 common timezone abbreviations in `tz_offset/1` | ✅ | CET, EST, PST, JST, etc. |
-| `bc_user_env.erl` — UTC offset in time section display | ✅ | `(CET, UTC+1)` — no duplicate for UTC/GMT |
-| `bc_user_env_tests.erl` — 6 new tests | ✅ | Abbreviations, parenthetical, UTC offset display |
-| Container: default agent USER.md | ✅ | `CET (Central European Time)` → `Europe/Stockholm` |
-| Container: mom agent USER.md | ✅ | `CET` → `Europe/Budapest` |
-| All tests pass | ✅ | 745 EUnit tests pass, 0 warnings |
-
----
 
 ### Post-M37 — Fix UTF-8 Hungarian USER.md Field Regex Matching ✅
 
@@ -152,6 +112,24 @@ UTF-8 Hungarian USER.md field regex fix, and A2A protocol
 | `bc_user_env_tests.erl` — `/utf8` suffix on Hungarian test data | ✅ | Tests now exercise real UTF-8 matching |
 | `bc_user_env_tests.erl` — new `parse_tz_hungarian_utf8_file_test` | ✅ | Explicit UTF-8 bytes simulating `file:read_file/1` |
 | All tests pass | ✅ | 746 EUnit tests, 0 warnings |
+
+---
+
+### Post-M37 — A2A Bearer Token Authentication ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Rebase `feature/a2a-protocol` onto main | ✅ | 9 commits behind resolved, duplicate `version/0` fixed |
+| `bc_a2a_http_h.erl` — Bearer token auth on POST /a2a | ✅ | `authenticate/1`, constant-time comparison via `crypto:hash_equals/2` |
+| `bc_a2a_http_h.erl` — 401 JSON-RPC error + `WWW-Authenticate: Bearer` | ✅ | RFC 6750 compliant |
+| `bc_a2a_agent_card.erl` — dynamic auth scheme in Agent Card | ✅ | `resolve_auth_scheme/0` reads `A2A_BEARER_TOKEN` env var |
+| Config — `A2A_BEARER_TOKEN` in sandbox `env_blocklist` | ✅ | sys.config + sys.docker.config |
+| Config — `beamclaw_a2a` app section in sys.config | ✅ | Agent card name + url |
+| `bc_a2a_auth_tests.erl` — 6 EUnit tests | ✅ | verify_bearer, resolve_token |
+| `bc_a2a_server_tests.erl` — 2 Agent Card auth tests | ✅ | Auth present/absent based on env var |
+| `bc_a2a_http_integration_SUITE.erl` — 5 CT auth tests | ✅ | Missing header, invalid token, valid token, unconfigured, card auth |
+| CLAUDE.md, docs/configuration.md updates | ✅ | `a2a_auth_failed` obs event, `A2A_BEARER_TOKEN` env var |
+| All tests pass | ✅ | 780 EUnit + 46 CT = 826 total |
 
 ---
 
@@ -169,4 +147,4 @@ _None at this time._
 
 ## Last Updated
 
-2026-03-11
+2026-03-13

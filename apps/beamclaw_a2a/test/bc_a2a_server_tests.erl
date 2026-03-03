@@ -49,3 +49,17 @@ agent_card_has_version_test() ->
     Card = bc_a2a_server:agent_card(),
     Version = maps:get(<<"version">>, Card),
     ?assert(is_binary(Version)).
+
+agent_card_includes_auth_when_configured_test() ->
+    os:putenv("A2A_BEARER_TOKEN", "test-secret"),
+    Card = bc_a2a_server:agent_card(),
+    Auth = maps:get(<<"authentication">>, Card),
+    ?assert(is_map(Auth)),
+    ?assertEqual([<<"bearer">>], maps:get(<<"schemes">>, Auth)),
+    os:unsetenv("A2A_BEARER_TOKEN").
+
+agent_card_no_auth_when_unconfigured_test() ->
+    os:unsetenv("A2A_BEARER_TOKEN"),
+    Card = bc_a2a_server:agent_card(),
+    %% authentication key should not be present (reject_undefined removes it)
+    ?assertNot(maps:is_key(<<"authentication">>, Card)).

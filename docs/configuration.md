@@ -29,6 +29,7 @@ resolved at runtime by `bc_config:get/2` via `os:getenv/1`.
 | `BEAMCLAW_EMBEDDING_URL` | No | Base URL for the embedding API (default: `https://api.openai.com/v1`). Supports OpenAI, Azure OpenAI, Ollama, or any OpenAI-compatible endpoint. |
 | `BEAMCLAW_EMBEDDING_MODEL` | No | Embedding model name (default: `text-embedding-3-small`). |
 | `FINNHUB_TOKEN` | No | Finnhub API token for news headlines in the user environment context. Get one at [finnhub.io](https://finnhub.io/). When unset, the news section is silently omitted. |
+| `A2A_BEARER_TOKEN` | No | Bearer token for A2A protocol endpoint authentication. When set, `POST /a2a` requires `Authorization: Bearer <token>` header; the Agent Card advertises `bearer` auth scheme. When unset, A2A endpoint is open access (suitable for single-user deployments). |
 
 At least one of `OPENROUTER_API_KEY` or `OPENAI_API_KEY` must be set, depending on
 `default_provider`.
@@ -371,6 +372,27 @@ backend automatically falls back to `ram_copies`.
 | `heartbeat.default_interval_ms` | integer | `1800000` | Default heartbeat interval (30 minutes) |
 | `heartbeat.suppress_ok` | boolean | `true` | Suppress delivery when LLM responds `HEARTBEAT_OK` |
 | `heartbeat.active_hours` | tuple | `{8, 22}` | UTC hour range for heartbeat delivery |
+
+### beamclaw_a2a
+
+```erlang
+{beamclaw_a2a, [
+    {agent_card, #{
+        name => <<"BeamClaw">>,              %% Agent name in Agent Card
+        url  => <<"http://localhost:18800">>  %% Service endpoint URL
+    }}
+]}
+```
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `agent_card.name` | binary | `<<"BeamClaw">>` | Agent name in the A2A Agent Card |
+| `agent_card.url` | binary | `<<"http://localhost:18800">>` | Service endpoint URL in the Agent Card |
+
+Authentication is configured via the `A2A_BEARER_TOKEN` environment variable (not in
+`sys.config`), following the same pattern as `TELEGRAM_WEBHOOK_SECRET`. When set, Bearer
+token authentication is required on `POST /a2a` and the Agent Card advertises the `bearer`
+auth scheme. When unset, the endpoint is open access.
 
 ### beamclaw_core — Session Maintenance
 

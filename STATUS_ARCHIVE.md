@@ -878,3 +878,45 @@ All six OTP apps created, supervision trees defined, behaviours declared,
 | `bc_user_env_tests.erl` — 26 EUnit tests | ✅ | Pure functions + gen_server disabled test |
 | CLAUDE.md, docs updates | ✅ | File layout, sup tree, config, obs events |
 | All tests pass | ✅ | 725 EUnit tests pass, 0 warnings |
+
+---
+
+## Post-M37 — Fix User Env: Async Refresh + Open-Meteo ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| `bc_user_env.erl` — switch weather API from wttr.in to Open-Meteo | ✅ | No API key needed, works from Docker |
+| `bc_user_env.erl` — async periodic refresh via `handle_info` | ✅ | `handle_call` never blocks on HTTP |
+| `bc_user_env.erl` — `wmo_description/1` WMO weather code mapper | ✅ | 28 WMO codes → human-readable strings |
+| `bc_user_env.erl` — enable by default | ✅ | `enabled => true`, Stockholm lat/lon |
+| Config — new shape: `latitude`/`longitude`/`location_name`/`refresh_interval_ms` | ✅ | sys.config + sys.docker.config |
+| `bc_user_env_tests.erl` — Open-Meteo JSON + WMO tests | ✅ | 8 new tests (wmo, open-meteo format) |
+| CLAUDE.md, docs/configuration.md updates | ✅ | New config keys documented |
+| All tests pass | ✅ | 733 EUnit tests pass, 0 warnings |
+
+## Post-M37 — Per-Agent Weather Location ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| `bc_workspace_templates.erl` — add `**Location:**` to USER.md template | ✅ | City, lat, lon format |
+| `bc_user_env.erl` — `parse_location_from_user_md/1` | ✅ | English + Hungarian (`**Helyszín:**`) |
+| `bc_user_env.erl` — `resolve_location/2` | ✅ | USER.md → global config fallback |
+| `bc_user_env.erl` — per-location `weather_cache` map | ✅ | `#{LocKey => WeatherText}` |
+| `bc_user_env.erl` — on-demand `fetch_location` for cache miss | ✅ | Async spawn, weather appears next LLM call |
+| `bc_user_env.erl` — refresh fetches all cached locations | ✅ | Periodic timer refreshes all known locations |
+| `bc_user_env.erl` — Hungarian timezone parsing (`**Időzóna:**`) | ✅ | Bonus: mom's USER.md works for timezone too |
+| `bc_user_env_tests.erl` — 6 new location parsing tests | ✅ | Present, missing, Hungarian, bad format, placeholder, integer coords |
+| All tests pass | ✅ | 739 EUnit tests pass, 0 warnings |
+
+## Post-M37 — Timezone Abbreviations + UTC Offset Display ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| `bc_workspace_templates.erl` — timezone format hint in USER.md template | ✅ | Guides IANA name or abbreviation |
+| `bc_user_env.erl` — `strip_parenthetical/1` in `parse_timezone_from_user_md` | ✅ | `CET (Central European Time)` → `CET` |
+| `bc_user_env.erl` — 30 common timezone abbreviations in `tz_offset/1` | ✅ | CET, EST, PST, JST, etc. |
+| `bc_user_env.erl` — UTC offset in time section display | ✅ | `(CET, UTC+1)` — no duplicate for UTC/GMT |
+| `bc_user_env_tests.erl` — 6 new tests | ✅ | Abbreviations, parenthetical, UTC offset display |
+| Container: default agent USER.md | ✅ | `CET (Central European Time)` → `Europe/Stockholm` |
+| Container: mom agent USER.md | ✅ | `CET` → `Europe/Budapest` |
+| All tests pass | ✅ | 745 EUnit tests pass, 0 warnings |

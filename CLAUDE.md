@@ -111,7 +111,7 @@ CT suites:
 | `bc_sandbox_docker_SUITE` | `beamclaw_sandbox` | 3 | Docker container lifecycle, script execution, bridge |
 | `bc_scheduler_SUITE` | `beamclaw_scheduler` | 2 | Scheduler timer fire, delivery, heartbeat, tool actions |
 | `bc_context_integration_SUITE` | `beamclaw_gateway` | 2 | /context command dispatch (TUI + Telegram) |
-| `bc_a2a_http_integration_SUITE` | `beamclaw_a2a` | 2 | A2A Agent Card + JSON-RPC endpoints |
+| `bc_a2a_http_integration_SUITE` | `beamclaw_a2a` | 2 | A2A Agent Card, JSON-RPC, Bearer auth |
 
 **When to run**:
 - Before every commit: `rebar3 eunit`
@@ -590,6 +590,7 @@ Non-blocking cast; backends receive events asynchronously via `pg` process group
 | `a2a_task_created` | `task_id`, `session_id` |
 | `a2a_task_updated` | `task_id`, `state` |
 | `a2a_request` | `method`, `path`, `rpc_method` |
+| `a2a_auth_failed` | `client_ip`, `reason` |
 
 Usage: `bc_obs:emit(tool_call_start, #{tool_name => Name, args => Args, session_id => SId})`.
 
@@ -708,7 +709,7 @@ as the user_id, enabling cross-channel session sharing for single-user deploymen
     {env_blocklist, [<<"OPENROUTER_API_KEY">>, <<"OPENAI_API_KEY">>,
                      <<"TELEGRAM_BOT_TOKEN">>, <<"AWS_SECRET_ACCESS_KEY">>,
                      <<"GROQ_API_KEY">>, <<"TELEGRAM_WEBHOOK_SECRET">>,
-                     <<"FINNHUB_TOKEN">>]}
+                     <<"FINNHUB_TOKEN">>, <<"A2A_BEARER_TOKEN">>]}
 ]},
 {beamclaw_tools, [
     {web_search, #{api_key => {env, "BRAVE_API_KEY"},
@@ -737,8 +738,17 @@ as the user_id, enabling cross-channel session sharing for single-user deploymen
                chunk_size => 400, chunk_overlap => 80,
                workspace_files => [<<"MEMORY.md">>, ...],
                daily_log_lookback => 7}}
+]},
+{beamclaw_a2a, [
+    {agent_card, #{
+        name => <<"BeamClaw">>,
+        url  => <<"http://localhost:18800">>
+    }}
 ]}
 ```
+
+`A2A_BEARER_TOKEN` env var: when set, Bearer token authentication is required on `POST /a2a`.
+Agent Card advertises `bearer` scheme when token is configured; no auth advertised otherwise.
 
 Key `vm.args` flags:
 
@@ -758,7 +768,7 @@ POST /v1/chat/completions    → bc_http_completions_h    (OpenAI-compatible, SS
 GET  /ws                     → bc_ws_h                  (WebSocket)
 POST /webhook/telegram       → bc_webhook_telegram_h
 GET  /.well-known/agent.json → bc_a2a_http_h            (A2A Agent Card discovery)
-POST /a2a                    → bc_a2a_http_h            (A2A JSON-RPC 2.0)
+POST /a2a                    → bc_a2a_http_h            (A2A JSON-RPC 2.0, Bearer token auth)
 ```
 
 Rate limiting (`bc_rate_limiter`): sliding-window per client IP, ETS-backed, pruned every 60 s. Checked in every handler before dispatch.
