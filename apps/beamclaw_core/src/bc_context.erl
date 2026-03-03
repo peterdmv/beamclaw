@@ -55,7 +55,8 @@ gather(#{agent_id := AgentId, history := History} = Opts) ->
 
     %% Categorize system messages
     SystemMsgs = bc_system_prompt:assemble(AgentId),
-    {BootstrapFiles, DailyTokens, SkillTokens} = categorize_system_messages(SystemMsgs),
+    {BootstrapFiles, DailyTokens, SkillTokens, EnvTokens} =
+        categorize_system_messages(SystemMsgs),
 
     BootstrapTokens = lists:foldl(fun({_, T}, Acc) -> Acc + T end, 0, BootstrapFiles),
 
@@ -70,7 +71,8 @@ gather(#{agent_id := AgentId, history := History} = Opts) ->
     CompactionThresholdPct = maps:get(compaction_threshold_pct, LoopCfg, 80),
     CompactionBuffer = Window * (100 - CompactionThresholdPct) div 100,
 
-    Total = BootstrapTokens + DailyTokens + SkillTokens + ToolTokens + MessageTokens,
+    Total = BootstrapTokens + DailyTokens + SkillTokens + EnvTokens +
+            ToolTokens + MessageTokens,
     FreeSpace = max(0, Window - Total - CompactionBuffer),
 
     #{version          => version(),
@@ -82,6 +84,7 @@ gather(#{agent_id := AgentId, history := History} = Opts) ->
       bootstrap_tokens => BootstrapTokens,
       daily_tokens     => DailyTokens,
       skill_tokens     => SkillTokens,
+      env_tokens       => EnvTokens,
       tool_tokens      => ToolTokens,
       message_tokens   => MessageTokens,
       compaction_buffer => CompactionBuffer,
@@ -90,6 +93,7 @@ gather(#{agent_id := AgentId, history := History} = Opts) ->
       categories       => [
           {<<"Bootstrap files">>, BootstrapTokens},
           {<<"Daily logs">>, DailyTokens},
+          {<<"Environment">>, EnvTokens},
           {<<"Skills">>, SkillTokens},
           {<<"Tool definitions">>, ToolTokens},
           {<<"Messages">>, MessageTokens},
@@ -116,14 +120,15 @@ format_text(Info, Opts) ->
 
     %% Color maps for ANSI
     Colors = #{
-        bootstrap  => "\e[38;5;244m",  %% Gray
-        daily      => "\e[38;5;174m",  %% Pink
-        skills     => "\e[38;5;220m",  %% Yellow
-        tools      => "\e[38;5;135m",  %% Purple
-        messages   => "\e[38;5;75m",   %% Blue
-        free       => "\e[38;5;246m",  %% Light gray
-        compaction => "\e[38;5;240m",  %% Dark gray
-        reset      => "\e[39m"
+        bootstrap   => "\e[38;5;244m",  %% Gray
+        daily       => "\e[38;5;174m",  %% Pink
+        environment => "\e[38;5;114m",  %% Green
+        skills      => "\e[38;5;220m",  %% Yellow
+        tools       => "\e[38;5;135m",  %% Purple
+        messages    => "\e[38;5;75m",   %% Blue
+        free        => "\e[38;5;246m",  %% Light gray
+        compaction  => "\e[38;5;240m",  %% Dark gray
+        reset       => "\e[39m"
     },
 
     %% Format header
@@ -146,18 +151,20 @@ format_text(Info, Opts) ->
         SId -> iolist_to_binary(["Session: ", SId])
     end,
 
+    %% Categories: Bootstrap, Daily, Environment, Skills, Tools, Messages, Free, Compaction
+    SafeNth = fun(N, L) -> case length(L) >= N of true -> lists:nth(N, L); false -> <<>> end end,
     RightSide = [
         ModelLine,                           %% Row 0
         SessionLine,                         %% Row 1
-        <<>>,                                %% Row 2
-        <<"Estimated usage by category">>,   %% Row 3
-        lists:nth(1, LegendLines),           %% Row 4 — Bootstrap
-        lists:nth(2, LegendLines),           %% Row 5 — Daily
-        lists:nth(3, LegendLines),           %% Row 6 — Skills
-        lists:nth(4, LegendLines),           %% Row 7 — Tools
-        lists:nth(5, LegendLines),           %% Row 8 — Messages
-        lists:nth(6, LegendLines),           %% Row 9 — Free
-        lists:nth(7, LegendLines)            %% extra — Compaction (below grid)
+        <<"Estimated usage by category">>,   %% Row 2
+        SafeNth(1, LegendLines),             %% Row 3 — Bootstrap
+        SafeNth(2, LegendLines),             %% Row 4 — Daily
+        SafeNth(3, LegendLines),             %% Row 5 — Environment
+        SafeNth(4, LegendLines),             %% Row 6 — Skills
+        SafeNth(5, LegendLines),             %% Row 7 — Tools
+        SafeNth(6, LegendLines),             %% Row 8 — Messages
+        SafeNth(7, LegendLines),             %% Row 9 — Free
+        SafeNth(8, LegendLines)              %% extra — Compaction (below grid)
     ],
 
     %% Combine grid + right side
@@ -248,13 +255,14 @@ build_telegram_grid_rows(Grid) ->
         iolist_to_binary([telegram_cell_emoji(C) || C <- Row])
     end, Rows).
 
-telegram_cell_emoji(bootstrap)  -> <<"\xf0\x9f\x9f\xa4">>;  %% 🟤
-telegram_cell_emoji(daily)      -> <<"\xf0\x9f\x94\xb4">>;  %% 🔴
-telegram_cell_emoji(skills)     -> <<"\xf0\x9f\x9f\xa1">>;  %% 🟡
-telegram_cell_emoji(tools)      -> <<"\xf0\x9f\x9f\xa3">>;  %% 🟣
-telegram_cell_emoji(messages)   -> <<"\xf0\x9f\x94\xb5">>;  %% 🔵
-telegram_cell_emoji(free)       -> <<"\xe2\xac\x9c">>;       %% ⬜
-telegram_cell_emoji(compaction) -> <<"\xe2\x9a\xab">>.       %% ⚫
+telegram_cell_emoji(bootstrap)   -> <<"\xf0\x9f\x9f\xa4">>;  %% 🟤
+telegram_cell_emoji(daily)       -> <<"\xf0\x9f\x94\xb4">>;  %% 🔴
+telegram_cell_emoji(environment) -> <<"\xf0\x9f\x9f\xa2">>;  %% 🟢
+telegram_cell_emoji(skills)      -> <<"\xf0\x9f\x9f\xa1">>;  %% 🟡
+telegram_cell_emoji(tools)       -> <<"\xf0\x9f\x9f\xa3">>;  %% 🟣
+telegram_cell_emoji(messages)    -> <<"\xf0\x9f\x94\xb5">>;  %% 🔵
+telegram_cell_emoji(free)        -> <<"\xe2\xac\x9c">>;       %% ⬜
+telegram_cell_emoji(compaction)  -> <<"\xe2\x9a\xab">>.       %% ⚫
 
 telegram_legend(Categories, Window) ->
     lists:map(fun({CatName, CatTokens}) ->
@@ -279,13 +287,14 @@ render_svg(Info) ->
 
     %% SVG color palette (dark theme)
     SvgColors = [
-        {bootstrap,  <<"#808080">>},  %% Gray
-        {daily,      <<"#e8a0a0">>},  %% Pink
-        {skills,     <<"#e0c060">>},  %% Yellow
-        {tools,      <<"#b080e0">>},  %% Purple
-        {messages,   <<"#60a0e0">>},  %% Blue
-        {free,       <<"#404060">>},  %% Dark blue-gray
-        {compaction, <<"#303050">>}   %% Darker
+        {bootstrap,   <<"#808080">>},  %% Gray
+        {daily,       <<"#e8a0a0">>},  %% Pink
+        {environment, <<"#80c080">>},  %% Green
+        {skills,      <<"#e0c060">>},  %% Yellow
+        {tools,       <<"#b080e0">>},  %% Purple
+        {messages,    <<"#60a0e0">>},  %% Blue
+        {free,        <<"#404060">>},  %% Dark blue-gray
+        {compaction,  <<"#303050">>}   %% Darker
     ],
 
     %% Title
@@ -471,27 +480,29 @@ provider_key(_)                      -> openrouter.
 %% ---- Internal: Categorize system messages ----
 
 categorize_system_messages(Msgs) ->
-    lists:foldl(fun(#bc_message{content = Content}, {Boot, Daily, Skill}) ->
+    lists:foldl(fun(#bc_message{content = Content}, {Boot, Daily, Skill, Env}) ->
         case Content of
+            <<"[environment]", _/binary>> ->
+                {Boot, Daily, Skill, Env + estimate_tokens(Content)};
             <<"[skill:", _/binary>> ->
-                {Boot, Daily, Skill + estimate_tokens(Content)};
+                {Boot, Daily, Skill + estimate_tokens(Content), Env};
             <<"[skills:available]", _/binary>> ->
-                {Boot, Daily, Skill + estimate_tokens(Content)};
+                {Boot, Daily, Skill + estimate_tokens(Content), Env};
             <<"[memory/", _/binary>> ->
-                {Boot, Daily + estimate_tokens(Content), Skill};
+                {Boot, Daily + estimate_tokens(Content), Skill, Env};
             <<"[", Rest/binary>> ->
                 %% Bootstrap file: [IDENTITY.md], [SOUL.md], etc.
                 case binary:match(Rest, <<".md]">>) of
-                    nomatch -> {Boot, Daily, Skill};
+                    nomatch -> {Boot, Daily, Skill, Env};
                     _ ->
                         Filename = extract_filename(Content),
                         Tokens = estimate_tokens(Content),
-                        {Boot ++ [{Filename, Tokens}], Daily, Skill}
+                        {Boot ++ [{Filename, Tokens}], Daily, Skill, Env}
                 end;
             _ ->
-                {Boot, Daily, Skill}
+                {Boot, Daily, Skill, Env}
         end
-    end, {[], 0, 0}, Msgs).
+    end, {[], 0, 0, 0}, Msgs).
 
 extract_filename(<<"[", Rest/binary>>) ->
     case binary:match(Rest, <<"]">>) of
@@ -540,20 +551,23 @@ estimate_history_tokens(History) ->
 build_grid(#{context_window := Window, bootstrap_tokens := BootTok,
              daily_tokens := DailyTok, skill_tokens := SkillTok,
              tool_tokens := ToolTok, message_tokens := MsgTok,
-             compaction_buffer := CompBuf}) ->
+             compaction_buffer := CompBuf} = Info) ->
+    EnvTok = maps:get(env_tokens, Info, 0),
     CellSize = max(1, Window div 100),
     %% Used segments: ceiling division (at least 1 cell when non-zero)
     BootCells = ceil_cells(BootTok, CellSize),
     DailyCells = ceil_cells(DailyTok, CellSize),
+    EnvCells = ceil_cells(EnvTok, CellSize),
     SkillCells = ceil_cells(SkillTok, CellSize),
     ToolCells = ceil_cells(ToolTok, CellSize),
     MsgCells = ceil_cells(MsgTok, CellSize),
     CompCells = ceil_cells(CompBuf, CellSize),
-    UsedCells = BootCells + DailyCells + SkillCells + ToolCells + MsgCells,
+    UsedCells = BootCells + DailyCells + EnvCells + SkillCells + ToolCells + MsgCells,
     %% Free space = remainder; absorbs ceiling-division rounding from used segments
     FreeCells = max(0, 100 - UsedCells - CompCells),
     lists:duplicate(BootCells, bootstrap) ++
     lists:duplicate(DailyCells, daily) ++
+    lists:duplicate(EnvCells, environment) ++
     lists:duplicate(SkillCells, skills) ++
     lists:duplicate(ToolCells, tools) ++
     lists:duplicate(MsgCells, messages) ++
@@ -582,21 +596,23 @@ build_grid_rows(Grid, Ansi, Colors) ->
         iolist_to_binary(lists:join(<<" ">>, Cells))
     end, Rows).
 
-cell_symbol(bootstrap)  -> <<"\xe2\x9b\x81">>;  %% ⛁
-cell_symbol(daily)      -> <<"\xe2\x9b\x81">>;  %% ⛁
-cell_symbol(skills)     -> <<"\xe2\x9b\x81">>;  %% ⛁
-cell_symbol(tools)      -> <<"\xe2\x9b\x81">>;  %% ⛁
-cell_symbol(messages)   -> <<"\xe2\x9b\x81">>;  %% ⛁
-cell_symbol(free)       -> <<"\xe2\x9b\xb6">>;  %% ⛶
-cell_symbol(compaction) -> <<"\xe2\x9b\x9d">>.  %% ⛝
+cell_symbol(bootstrap)   -> <<"\xe2\x9b\x81">>;  %% ⛁
+cell_symbol(daily)       -> <<"\xe2\x9b\x81">>;  %% ⛁
+cell_symbol(environment) -> <<"\xe2\x9b\x81">>;  %% ⛁
+cell_symbol(skills)      -> <<"\xe2\x9b\x81">>;  %% ⛁
+cell_symbol(tools)       -> <<"\xe2\x9b\x81">>;  %% ⛁
+cell_symbol(messages)    -> <<"\xe2\x9b\x81">>;  %% ⛁
+cell_symbol(free)        -> <<"\xe2\x9b\xb6">>;  %% ⛶
+cell_symbol(compaction)  -> <<"\xe2\x9b\x9d">>.  %% ⛝
 
-cell_color(bootstrap,  C) -> maps:get(bootstrap,  C, "");
-cell_color(daily,      C) -> maps:get(daily,      C, "");
-cell_color(skills,     C) -> maps:get(skills,     C, "");
-cell_color(tools,      C) -> maps:get(tools,      C, "");
-cell_color(messages,   C) -> maps:get(messages,   C, "");
-cell_color(free,       C) -> maps:get(free,       C, "");
-cell_color(compaction, C) -> maps:get(compaction,  C, "").
+cell_color(bootstrap,   C) -> maps:get(bootstrap,   C, "");
+cell_color(daily,       C) -> maps:get(daily,       C, "");
+cell_color(environment, C) -> maps:get(environment, C, "");
+cell_color(skills,      C) -> maps:get(skills,      C, "");
+cell_color(tools,       C) -> maps:get(tools,       C, "");
+cell_color(messages,    C) -> maps:get(messages,    C, "");
+cell_color(free,        C) -> maps:get(free,        C, "");
+cell_color(compaction,  C) -> maps:get(compaction,  C, "").
 
 %% ---- Internal: Legend formatting ----
 
@@ -632,6 +648,7 @@ format_size(N) ->
 
 category_key(<<"Bootstrap files">>) -> bootstrap;
 category_key(<<"Daily logs">>)      -> daily;
+category_key(<<"Environment">>)     -> environment;
 category_key(<<"Skills">>)          -> skills;
 category_key(<<"Tool definitions">>) -> tools;
 category_key(<<"Messages">>)        -> messages;
@@ -639,14 +656,15 @@ category_key(<<"Free space">>)      -> free;
 category_key(<<"Compaction buffer">>) -> compaction;
 category_key(_)                      -> free.
 
-category_symbol(bootstrap)  -> <<"\xe2\x9b\x81">>;
-category_symbol(daily)      -> <<"\xe2\x9b\x81">>;
-category_symbol(skills)     -> <<"\xe2\x9b\x81">>;
-category_symbol(tools)      -> <<"\xe2\x9b\x81">>;
-category_symbol(messages)   -> <<"\xe2\x9b\x81">>;
-category_symbol(free)       -> <<"\xe2\x9b\xb6">>;
-category_symbol(compaction) -> <<"\xe2\x9b\x9d">>;
-category_symbol(_)          -> <<"\xe2\x9b\xb6">>.
+category_symbol(bootstrap)   -> <<"\xe2\x9b\x81">>;
+category_symbol(daily)       -> <<"\xe2\x9b\x81">>;
+category_symbol(environment) -> <<"\xe2\x9b\x81">>;
+category_symbol(skills)      -> <<"\xe2\x9b\x81">>;
+category_symbol(tools)       -> <<"\xe2\x9b\x81">>;
+category_symbol(messages)    -> <<"\xe2\x9b\x81">>;
+category_symbol(free)        -> <<"\xe2\x9b\xb6">>;
+category_symbol(compaction)  -> <<"\xe2\x9b\x9d">>;
+category_symbol(_)           -> <<"\xe2\x9b\xb6">>.
 
 svg_escape(Text) when is_list(Text) ->
     lists:flatmap(fun

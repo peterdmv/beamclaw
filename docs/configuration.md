@@ -89,7 +89,19 @@ them to a file — `.env` and `*.secret` files are excluded by `.gitignore`.
         %% avoid unnecessary token usage.
         auto_context             => false,
         %% Maximum number of auto-context snippets to inject per turn.
-        auto_context_limit       => 3
+        auto_context_limit       => 3,
+
+        %% Dynamic environment context: injects time, weather, and news
+        %% headlines into the system prompt as a single [environment] message.
+        %% Weather fetched via Brave Search API, news via Finnhub API.
+        %% Location is parsed from the agent's USER.md (Location/City/Timezone).
+        environment_context      => #{
+            enabled             => false,        %% opt-in
+            weather_ttl_seconds => 3600,         %% 1 hour weather cache
+            news_ttl_seconds    => 3600,         %% 1 hour news cache
+            news_category       => <<"general">> %% finnhub: general|forex|crypto|merger
+            %% location          => <<"London">> %% override USER.md location
+        }
     }},
 
     %% Default autonomy level for new sessions.

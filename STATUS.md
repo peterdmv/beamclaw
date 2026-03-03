@@ -87,6 +87,7 @@ v0.1.0 release preparation (Post-M37) are all complete.
 | Post-M37 | v0.1.0 Release Preparation |
 | Post-M37 | Incoming Image Attachment Disk Save + bash Tool Arg Fix |
 | Post-M37 | Skill Prompt Fix + Strip Old Image Attachments |
+| Post-M37 | Dynamic Environment Context (time/weather/news injection) |
 
 ---
 
@@ -115,6 +116,20 @@ v0.1.0 release preparation (Post-M37) are all complete.
 | All tests pass | ✅ | 699 EUnit tests pass, 0 warnings |
 
 ---
+
+### Post-M37 — Dynamic Environment Context ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| `bc_env_context.erl` — gen_server with weather/news cache | ✅ | Brave Search for weather, Finnhub for news, configurable TTLs |
+| `bc_env_context.erl` — pure-function formatter | ✅ | Time, weather, news, time-since-last-interaction, agent instructions |
+| `bc_env_context.erl` — USER.md location parsing | ✅ | Extracts Location/City/Timezone fields, strips parenthetical notes |
+| `bc_system_prompt.erl` — inject [environment] message | ✅ | After bootstrap files, before daily logs; single instance |
+| `bc_loop.erl` — pass last_activity to system prompt | ✅ | Via AssembleCfg map from bc_session |
+| `bc_context.erl` — environment token accounting | ✅ | New "Environment" category in grid/legend/SVG/Telegram |
+| `beamclaw_core_sup.erl` — add bc_env_context child | ✅ | Permanent, before bc_session_registry |
+| `config/sys.config` — environment_context config | ✅ | Opt-in, weather/news TTLs, news_category |
+| `bc_env_context_tests.erl` — 25 EUnit tests | ✅ | format_time_ago, parse_user_location, format_context, token budget |
 
 ## Active Work
 

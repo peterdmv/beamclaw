@@ -222,6 +222,7 @@ beamclaw_gateway → beamclaw_core → beamclaw_sandbox    → beamclaw_tools �
 
 ```
 beamclaw_core_sup  (one_for_one)
+  ├── bc_env_context          (gen_server, permanent — cached weather/news/time context)
   ├── bc_session_registry     (gen_server, named — ETS: session_id → pid)
   ├── bc_session_cleaner      (gen_server, permanent — periodic expired session cleanup)
   ├── bc_session_maintenance  (gen_server, permanent — idle compaction, nightly flush, pre-expiry)
@@ -612,7 +613,14 @@ as the user_id, enabling cross-channel session sharing for single-user deploymen
                      stream_chunk_size        => 80,
                      memory_flush             => true,
                      auto_context             => false,
-                     auto_context_limit       => 3}},
+                     auto_context_limit       => 3,
+                     environment_context      => #{
+                         enabled             => false,   %% opt-in
+                         weather_ttl_seconds => 3600,    %% 1 hour cache
+                         news_ttl_seconds    => 3600,    %% 1 hour cache
+                         news_category       => <<"general">>  %% finnhub
+                         %% location          => <<"London">>
+                     }}},
     {autonomy_level, supervised},
     {session_ttl_seconds, 3600},
     {default_agent, <<"default">>},
@@ -884,6 +892,7 @@ beamclaw/
         bc_thinking.erl       %% strip LLM thinking/reasoning tags
         bc_tool_parser.erl
         bc_config.erl
+        bc_env_context.erl          %% dynamic environment context (time/weather/news cache)
         bc_context.erl              %% context window usage display (pure function)
         bc_workspace_templates.erl  %% eight default bootstrap file templates
         bc_workspace.erl            %% agent workspace filesystem ops

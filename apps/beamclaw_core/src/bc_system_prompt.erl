@@ -33,10 +33,14 @@ and daily log updates mid-session are picked up immediately.
 Assemble system messages from an agent's bootstrap files.
 Returns messages in order:
   IDENTITY → SOUL → USER → TOOLS → AGENTS → HEARTBEAT → BOOTSTRAP → MEMORY
+  → [environment] (dynamic time/weather/news, when enabled)
   → memory/yesterday.md → memory/today.md
   → skill messages (if skills config provided via assemble/2)
 Files that are missing or empty/whitespace-only are skipped.
 If the agent doesn't exist, returns a single fallback system message.
+
+The Config map may contain `last_activity` (Unix seconds) for computing
+time-since-last-interaction in the environment context.
 """.
 -spec assemble(binary()) -> [#bc_message{}].
 assemble(AgentId) ->
@@ -78,13 +82,14 @@ assemble(AgentId, Config, UserMessage) ->
                         end
                 end
             end, Order),
+            EnvCtxMsgs = load_env_context(AgentId, Config),
             DailyMsgs = load_daily_logs(AgentId),
             SkillMsgs = load_skills(AgentId, Config, UserMessage),
             BaseMsgs = case BootstrapMsgs of
                 [] -> [fallback_message()];
                 _  -> BootstrapMsgs
             end,
-            BaseMsgs ++ DailyMsgs ++ SkillMsgs
+            BaseMsgs ++ EnvCtxMsgs ++ DailyMsgs ++ SkillMsgs
     end.
 
 %% Internal
@@ -96,6 +101,29 @@ fallback_message() ->
         content = <<"You are a helpful assistant.">>,
         ts      = 0
     }.
+
+-doc """
+Load dynamic environment context (time, weather, news) as a system message.
+Returns an empty list if the feature is disabled or bc_env_context is not loaded.
+""".
+load_env_context(AgentId, Config) ->
+    case code:ensure_loaded(bc_env_context) of
+        {module, _} ->
+            LastActivity = maps:get(last_activity, Config, undefined),
+            try bc_env_context:get_context(AgentId, LastActivity) of
+                {ok, Content} when is_binary(Content), Content =/= <<>> ->
+                    [#bc_message{
+                        id      = generate_id(),
+                        role    = system,
+                        content = <<"[environment]\n", Content/binary>>,
+                        ts      = 0
+                    }];
+                _ -> []
+            catch
+                _:_ -> []
+            end;
+        _ -> []
+    end.
 
 -doc "Load today and yesterday daily logs as system messages.".
 load_daily_logs(AgentId) ->

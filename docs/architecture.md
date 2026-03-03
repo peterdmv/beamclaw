@@ -50,6 +50,7 @@ The rule: no dependency cycle. `beamclaw_obs` never imports from any sibling.
 
 ```
 beamclaw_core_sup  (one_for_one)
+  ├── bc_env_context          (gen_server, permanent — cached weather/news/time context)
   ├── bc_session_registry     (gen_server, named — ETS: session_id → pid)
   ├── bc_session_cleaner      (gen_server, permanent — periodic expired session cleanup)
   └── bc_sessions_sup         (simple_one_for_one)

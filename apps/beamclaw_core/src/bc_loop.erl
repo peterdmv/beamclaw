@@ -170,7 +170,10 @@ streaming(enter, _OldState, Data) ->
 streaming(cast, do_stream, Data) ->
     History    = bc_session:get_history(Data#loop_data.session_pid),
     UserText   = last_user_content(History),
-    SystemMsgs = bc_system_prompt:assemble(Data#loop_data.agent_id, #{}, UserText),
+    LastActivity = try bc_session:get_last_activity(Data#loop_data.session_pid)
+                  catch _:_ -> undefined end,
+    AssembleCfg = #{last_activity => LastActivity},
+    SystemMsgs = bc_system_prompt:assemble(Data#loop_data.agent_id, AssembleCfg, UserText),
     AutoCtxMsgs = maybe_auto_context(History, Data),
     FullHistory = SystemMsgs ++ AutoCtxMsgs ++ History,
     LLMHistory = strip_old_attachments(FullHistory),

@@ -106,7 +106,7 @@ gather_empty_history_test_() ->
              ?assertEqual(0, maps:get(message_count, Info)),
              ?assert(maps:get(context_window, Info) > 0),
              ?assert(is_list(maps:get(categories, Info))),
-             ?assertEqual(7, length(maps:get(categories, Info))),
+             ?assertEqual(8, length(maps:get(categories, Info))),
              ?assert(is_binary(maps:get(version, Info)))
          end]
      end}.

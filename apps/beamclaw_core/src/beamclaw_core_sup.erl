@@ -25,6 +25,12 @@ start_link() ->
 init([]) ->
     SupFlags = #{strategy => one_for_one, intensity => 5, period => 30},
     Children = [
+        #{id       => bc_env_context,
+          start    => {bc_env_context, start_link, []},
+          restart  => permanent,
+          shutdown => 5000,
+          type     => worker,
+          modules  => [bc_env_context]},
         #{id       => bc_session_registry,
           start    => {bc_session_registry, start_link, []},
           restart  => permanent,
