@@ -183,6 +183,33 @@ parse_tz_empty_test() ->
     Md = <<"# User\n\n- **Timezone:** \n">>,
     ?assertEqual(undefined, bc_user_env:parse_timezone_from_user_md(Md)).
 
+%% ---- parse_location_from_user_md/1 tests ----
+
+parse_location_present_test() ->
+    Md = <<"# User\n\n- **Location:** Budapest, 47.50, 19.04\n- **Context:** developer">>,
+    ?assertEqual({<<"Budapest">>, 47.50, 19.04}, bc_user_env:parse_location_from_user_md(Md)).
+
+parse_location_missing_test() ->
+    Md = <<"# User\n\n- **Name:** Alice\n- **Timezone:** Europe/Stockholm\n">>,
+    ?assertEqual(undefined, bc_user_env:parse_location_from_user_md(Md)).
+
+parse_location_hungarian_test() ->
+    Md = <<"# Felhasználó\n\n- **Helyszín:** Budapest, 47.50, 19.04\n">>,
+    ?assertEqual({<<"Budapest">>, 47.50, 19.04}, bc_user_env:parse_location_from_user_md(Md)).
+
+parse_location_bad_format_test() ->
+    %% Just a city name without coordinates
+    Md = <<"# User\n\n- **Location:** Stockholm\n">>,
+    ?assertEqual(undefined, bc_user_env:parse_location_from_user_md(Md)).
+
+parse_location_placeholder_test() ->
+    Md = <<"# User\n\n- **Location:** (city name, latitude, longitude)\n">>,
+    ?assertEqual(undefined, bc_user_env:parse_location_from_user_md(Md)).
+
+parse_location_integer_coords_test() ->
+    Md = <<"# User\n\n- **Location:** London, 51, 0\n">>,
+    ?assertEqual({<<"London">>, 51.0, 0.0}, bc_user_env:parse_location_from_user_md(Md)).
+
 %% ---- tz_offset/1 tests ----
 
 tz_offset_known_zones_test() ->

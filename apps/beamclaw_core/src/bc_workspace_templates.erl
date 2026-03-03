@@ -81,6 +81,7 @@ template(<<"USER.md">>) ->
       "- **What to call them:** (name, nickname, or title they prefer)\n"
       "- **Pronouns:** (ask if not obvious)\n"
       "- **Timezone:** (useful for scheduling and greetings)\n"
+      "- **Location:** (city name, latitude, longitude — e.g. Stockholm, 59.33, 18.07)\n"
       "- **Context:** (what they do, what they care about, how they work)\n\n"
       "Update this file as you learn about the user. Pay attention to\n"
       "preferences, communication style, and recurring topics.\n">>;

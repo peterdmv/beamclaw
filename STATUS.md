@@ -11,9 +11,10 @@ BM25-based skill auto-injection, `/context` command, outgoing photo delivery,
 per-user agent mapping, voice message transcription, token-based compaction,
 webhook secret token validation, smart session memory maintenance,
 Telegram bot command registration, `/new` session reset,
-v0.1.0 release preparation, and user environment context injection
+v0.1.0 release preparation, user environment context injection,
+and per-agent weather location
 (Post-M37) are all complete.
-733 EUnit tests + 37 CT tests pass (770 total).
+739 EUnit tests + 37 CT tests pass (776 total).
 
 ---
 
@@ -90,6 +91,7 @@ v0.1.0 release preparation, and user environment context injection
 | Post-M37 | Skill Prompt Fix + Strip Old Image Attachments |
 | Post-M37 | User Environment Context Injection |
 | Post-M37 | Fix User Env: Async Refresh + Open-Meteo |
+| Post-M37 | Per-Agent Weather Location |
 
 ---
 
@@ -143,6 +145,20 @@ v0.1.0 release preparation, and user environment context injection
 | CLAUDE.md, docs/configuration.md updates | ✅ | New config keys documented |
 | All tests pass | ✅ | 733 EUnit tests pass, 0 warnings |
 
+### Post-M37 — Per-Agent Weather Location ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| `bc_workspace_templates.erl` — add `**Location:**` to USER.md template | ✅ | City, lat, lon format |
+| `bc_user_env.erl` — `parse_location_from_user_md/1` | ✅ | English + Hungarian (`**Helyszín:**`) |
+| `bc_user_env.erl` — `resolve_location/2` | ✅ | USER.md → global config fallback |
+| `bc_user_env.erl` — per-location `weather_cache` map | ✅ | `#{LocKey => WeatherText}` |
+| `bc_user_env.erl` — on-demand `fetch_location` for cache miss | ✅ | Async spawn, weather appears next LLM call |
+| `bc_user_env.erl` — refresh fetches all cached locations | ✅ | Periodic timer refreshes all known locations |
+| `bc_user_env.erl` — Hungarian timezone parsing (`**Időzóna:**`) | ✅ | Bonus: mom's USER.md works for timezone too |
+| `bc_user_env_tests.erl` — 6 new location parsing tests | ✅ | Present, missing, Hungarian, bad format, placeholder, integer coords |
+| All tests pass | ✅ | 739 EUnit tests pass, 0 warnings |
+
 ---
 
 ## Active Work
@@ -159,4 +175,4 @@ _None at this time._
 
 ## Last Updated
 
-2026-03-09
+2026-03-10

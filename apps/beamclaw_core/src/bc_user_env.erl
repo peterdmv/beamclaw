@@ -37,16 +37,16 @@ LLM request and prepended alongside system prompt and auto-context messages.
 %% Exported for testing
 -export([format_idle_time/1, format_time_section/3,
          parse_weather_json/1, parse_news_json/1,
-         parse_timezone_from_user_md/1, tz_offset/1,
-         build_env_block/1, wmo_description/1]).
+         parse_timezone_from_user_md/1, parse_location_from_user_md/1,
+         tz_offset/1, build_env_block/1, wmo_description/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2]).
 
 -record(state, {
-    weather_text :: binary() | undefined,
-    news_text    :: binary() | undefined,
-    worker_ref   :: reference() | undefined  %% monitor ref for async worker
+    weather_cache :: #{binary() => binary()},  %% LocKey => WeatherText
+    news_text     :: binary() | undefined,
+    worker_ref    :: reference() | undefined  %% monitor ref for async worker
 }).
 
 start_link() ->
@@ -71,7 +71,7 @@ init([]) ->
         true  -> self() ! refresh;
         false -> ok
     end,
-    {ok, #state{}}.
+    {ok, #state{weather_cache = #{}}}.
 
 handle_call({get_env_message, AgentId, SessionPid}, _From, State) ->
     Config = bc_config:get(beamclaw_core, user_env, #{enabled => true}),
@@ -112,31 +112,44 @@ handle_info(refresh, State) ->
             %% Schedule next refresh
             Interval = maps:get(refresh_interval_ms, Config, 1800000),
             erlang:send_after(Interval, self(), refresh),
-            %% Spawn async worker to fetch weather + news
             Self = self(),
             WeatherCfg = maps:get(weather, Config, #{enabled => true}),
             NewsCfg = maps:get(news, Config, #{enabled => true}),
             WeatherEnabled = maps:get(enabled, WeatherCfg, true),
             NewsEnabled = maps:get(enabled, NewsCfg, true),
-            %% Check if caches are still fresh — skip fetch if so
-            NeedWeather = WeatherEnabled andalso needs_refresh(State#state.weather_text, undefined),
+            %% Collect all locations: default config + any already cached
+            DefaultLat = maps:get(latitude, Config, 59.33),
+            DefaultLon = maps:get(longitude, Config, 18.07),
+            DefaultLocName = maps:get(location_name, Config, "Stockholm"),
+            DefaultKey = loc_key(DefaultLat, DefaultLon),
+            CachedLocs = lists:filtermap(fun(K) ->
+                case K =:= DefaultKey of
+                    true  -> false;  %% already included as default
+                    false ->
+                        case parse_loc_key(K) of
+                            {Lat, Lon, LN} -> {true, {K, Lat, Lon, LN}};
+                            error -> false
+                        end
+                end
+            end, maps:keys(State#state.weather_cache)),
+            AllLocs = [{DefaultKey, DefaultLat, DefaultLon, DefaultLocName} | CachedLocs],
+            Token = resolve_finnhub_token(Config),
             NeedNews = NewsEnabled andalso needs_refresh(State#state.news_text, undefined),
-            case NeedWeather orelse NeedNews of
+            case WeatherEnabled orelse NeedNews of
                 false ->
                     {noreply, State};
                 true ->
-                    Lat = maps:get(latitude, Config, 59.33),
-                    Lon = maps:get(longitude, Config, 18.07),
-                    LocName = maps:get(location_name, Config, "Stockholm"),
-                    Token = resolve_finnhub_token(Config),
                     {_Pid, Ref} = spawn_monitor(fun() ->
-                        Weather = case NeedWeather of
+                        WeatherMap = case WeatherEnabled of
                             true ->
-                                case fetch_weather(Lat, Lon, LocName) of
-                                    {ok, Text} -> Text;
-                                    {error, _} -> undefined
-                                end;
-                            false -> keep
+                                lists:foldl(fun({LK, Lat, Lon, LN}, Acc) ->
+                                    case fetch_weather(Lat, Lon, LN) of
+                                        {ok, Text} -> Acc#{LK => Text};
+                                        {error, _} -> Acc
+                                    end
+                                end, #{}, AllLocs);
+                            false ->
+                                #{}
                         end,
                         News = case NeedNews andalso Token =/= undefined of
                             true ->
@@ -146,23 +159,34 @@ handle_info(refresh, State) ->
                                 end;
                             false -> keep
                         end,
-                        Self ! {refresh_result, Weather, News}
+                        Self ! {refresh_result, WeatherMap, News}
                     end),
                     {noreply, State#state{worker_ref = Ref}}
             end
     end;
-handle_info({refresh_result, Weather, News}, State) ->
-    State1 = case Weather of
-        keep      -> State;
-        undefined -> State;  %% fetch failed, keep old cache
-        _         -> State#state{weather_text = Weather}
-    end,
+handle_info({refresh_result, WeatherMap, News}, State) when is_map(WeatherMap) ->
+    %% Merge fetched weather into cache (new values overwrite old)
+    NewCache = maps:merge(State#state.weather_cache, WeatherMap),
+    State1 = State#state{weather_cache = NewCache},
     State2 = case News of
         keep      -> State1;
         undefined -> State1;
         _         -> State1#state{news_text = News}
     end,
     {noreply, State2#state{worker_ref = undefined}};
+handle_info({fetch_location, LocKey, Lat, Lon, LocName}, State) ->
+    %% On-demand async fetch for a new location (cache miss)
+    Self = self(),
+    spawn(fun() ->
+        case fetch_weather(Lat, Lon, LocName) of
+            {ok, Text} -> Self ! {location_result, LocKey, Text};
+            {error, _} -> ok
+        end
+    end),
+    {noreply, State};
+handle_info({location_result, LocKey, Text}, State) ->
+    NewCache = (State#state.weather_cache)#{LocKey => Text},
+    {noreply, State#state{weather_cache = NewCache}};
 handle_info({'DOWN', Ref, process, _Pid, _Reason}, #state{worker_ref = Ref} = State) ->
     %% Worker crashed — clear ref, caches remain unchanged
     {noreply, State#state{worker_ref = undefined}};
@@ -184,11 +208,18 @@ build_sections(AgentId, SessionPid, Config, State) ->
     %% Idle section (pure computation)
     IdleSection = build_idle_section(SessionPid),
 
-    %% Weather + news from cached state (never fetch here)
-    WeatherSection = case State#state.weather_text of
-        undefined -> <<>>;
-        W         -> W
+    %% Weather from per-location cache
+    {LocName, Lat, Lon} = resolve_location(AgentId, Config),
+    LocKey = loc_key(Lat, Lon),
+    WeatherSection = case maps:get(LocKey, State#state.weather_cache, undefined) of
+        undefined ->
+            %% Cache miss — trigger async fetch for this location
+            self() ! {fetch_location, LocKey, Lat, Lon, LocName},
+            <<>>;
+        W -> W
     end,
+
+    %% News from cached state (global, not per-agent)
     NewsSection = case State#state.news_text of
         undefined -> <<>>;
         N         -> N
@@ -218,6 +249,79 @@ resolve_timezone(AgentId, Config) ->
                 _ ->
                     {<<"UTC">>, 0}
             end
+    end.
+
+resolve_location(AgentId, Config) ->
+    %% Try agent's USER.md first, fall back to global config
+    case bc_workspace:read_bootstrap_file(AgentId, <<"USER.md">>) of
+        {ok, UserMd} ->
+            case parse_location_from_user_md(UserMd) of
+                {LocName, Lat, Lon} -> {LocName, Lat, Lon};
+                undefined -> default_location(Config)
+            end;
+        _ ->
+            default_location(Config)
+    end.
+
+default_location(Config) ->
+    Lat = maps:get(latitude, Config, 59.33),
+    Lon = maps:get(longitude, Config, 18.07),
+    LocName = to_bin(maps:get(location_name, Config, "Stockholm")),
+    {LocName, Lat, Lon}.
+
+-doc "Extract location from USER.md. Returns {LocName, Lat, Lon} or undefined.".
+-spec parse_location_from_user_md(binary()) -> {binary(), float(), float()} | undefined.
+parse_location_from_user_md(Content) ->
+    %% Match **Location:** or **Helyszín:** (Hungarian)
+    Pattern = <<"\\*\\*(Location|Helyszín):\\*\\*\\s*(.+)">>,
+    case re:run(Content, Pattern, [{capture, [2], binary}]) of
+        {match, [Raw]} ->
+            parse_location_value(string:trim(Raw));
+        nomatch ->
+            undefined
+    end.
+
+parse_location_value(<<>>) -> undefined;
+parse_location_value(<<"(", _/binary>>) -> undefined;  %% placeholder
+parse_location_value(Value) ->
+    %% Expected format: "CityName, LAT, LON"
+    Parts = binary:split(Value, <<",">>, [global]),
+    case Parts of
+        [CityRaw, LatRaw, LonRaw] ->
+            City = string:trim(CityRaw),
+            case {parse_float(string:trim(LatRaw)), parse_float(string:trim(LonRaw))} of
+                {{ok, Lat}, {ok, Lon}} -> {City, Lat, Lon};
+                _ -> undefined
+            end;
+        _ -> undefined
+    end.
+
+parse_float(Bin) ->
+    Str = binary_to_list(Bin),
+    case string:to_float(Str) of
+        {F, []} when is_float(F) -> {ok, F};
+        {error, no_float} ->
+            %% Try integer
+            case string:to_integer(Str) of
+                {I, []} when is_integer(I) -> {ok, float(I)};
+                _ -> error
+            end;
+        _ -> error
+    end.
+
+loc_key(Lat, Lon) ->
+    iolist_to_binary(io_lib:format("~.2f,~.2f", [float(Lat), float(Lon)])).
+
+parse_loc_key(Key) ->
+    case binary:split(Key, <<",">>) of
+        [LatBin, LonBin] ->
+            case {parse_float(LatBin), parse_float(LonBin)} of
+                {{ok, Lat}, {ok, Lon}} ->
+                    %% Use lat/lon as location name fallback
+                    {Lat, Lon, Key};
+                _ -> error
+            end;
+        _ -> error
     end.
 
 build_idle_section(SessionPid) ->
@@ -429,8 +533,8 @@ parse_news_json(Json) ->
 -doc "Extract timezone from USER.md content. Returns undefined if not found.".
 -spec parse_timezone_from_user_md(binary()) -> binary() | undefined.
 parse_timezone_from_user_md(Content) ->
-    case re:run(Content, <<"\\*\\*Timezone:\\*\\*\\s*(.+)">>,
-                [{capture, [1], binary}]) of
+    case re:run(Content, <<"\\*\\*(Timezone|Időzóna):\\*\\*\\s*(.+)">>,
+                [{capture, [2], binary}]) of
         {match, [Tz]} ->
             Trimmed = string:trim(Tz),
             case Trimmed of
