@@ -436,10 +436,23 @@ format_time_section(TzLabel, UtcOffset, {{Year, Month, Day}, {Hour, Min, _Sec}})
     LocalMin  = ((TotalMinutes rem 60) + 60) rem 60,
     DayOfWeek = day_name(calendar:day_of_the_week({Year, Month, Day})),
     MonthName = month_name(Month),
+    TzSuffix = format_tz_suffix(TzLabel, UtcOffset),
     iolist_to_binary(io_lib:format(
-        "~s, ~s ~B, ~4..0B ~2..0B:~2..0B (~s)",
-        [DayOfWeek, MonthName, Day, Year, LocalHour, LocalMin, TzLabel]
+        "~s, ~s ~B, ~4..0B ~2..0B:~2..0B ~s",
+        [DayOfWeek, MonthName, Day, Year, LocalHour, LocalMin, TzSuffix]
     )).
+
+format_tz_suffix(TzLabel, _Offset) when TzLabel =:= <<"UTC">>; TzLabel =:= <<"GMT">> ->
+    <<"(UTC)">>;
+format_tz_suffix(TzLabel, Offset) ->
+    OffsetStr = format_utc_offset(Offset),
+    iolist_to_binary([<<"(">>, TzLabel, <<", ">>, OffsetStr, <<")">>]).
+
+format_utc_offset(0) -> <<"UTC+0">>;
+format_utc_offset(N) when N > 0 ->
+    iolist_to_binary(io_lib:format("UTC+~B", [N]));
+format_utc_offset(N) ->
+    iolist_to_binary(io_lib:format("UTC~B", [N])).
 
 -doc "Parse Open-Meteo JSON response into a weather summary string.".
 -spec parse_weather_json(binary()) -> {ok, binary()} | {error, term()}.
@@ -540,10 +553,17 @@ parse_timezone_from_user_md(Content) ->
             case Trimmed of
                 <<>> -> undefined;
                 <<"(", _/binary>> -> undefined;  %% placeholder like "(useful for...)"
-                _ -> Trimmed
+                _ -> strip_parenthetical(Trimmed)
             end;
         nomatch ->
             undefined
+    end.
+
+-doc "Strip trailing parenthetical like 'CET (Central European Time)' → 'CET'.".
+strip_parenthetical(Bin) ->
+    case re:run(Bin, <<"^(.+?)\\s*\\(.*\\)\\s*$">>, [{capture, [1], binary}]) of
+        {match, [Core]} -> string:trim(Core);
+        nomatch         -> Bin
     end.
 
 -doc "Map IANA timezone names to UTC offsets (integer hours). Simplified, no DST.".
@@ -555,6 +575,25 @@ tz_offset("UTC+" ++ N) -> safe_int(N, 0);
 tz_offset("UTC-" ++ N) -> -safe_int(N, 0);
 tz_offset("GMT+" ++ N) -> safe_int(N, 0);
 tz_offset("GMT-" ++ N) -> -safe_int(N, 0);
+%% Common abbreviations
+tz_offset("CET")  -> 1;    tz_offset("CEST") -> 2;
+tz_offset("WET")  -> 0;    tz_offset("WEST") -> 1;
+tz_offset("EET")  -> 2;    tz_offset("EEST") -> 3;
+tz_offset("BST")  -> 1;    tz_offset("IST")  -> 1;
+tz_offset("MSK")  -> 3;
+tz_offset("EST")  -> -5;   tz_offset("EDT")  -> -4;
+tz_offset("CST")  -> -6;   tz_offset("CDT")  -> -5;
+tz_offset("MST")  -> -7;   tz_offset("MDT")  -> -6;
+tz_offset("PST")  -> -8;   tz_offset("PDT")  -> -7;
+tz_offset("AKST") -> -9;   tz_offset("AKDT") -> -8;
+tz_offset("HST")  -> -10;  tz_offset("AST")  -> -4;
+tz_offset("BRT")  -> -3;
+tz_offset("JST")  -> 9;    tz_offset("KST")  -> 9;
+tz_offset("HKT")  -> 8;    tz_offset("SGT")  -> 8;
+tz_offset("ICT")  -> 7;    tz_offset("WIB")  -> 7;
+tz_offset("GST")  -> 4;
+tz_offset("AEST") -> 10;   tz_offset("AWST") -> 8;
+tz_offset("NZST") -> 12;
 %% Europe
 tz_offset("Europe/London")     -> 0;
 tz_offset("Europe/Dublin")     -> 0;

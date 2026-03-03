@@ -42,19 +42,19 @@ idle_days_test() ->
 %% ---- format_time_section/3 tests ----
 
 time_section_basic_test() ->
-    %% 2026-03-07 is a Saturday
+    %% 2026-03-07 is a Saturday; UTC/GMT shows just "(UTC)" — no duplicate offset
     Result = bc_user_env:format_time_section(<<"UTC">>, 0, {{2026, 3, 7}, {14, 23, 0}}),
     ?assertEqual(<<"Saturday, March 7, 2026 14:23 (UTC)">>, Result).
 
 time_section_with_offset_test() ->
-    %% CET = UTC+1, so 14:23 UTC → 15:23 CET
+    %% CET = UTC+1, so 14:23 UTC → 15:23 CET — now shows UTC offset too
     Result = bc_user_env:format_time_section(<<"Europe/Budapest">>, 1, {{2026, 3, 7}, {14, 23, 0}}),
-    ?assertEqual(<<"Saturday, March 7, 2026 15:23 (Europe/Budapest)">>, Result).
+    ?assertEqual(<<"Saturday, March 7, 2026 15:23 (Europe/Budapest, UTC+1)">>, Result).
 
 time_section_negative_offset_test() ->
     %% EST = UTC-5, so 14:23 UTC → 09:23 EST
     Result = bc_user_env:format_time_section(<<"America/New_York">>, -5, {{2026, 3, 7}, {14, 23, 0}}),
-    ?assertEqual(<<"Saturday, March 7, 2026 09:23 (America/New_York)">>, Result).
+    ?assertEqual(<<"Saturday, March 7, 2026 09:23 (America/New_York, UTC-5)">>, Result).
 
 time_section_midnight_wrap_test() ->
     %% UTC+9 from 20:00 UTC → 05:00 next day (hour only, date not adjusted)
@@ -231,10 +231,46 @@ tz_offset_binary_input_test() ->
     ?assertEqual(1, bc_user_env:tz_offset(<<"Europe/Budapest">>)),
     ?assertEqual(0, bc_user_env:tz_offset(<<"UTC">>)).
 
+%% ---- tz_offset abbreviation tests ----
+
+tz_offset_abbreviations_test() ->
+    ?assertEqual(1,  bc_user_env:tz_offset("CET")),
+    ?assertEqual(2,  bc_user_env:tz_offset("CEST")),
+    ?assertEqual(-5, bc_user_env:tz_offset("EST")),
+    ?assertEqual(-8, bc_user_env:tz_offset("PST")),
+    ?assertEqual(9,  bc_user_env:tz_offset("JST")).
+
+%% ---- parse_timezone parenthetical strip tests ----
+
+parse_tz_with_parenthetical_test() ->
+    Md = <<"# User\n\n- **Timezone:** CET (Central European Time)\n">>,
+    ?assertEqual(<<"CET">>, bc_user_env:parse_timezone_from_user_md(Md)).
+
+parse_tz_hungarian_with_value_test() ->
+    Md = <<"# Felhasználó\n\n- **Időzóna:** CET\n">>,
+    ?assertEqual(<<"CET">>, bc_user_env:parse_timezone_from_user_md(Md)).
+
+%% ---- time section UTC offset display tests ----
+
+time_section_utc_offset_display_test() ->
+    %% CET label with offset +1 should show "(CET, UTC+1)"
+    Result = bc_user_env:format_time_section(<<"CET">>, 1, {{2026, 3, 7}, {14, 23, 0}}),
+    ?assert(binary:match(Result, <<"(CET, UTC+1)">>) =/= nomatch).
+
+time_section_utc_no_duplicate_test() ->
+    %% UTC label should show just "(UTC)", not "(UTC, UTC+0)"
+    Result = bc_user_env:format_time_section(<<"UTC">>, 0, {{2026, 3, 7}, {14, 23, 0}}),
+    ?assertEqual(<<"Saturday, March 7, 2026 14:23 (UTC)">>, Result).
+
+time_section_gmt_no_duplicate_test() ->
+    %% GMT label should also just show "(UTC)"
+    Result = bc_user_env:format_time_section(<<"GMT">>, 0, {{2026, 3, 7}, {14, 23, 0}}),
+    ?assertEqual(<<"Saturday, March 7, 2026 14:23 (UTC)">>, Result).
+
 %% ---- build_env_block/1 tests ----
 
 build_block_all_sections_test() ->
-    Sections = [<<"Monday, March 3, 2026 10:00 (UTC)">>,
+    Sections = [<<"Monday, March 3, 2026 10:00 (CET, UTC+1)">>,
                 <<"Time since last message: 5 minutes ago">>,
                 <<"Weather in Stockholm: 12\302\260C, clear sky, 50% humidity">>,
                 <<"Headlines:\n- Big news">>],

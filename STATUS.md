@@ -12,9 +12,9 @@ per-user agent mapping, voice message transcription, token-based compaction,
 webhook secret token validation, smart session memory maintenance,
 Telegram bot command registration, `/new` session reset,
 v0.1.0 release preparation, user environment context injection,
-and per-agent weather location
+per-agent weather location, and timezone abbreviations + UTC offset display
 (Post-M37) are all complete.
-739 EUnit tests + 37 CT tests pass (776 total).
+745 EUnit tests + 37 CT tests pass (782 total).
 
 ---
 
@@ -92,45 +92,11 @@ and per-agent weather location
 | Post-M37 | User Environment Context Injection |
 | Post-M37 | Fix User Env: Async Refresh + Open-Meteo |
 | Post-M37 | Per-Agent Weather Location |
+| Post-M37 | Timezone Abbreviations + UTC Offset Display |
 
 ---
 
 ## Recent Milestones
-
-### Post-M37 — Incoming Image Attachment Disk Save + bash Tool Arg Fix ✅
-
-| Task | Status | Notes |
-|------|--------|-------|
-| `bc_channel_telegram.erl` — save photo to `/tmp/bc_attach_*.jpg` | ✅ | Agent gets file path in message text |
-| `bc_channel_telegram.erl` — prepend `[Attached image saved to ...]` | ✅ | Agent knows disk path for tools |
-| `bc_tool_bash.erl` — accept `<<"command">>` fallback | ✅ | Prevents function_clause crash |
-| `bc_tool_bash.erl` — catch-all error clause | ✅ | Helpful error instead of crash |
-| `bc_tool_bash_tests.erl` — 5 new EUnit tests | ✅ | script, command, missing key, empty, definition |
-| `SKILL.md` (nano-banana-pro) — attachment path guidance | ✅ | Documents `-i /tmp/bc_attach_*.jpg` usage |
-| All tests pass | ✅ | 689 EUnit tests pass, 0 warnings |
-
-### Post-M37 — Skill Prompt Fix + Strip Old Image Attachments ✅
-
-| Task | Status | Notes |
-|------|--------|-------|
-| `SKILL.md` (nano-banana-pro) — add "do NOT verify" instruction | ✅ | Prevents unnecessary `ls`/`cat` after image generation |
-| `bc_loop.erl` — `strip_old_attachments/2` | ✅ | Strips vision data from user messages older than last 5 |
-| `bc_loop.erl` — apply stripping before LLM call | ✅ | Non-destructive: session history retains full attachments |
-| `bc_loop_attachment_tests.erl` — 10 EUnit tests | ✅ | Edge cases: keep count, non-user msgs, content preserved |
-| All tests pass | ✅ | 699 EUnit tests pass, 0 warnings |
-
-### Post-M37 — User Environment Context Injection ✅
-
-| Task | Status | Notes |
-|------|--------|-------|
-| `bc_user_env.erl` — singleton gen_server with weather/news caching | ✅ | wttr.in + Finnhub APIs, configurable TTLs |
-| `beamclaw_core_sup.erl` — add `bc_user_env` child spec | ✅ | Permanent worker after `bc_session_maintenance` |
-| `bc_loop.erl` — inject `EnvMsgs` via `maybe_user_env/1` | ✅ | Ephemeral, never stored in history |
-| `config/sys.config` — `user_env` config block | ✅ | Opt-in (`enabled => false`), FINNHUB_TOKEN to blocklist |
-| `bc_workspace_templates.erl` — SOUL.md environment awareness | ✅ | Guidance for time-of-day, weather, idle references |
-| `bc_user_env_tests.erl` — 26 EUnit tests | ✅ | Pure functions + gen_server disabled test |
-| CLAUDE.md, docs updates | ✅ | File layout, sup tree, config, obs events |
-| All tests pass | ✅ | 725 EUnit tests pass, 0 warnings |
 
 ### Post-M37 — Fix User Env: Async Refresh + Open-Meteo ✅
 
@@ -159,6 +125,19 @@ and per-agent weather location
 | `bc_user_env_tests.erl` — 6 new location parsing tests | ✅ | Present, missing, Hungarian, bad format, placeholder, integer coords |
 | All tests pass | ✅ | 739 EUnit tests pass, 0 warnings |
 
+### Post-M37 — Timezone Abbreviations + UTC Offset Display ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| `bc_workspace_templates.erl` — timezone format hint in USER.md template | ✅ | Guides IANA name or abbreviation |
+| `bc_user_env.erl` — `strip_parenthetical/1` in `parse_timezone_from_user_md` | ✅ | `CET (Central European Time)` → `CET` |
+| `bc_user_env.erl` — 30 common timezone abbreviations in `tz_offset/1` | ✅ | CET, EST, PST, JST, etc. |
+| `bc_user_env.erl` — UTC offset in time section display | ✅ | `(CET, UTC+1)` — no duplicate for UTC/GMT |
+| `bc_user_env_tests.erl` — 6 new tests | ✅ | Abbreviations, parenthetical, UTC offset display |
+| Container: default agent USER.md | ✅ | `CET (Central European Time)` → `Europe/Stockholm` |
+| Container: mom agent USER.md | ✅ | `CET` → `Europe/Budapest` |
+| All tests pass | ✅ | 745 EUnit tests pass, 0 warnings |
+
 ---
 
 ## Active Work
@@ -175,4 +154,4 @@ _None at this time._
 
 ## Last Updated
 
-2026-03-10
+2026-03-11

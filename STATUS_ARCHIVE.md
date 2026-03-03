@@ -837,3 +837,44 @@ All six OTP apps created, supervision trees defined, behaviours declared,
 | `docs/building.md` — fix stale counts | ✅ | App count (8→9), test count (407→683) |
 | Tests | ✅ | 1 new test (version_returns_binary_test), updated existing |
 | Git tag + GitHub Release | ✅ | Annotated `v0.1.0` tag, release from CHANGELOG.md |
+
+---
+
+## Post-M37 — Incoming Image Attachment Disk Save + bash Tool Arg Fix ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| `bc_channel_telegram.erl` — save photo to `/tmp/bc_attach_*.jpg` | ✅ | Agent gets file path in message text |
+| `bc_channel_telegram.erl` — prepend `[Attached image saved to ...]` | ✅ | Agent knows disk path for tools |
+| `bc_tool_bash.erl` — accept `<<"command">>` fallback | ✅ | Prevents function_clause crash |
+| `bc_tool_bash.erl` — catch-all error clause | ✅ | Helpful error instead of crash |
+| `bc_tool_bash_tests.erl` — 5 new EUnit tests | ✅ | script, command, missing key, empty, definition |
+| `SKILL.md` (nano-banana-pro) — attachment path guidance | ✅ | Documents `-i /tmp/bc_attach_*.jpg` usage |
+| All tests pass | ✅ | 689 EUnit tests pass, 0 warnings |
+
+---
+
+## Post-M37 — Skill Prompt Fix + Strip Old Image Attachments ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| `SKILL.md` (nano-banana-pro) — add "do NOT verify" instruction | ✅ | Prevents unnecessary `ls`/`cat` after image generation |
+| `bc_loop.erl` — `strip_old_attachments/2` | ✅ | Strips vision data from user messages older than last 5 |
+| `bc_loop.erl` — apply stripping before LLM call | ✅ | Non-destructive: session history retains full attachments |
+| `bc_loop_attachment_tests.erl` — 10 EUnit tests | ✅ | Edge cases: keep count, non-user msgs, content preserved |
+| All tests pass | ✅ | 699 EUnit tests pass, 0 warnings |
+
+---
+
+## Post-M37 — User Environment Context Injection ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| `bc_user_env.erl` — singleton gen_server with weather/news caching | ✅ | wttr.in + Finnhub APIs, configurable TTLs |
+| `beamclaw_core_sup.erl` — add `bc_user_env` child spec | ✅ | Permanent worker after `bc_session_maintenance` |
+| `bc_loop.erl` — inject `EnvMsgs` via `maybe_user_env/1` | ✅ | Ephemeral, never stored in history |
+| `config/sys.config` — `user_env` config block | ✅ | Opt-in (`enabled => false`), FINNHUB_TOKEN to blocklist |
+| `bc_workspace_templates.erl` — SOUL.md environment awareness | ✅ | Guidance for time-of-day, weather, idle references |
+| `bc_user_env_tests.erl` — 26 EUnit tests | ✅ | Pure functions + gen_server disabled test |
+| CLAUDE.md, docs updates | ✅ | File layout, sup tree, config, obs events |
+| All tests pass | ✅ | 725 EUnit tests pass, 0 warnings |
