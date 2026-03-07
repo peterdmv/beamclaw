@@ -307,6 +307,10 @@ make_session_ref(Data) ->
     }.
 
 receive_stream(Data, T0, TickRef) ->
+    %% Compute remaining timeout from T0 so that typing_tick messages
+    %% (arriving every 3s) do not reset the 60s deadline.
+    Elapsed   = erlang:monotonic_time(millisecond) - T0,
+    Remaining = max(0, 60000 - Elapsed),
     receive
         {stream_chunk, _Pid, Chunk} ->
             %% Forward to direct reply target (HTTP/WS); channel gen-servers
@@ -362,7 +366,7 @@ receive_stream(Data, T0, TickRef) ->
             emit_typing(Data),
             NewTickRef = schedule_typing_tick(),
             receive_stream(Data, T0, NewTickRef)
-    after 60000 ->
+    after Remaining ->
         cancel_typing_tick(TickRef),
         logger:error("[loop] stream timeout"),
         route_response(Data, #bc_message{role    = assistant,

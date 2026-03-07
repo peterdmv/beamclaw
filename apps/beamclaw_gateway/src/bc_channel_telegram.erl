@@ -56,6 +56,8 @@ handle_webhook(Update) ->
 init(Config) ->
     Token = bc_config:resolve(maps:get(token, Config, {env, "TELEGRAM_BOT_TOKEN"})),
     Mode  = maps:get(mode, Config, long_poll),
+    ApiBase = maps:get(api_base_url, Config, "https://api.telegram.org"),
+    put(telegram_api_base_url, ApiBase),
     %% ETS table mapping SessionId → ChatId (needed since session IDs are now
     %% derived hashes, not raw ChatId values)
     _ = ets:new(bc_telegram_chat_map, [set, named_table, public]),
@@ -114,6 +116,9 @@ handle_cast({send_response, SessionId, Msg}, State) ->
 handle_cast({notify_typing, SessionId}, State) ->
     send_typing(SessionId, State),
     {noreply, State};
+handle_cast({update_draft, SessionId, DraftId, Content}, State) ->
+    {ok, NewState} = update_draft(SessionId, DraftId, Content, State),
+    {noreply, NewState};
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
@@ -696,7 +701,11 @@ edit_message_plain(ChatId, MessageId, Text, #{token := Token}) ->
     end.
 
 make_api_url(Token, Path) ->
-    list_to_binary("https://api.telegram.org/bot" ++ Token ++ Path).
+    Base = case get(telegram_api_base_url) of
+        undefined -> "https://api.telegram.org";
+        B         -> B
+    end,
+    list_to_binary(Base ++ "/bot" ++ Token ++ Path).
 
 resolve_chat_id(SessionId, _State) ->
     case ets:lookup(bc_telegram_chat_map, SessionId) of

@@ -14,9 +14,11 @@ Telegram bot command registration, `/new` session reset,
 v0.1.0 release preparation, user environment context injection,
 per-agent weather location, timezone abbreviations + UTC offset display,
 UTF-8 Hungarian USER.md field regex fix, A2A protocol,
-and A2A Bearer token authentication
+A2A Bearer token authentication,
+and development process retrospective test suites
 (Post-M37) are all complete.
-780 EUnit tests + 46 CT tests pass (826 total).
+814 EUnit tests + 67 CT tests pass (881 total).
+21 new CT tests added for edge-case, Telegram, and CLI coverage.
 
 ---
 
@@ -98,10 +100,29 @@ and A2A Bearer token authentication
 | Post-M37 | Fix UTF-8 Hungarian USER.md Field Regex Matching |
 | Post-M37 | A2A (Agent2Agent) Protocol |
 | Post-M37 | A2A Bearer Token Authentication |
+| Post-M37 | Development Process Retrospective — Test Suites |
 
 ---
 
 ## Recent Milestones
+
+### Post-M37 — Development Process Retrospective — Test Suites ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| `bc_unicode_tests.erl` — 34 UTF-8 EUnit tests | ✅ | Hungarian, emoji, CJK, Arabic, Cyrillic through scrubber, formatter, parser |
+| `bc_loop_edge_SUITE.erl` — 6 state machine edge-case CT tests | ✅ | Stream error/timeout recovery, tool crash, max iterations, queue drain, supervisor restart |
+| `bc_loop.erl` — fix stream timeout not firing due to typing ticks | ✅ | `receive_stream` now uses elapsed-time-based deadline instead of resetting `after` timer |
+| `bc_telegram_mock.erl` — Cowboy-based mock Telegram Bot API | ✅ | Records requests in ETS; supports configurable responses |
+| `bc_telegram_integration_SUITE.erl` — 8 Telegram integration CT tests | ✅ | Bot commands, sendMessage format, HTML parse_mode, Unicode, typing, empty skip, editMessage, webhook |
+| `bc_channel_telegram.erl` — configurable `api_base_url` for testing | ✅ | Process dictionary stores mock base URL; `make_api_url/2` reads from it |
+| `bc_cli_smoke_SUITE.erl` — 7 CLI escript smoke CT tests | ✅ | version, help, unknown command, agent list, skills list, sandbox status |
+| `bc_docker_integration_SUITE.erl` — 10 Docker deployment CT tests | ✅ | Auto-skips without Docker; builds image, starts container, health check, UTF-8, workspace |
+| Mock providers for edge tests (error, timeout, infinite tool, toolcall) | ✅ | 5 mock modules for systematic state machine edge-case testing |
+| CLAUDE.md — CT suites table updated | ✅ | 4 new suites documented |
+| All tests pass | ✅ | 814 EUnit + 67 CT = 881 total |
+
+---
 
 ### Post-M37 — Fix UTF-8 Hungarian USER.md Field Regex Matching ✅
 
@@ -147,4 +168,4 @@ _None at this time._
 
 ## Last Updated
 
-2026-03-13
+2026-03-07

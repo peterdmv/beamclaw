@@ -106,8 +106,12 @@ CT suites:
 | Suite | App | Tier | Tests |
 |---|---|---|---|
 | `bc_agentic_loop_SUITE` | `beamclaw_core` | 2 | Session + loop + provider round-trip |
+| `bc_loop_edge_SUITE` | `beamclaw_core` | 2 | Stream timeout/error recovery, tool crash, max iterations, supervisor restart |
 | `bc_http_integration_SUITE` | `beamclaw_gateway` | 2 | Cowboy HTTP handlers end-to-end |
+| `bc_telegram_integration_SUITE` | `beamclaw_gateway` | 2 | Telegram mock API: bot commands, sendMessage format, typing, Unicode, webhook |
+| `bc_cli_smoke_SUITE` | `beamclaw_gateway` | 2 | CLI escript: version, help, agent list, skills list, sandbox status |
 | `bc_sandbox_docker_SUITE` | `beamclaw_sandbox` | 3 | Docker container lifecycle, script execution, bridge |
+| `bc_docker_integration_SUITE` | `beamclaw_gateway` | 3 | Docker deployment: image build, health, CLI, UTF-8, workspace |
 | `bc_scheduler_SUITE` | `beamclaw_scheduler` | 2 | Scheduler timer fire, delivery, heartbeat, tool actions |
 | `bc_context_integration_SUITE` | `beamclaw_gateway` | 2 | /context command dispatch (TUI + Telegram) |
 | `bc_a2a_http_integration_SUITE` | `beamclaw_a2a` | 2 | A2A Agent Card, JSON-RPC, Bearer auth |
@@ -120,8 +124,10 @@ CT suites:
 | Change type | Required tests |
 |---|---|
 | Pure-function module | EUnit |
-| Multi-module OTP interaction (session + loop + tools) | CT integration suite |
-| HTTP/WebSocket handler | CT integration suite |
+| Multi-module OTP interaction (session + loop + tools) | CT `bc_agentic_loop_SUITE` + `bc_loop_edge_SUITE` |
+| HTTP/WebSocket handler | CT `bc_http_integration_SUITE` |
+| Telegram channel changes | CT `bc_telegram_integration_SUITE` |
+| CLI escript changes | CT `bc_cli_smoke_SUITE` |
 | Scheduler/heartbeat/cron changes | CT `bc_scheduler_SUITE` |
 | Docker/sandbox/external process | CT Docker E2E suite |
 
