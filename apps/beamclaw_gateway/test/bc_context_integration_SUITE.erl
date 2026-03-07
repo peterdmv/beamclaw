@@ -354,15 +354,15 @@ capture_gl_loop(Acc) ->
         {io_request, From, ReplyAs, {put_chars, _Enc, Mod, Func, Args}} ->
             %% io:format sends {put_chars, unicode, io_lib, format, [Fmt, FmtArgs]}
             Chars = apply(Mod, Func, Args),
-            Bin = iolist_to_binary(Chars),
+            Bin = unicode:characters_to_binary(Chars),
             From ! {io_reply, ReplyAs, ok},
             capture_gl_loop(<<Acc/binary, Bin/binary>>);
         {io_request, From, ReplyAs, {put_chars, _Enc, Chars}} ->
-            Bin = iolist_to_binary(Chars),
+            Bin = unicode:characters_to_binary(Chars),
             From ! {io_reply, ReplyAs, ok},
             capture_gl_loop(<<Acc/binary, Bin/binary>>);
         {io_request, From, ReplyAs, {put_chars, Chars}} ->
-            Bin = iolist_to_binary(Chars),
+            Bin = unicode:characters_to_binary(Chars),
             From ! {io_reply, ReplyAs, ok},
             capture_gl_loop(<<Acc/binary, Bin/binary>>);
         {io_request, From, ReplyAs, {get_line, _Prompt}} ->
