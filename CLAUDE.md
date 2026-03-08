@@ -115,6 +115,7 @@ CT suites:
 | `bc_scheduler_SUITE` | `beamclaw_scheduler` | 2 | Scheduler timer fire, delivery, heartbeat, tool actions |
 | `bc_context_integration_SUITE` | `beamclaw_gateway` | 2 | /context command dispatch (TUI + Telegram) |
 | `bc_a2a_http_integration_SUITE` | `beamclaw_a2a` | 2 | A2A Agent Card, JSON-RPC, Bearer auth |
+| `bc_webhook_integration_SUITE` | `beamclaw_gateway` | 2 | Generic webhook: auth (header/body/query), open mode, rate limit, custom agent |
 
 **When to run**:
 - Before every commit: `rebar3 eunit`
@@ -233,6 +234,7 @@ GET  /metrics                → bc_http_metrics_h        (Prometheus scrape)
 POST /v1/chat/completions    → bc_http_completions_h    (OpenAI-compatible, SSE streaming)
 GET  /ws                     → bc_ws_h                  (WebSocket)
 POST /webhook/telegram       → bc_webhook_telegram_h
+POST /webhook/:source        → bc_webhook_h             (generic webhook ingestion)
 GET  /.well-known/agent.json → bc_a2a_http_h            (A2A Agent Card discovery)
 POST /a2a                    → bc_a2a_http_h            (A2A JSON-RPC 2.0, Bearer token auth)
 ```

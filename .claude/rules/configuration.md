@@ -93,7 +93,10 @@ as the user_id, enabling cross-channel session sharing for single-user deploymen
                                 stt_api_key => {env, "GROQ_API_KEY"},
                                 stt_model => "whisper-large-v3-turbo"}}},
         {tui,      #{enabled => true}}
-    ]}
+    ]},
+    {webhooks, #{
+        enabled => true                        %% enable POST /webhook/:source endpoint
+    }}
 ]},
 {beamclaw_sandbox, [
     {enabled, false},                          %% opt-in; requires Docker
@@ -158,6 +161,13 @@ as the user_id, enabling cross-channel session sharing for single-user deploymen
 
 `A2A_BEARER_TOKEN` env var: when set, Bearer token authentication is required on `POST /a2a`.
 Agent Card advertises `bearer` scheme when token is configured; no auth advertised otherwise.
+
+`WEBHOOK_SECRET_<SOURCE>` env vars: per-source authentication for `POST /webhook/:source`.
+When `WEBHOOK_SECRET_TRADINGVIEW` is set, requests to `/webhook/tradingview` must include
+the secret via one of (first match wins): `X-Webhook-Secret` header, `?secret=` query
+parameter, or `"secret"` field in a JSON body. When unset, the endpoint is open (no auth
+required). Source name is uppercased for the env var lookup. The `"secret"` field is
+automatically stripped from JSON bodies before forwarding to the agent session.
 
 Key `vm.args` flags:
 

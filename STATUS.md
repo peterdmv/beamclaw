@@ -15,10 +15,11 @@ v0.1.0 release preparation, user environment context injection,
 per-agent weather location, timezone abbreviations + UTC offset display,
 UTF-8 Hungarian USER.md field regex fix, A2A protocol,
 A2A Bearer token authentication,
-and development process retrospective test suites
+development process retrospective test suites,
+generic webhook ingestion endpoint,
+and webhook body-based auth for TradingView
 (Post-M37) are all complete.
-814 EUnit tests + 67 CT tests pass (881 total).
-21 new CT tests added for edge-case, Telegram, and CLI coverage.
+830 EUnit tests + 74 CT tests pass (904 total).
 
 ---
 
@@ -101,56 +102,25 @@ and development process retrospective test suites
 | Post-M37 | A2A (Agent2Agent) Protocol |
 | Post-M37 | A2A Bearer Token Authentication |
 | Post-M37 | Development Process Retrospective — Test Suites |
+| Post-M37 | Generic Webhook Ingestion Endpoint |
+| Post-M37 | Webhook Body-Based Auth (TradingView Support) |
 
 ---
 
 ## Recent Milestones
 
-### Post-M37 — Development Process Retrospective — Test Suites ✅
+### Post-M37 — Webhook Body-Based Auth (TradingView Support) ✅
 
 | Task | Status | Notes |
 |------|--------|-------|
-| `bc_unicode_tests.erl` — 34 UTF-8 EUnit tests | ✅ | Hungarian, emoji, CJK, Arabic, Cyrillic through scrubber, formatter, parser |
-| `bc_loop_edge_SUITE.erl` — 6 state machine edge-case CT tests | ✅ | Stream error/timeout recovery, tool crash, max iterations, queue drain, supervisor restart |
-| `bc_loop.erl` — fix stream timeout not firing due to typing ticks | ✅ | `receive_stream` now uses elapsed-time-based deadline instead of resetting `after` timer |
-| `bc_telegram_mock.erl` — Cowboy-based mock Telegram Bot API | ✅ | Records requests in ETS; supports configurable responses |
-| `bc_telegram_integration_SUITE.erl` — 8 Telegram integration CT tests | ✅ | Bot commands, sendMessage format, HTML parse_mode, Unicode, typing, empty skip, editMessage, webhook |
-| `bc_channel_telegram.erl` — configurable `api_base_url` for testing | ✅ | Process dictionary stores mock base URL; `make_api_url/2` reads from it |
-| `bc_cli_smoke_SUITE.erl` — 7 CLI escript smoke CT tests | ✅ | version, help, unknown command, agent list, skills list, sandbox status |
-| `bc_docker_integration_SUITE.erl` — 10 Docker deployment CT tests | ✅ | Auto-skips without Docker; builds image, starts container, health check, UTF-8, workspace |
-| Mock providers for edge tests (error, timeout, infinite tool, toolcall) | ✅ | 5 mock modules for systematic state machine edge-case testing |
-| CLAUDE.md — CT suites table updated | ✅ | 4 new suites documented |
-| All tests pass | ✅ | 814 EUnit + 67 CT = 881 total |
-
----
-
-### Post-M37 — Fix UTF-8 Hungarian USER.md Field Regex Matching ✅
-
-| Task | Status | Notes |
-|------|--------|-------|
-| `bc_user_env.erl` — add `/utf8` + `unicode` to `parse_timezone_from_user_md/1` | ✅ | Regex now matches real UTF-8 file content |
-| `bc_user_env.erl` — add `/utf8` + `unicode` to `parse_location_from_user_md/1` | ✅ | Same fix for Helyszín field |
-| `bc_user_env_tests.erl` — `/utf8` suffix on Hungarian test data | ✅ | Tests now exercise real UTF-8 matching |
-| `bc_user_env_tests.erl` — new `parse_tz_hungarian_utf8_file_test` | ✅ | Explicit UTF-8 bytes simulating `file:read_file/1` |
-| All tests pass | ✅ | 746 EUnit tests, 0 warnings |
-
----
-
-### Post-M37 — A2A Bearer Token Authentication ✅
-
-| Task | Status | Notes |
-|------|--------|-------|
-| Rebase `feature/a2a-protocol` onto main | ✅ | 9 commits behind resolved, duplicate `version/0` fixed |
-| `bc_a2a_http_h.erl` — Bearer token auth on POST /a2a | ✅ | `authenticate/1`, constant-time comparison via `crypto:hash_equals/2` |
-| `bc_a2a_http_h.erl` — 401 JSON-RPC error + `WWW-Authenticate: Bearer` | ✅ | RFC 6750 compliant |
-| `bc_a2a_agent_card.erl` — dynamic auth scheme in Agent Card | ✅ | `resolve_auth_scheme/0` reads `A2A_BEARER_TOKEN` env var |
-| Config — `A2A_BEARER_TOKEN` in sandbox `env_blocklist` | ✅ | sys.config + sys.docker.config |
-| Config — `beamclaw_a2a` app section in sys.config | ✅ | Agent card name + url |
-| `bc_a2a_auth_tests.erl` — 6 EUnit tests | ✅ | verify_bearer, resolve_token |
-| `bc_a2a_server_tests.erl` — 2 Agent Card auth tests | ✅ | Auth present/absent based on env var |
-| `bc_a2a_http_integration_SUITE.erl` — 5 CT auth tests | ✅ | Missing header, invalid token, valid token, unconfigured, card auth |
-| CLAUDE.md, docs/configuration.md updates | ✅ | `a2a_auth_failed` obs event, `A2A_BEARER_TOKEN` env var |
-| All tests pass | ✅ | 780 EUnit + 46 CT = 826 total |
+| `bc_webhook_h.erl` — 3-location secret extraction (header/query/body) | ✅ | Fallback chain: X-Webhook-Secret → ?secret= → JSON "secret" field |
+| `bc_webhook_h.erl` — strip "secret" field from forwarded JSON | ✅ | Secret never enters conversation history |
+| `bc_webhook_tests.erl` — 5 new EUnit tests | ✅ | body secret, missing, plain text, strips secret, no-secret unchanged |
+| `bc_webhook_integration_SUITE.erl` — 1 new CT test | ✅ | webhook_body_secret: JSON body auth without header |
+| Documentation: TradingView setup guide in `docs/running.md` | ✅ | Reverse proxy, alert template, placeholders, agent view |
+| Documentation: `docs/configuration.md` + `.claude/rules/configuration.md` | ✅ | Body/query param auth alternatives noted |
+| `.env.example` — webhook secret example | ✅ | `WEBHOOK_SECRET_TRADINGVIEW` entry |
+| All tests pass | ✅ | 830 EUnit + 74 CT = 904 total |
 
 ---
 
@@ -168,4 +138,4 @@ _None at this time._
 
 ## Last Updated
 
-2026-03-07
+2026-03-08

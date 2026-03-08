@@ -28,6 +28,7 @@ Routes:
   POST /v1/chat/completions    → bc_http_completions_h
   GET  /ws                     → bc_ws_h
   POST /webhook/telegram       → bc_webhook_telegram_h
+  POST /webhook/:source        → bc_webhook_h  (generic webhook ingestion)
   GET  /.well-known/agent.json → bc_a2a_http_h  (A2A Agent Card)
   POST /a2a                    → bc_a2a_http_h  (A2A JSON-RPC)
 """.
@@ -53,6 +54,7 @@ init([]) ->
             {"/v1/chat/completions",       bc_http_completions_h, []},
             {"/ws",                        bc_ws_h,               []},
             {"/webhook/telegram",          bc_webhook_telegram_h, []},
+            {"/webhook/:source",           bc_webhook_h,          []},
             {"/.well-known/agent.json",    bc_a2a_http_h,         []},
             {"/a2a",                       bc_a2a_http_h,         []}
         ]}

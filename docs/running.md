@@ -561,6 +561,7 @@ Pairing data is stored as JSON files under `~/.beamclaw/pairing/`:
 | `BEAMCLAW_EMBEDDING_API_KEY` | No | API key for embedding service (enables semantic search) |
 | `BEAMCLAW_EMBEDDING_URL` | No | Embedding API base URL (default: `https://api.openai.com/v1`) |
 | `BEAMCLAW_EMBEDDING_MODEL` | No | Embedding model name (default: `text-embedding-3-small`) |
+| `WEBHOOK_SECRET_<SOURCE>` | No | Per-source webhook auth secret (e.g., `WEBHOOK_SECRET_TRADINGVIEW`) |
 
 ### Pre-flight check
 
@@ -789,6 +790,160 @@ The HTTP gateway is always enabled on port 18800 (configurable). Endpoints:
 | `POST /v1/chat/completions` | OpenAI-compatible API (SSE streaming + sync) |
 | `GET /ws` | WebSocket — send/receive messages |
 | `POST /webhook/telegram` | Telegram webhook receiver |
+| `POST /webhook/:source` | Generic webhook ingestion (any external service) |
+
+### Generic Webhooks
+
+BeamClaw can receive webhooks from arbitrary external services (TradingView,
+GitHub, Stripe, etc.) via `POST /webhook/:source`. The webhook body is wrapped
+as a user message prefixed with `[Webhook: <source>]` and dispatched to the
+agent session.
+
+**Authentication**: Per-source secret checked in three locations (first match wins):
+1. `X-Webhook-Secret` header (works for GitHub, Stripe, etc.)
+2. `?secret=` query parameter in the URL
+3. `"secret"` field in a JSON body (works for TradingView)
+
+Set `WEBHOOK_SECRET_<SOURCE>` (uppercased) as an env var. If no env var is set
+for a source, the endpoint is open (no auth required). The `"secret"` field is
+automatically stripped from JSON bodies before forwarding to the agent.
+
+**Session routing**: With `BEAMCLAW_USER` set, webhooks arrive in the same
+session as Telegram/TUI (shared session model). Use `?agent=NAME` query param
+to route to a specific agent.
+
+```bash
+# Set a secret for TradingView webhooks
+export WEBHOOK_SECRET_TRADINGVIEW=my-tv-secret
+
+# Send a webhook (e.g., TradingView strategy alert)
+curl -X POST http://localhost:18800/webhook/tradingview \
+  -H "Content-Type: application/json" \
+  -H "X-Webhook-Secret: my-tv-secret" \
+  -d '{"ticker":"NVDA","action":"buy","price":135}'
+# Returns: {"status":"accepted"}
+
+# Open mode (no secret configured) — just POST
+curl -X POST http://localhost:18800/webhook/alerts \
+  -H "Content-Type: application/json" \
+  -d '{"event":"test"}'
+
+# Route to a specific agent
+curl -X POST http://localhost:18800/webhook/github?agent=devbot \
+  -H "Content-Type: application/json" \
+  -d '{"event":"push","ref":"refs/heads/main"}'
+```
+
+The agent receives the webhook content as a regular user message and can
+process it using its tools and skills. Responses are delivered through the
+session's active channel (e.g., Telegram).
+
+### TradingView Setup
+
+TradingView cannot send custom HTTP headers — it only POSTs a JSON body to a
+URL you define. BeamClaw supports body-based authentication for this use case.
+
+#### Prerequisites
+
+- BeamClaw running with HTTP port exposed (default: 18800)
+- A reverse proxy (nginx/Caddy) mapping port 443 → 18800, because **TradingView
+  only sends webhooks to ports 80 or 443**
+- `BEAMCLAW_USER` env var set (so webhooks share session with Telegram/TUI)
+
+#### Step 1: Set a webhook secret
+
+```bash
+# Docker (.env file):
+WEBHOOK_SECRET_TRADINGVIEW=your-random-secret-here
+# Then: docker compose up -d --build
+
+# Local (shell):
+export WEBHOOK_SECRET_TRADINGVIEW=your-random-secret-here
+beamclaw start  # or restart
+```
+
+#### Step 2: Set up reverse proxy (nginx example)
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name your-domain.com;
+    # ... SSL cert config ...
+
+    location /webhook/ {
+        proxy_pass http://127.0.0.1:18800;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+```
+
+#### Step 3: Create a TradingView alert
+
+1. Open a chart, click "Alert" (clock icon) or right-click → "Add Alert"
+2. Set your condition (e.g., NVDA crossing a price, or a strategy signal)
+3. In the **Notifications** tab, check **Webhook URL**
+4. Enter: `https://your-domain.com/webhook/tradingview`
+5. **Replace the default message** with this JSON template:
+
+```json
+{
+  "secret": "your-random-secret-here",
+  "ticker": "{{ticker}}",
+  "exchange": "{{exchange}}",
+  "action": "{{strategy.order.action}}",
+  "position": "{{strategy.market_position}}",
+  "price": {{close}},
+  "volume": {{volume}},
+  "time": "{{time}}",
+  "interval": "{{interval}}"
+}
+```
+
+For simple price crossing alerts (non-strategy), use:
+
+```json
+{
+  "secret": "your-random-secret-here",
+  "ticker": "{{ticker}}",
+  "exchange": "{{exchange}}",
+  "price": {{close}},
+  "time": "{{time}}",
+  "interval": "{{interval}}",
+  "message": "Price alert triggered"
+}
+```
+
+The `secret` field is stripped before the message reaches the agent — it never
+enters the conversation history.
+
+#### Available TradingView placeholders
+
+| Placeholder | Description |
+|---|---|
+| `{{ticker}}` | Symbol (NVDA, AAPL, etc.) |
+| `{{exchange}}` | Exchange (NASDAQ, NASDAQ, etc.) |
+| `{{close}}` | Close price (number, no quotes needed) |
+| `{{open}}` | Open price |
+| `{{high}}` | High price |
+| `{{low}}` | Low price |
+| `{{volume}}` | Volume |
+| `{{time}}` | UTC time (yyyy-MM-ddTHH:mm:ssZ) |
+| `{{interval}}` | Chart timeframe |
+| `{{strategy.order.action}}` | "buy" or "sell" (strategy alerts only) |
+| `{{strategy.market_position}}` | "long", "short", or "flat" |
+| `{{strategy.order.contracts}}` | Number of contracts |
+| `{{strategy.order.price}}` | Execution price |
+
+#### What the agent sees
+
+The agent receives a message like:
+```
+[Webhook: tradingview]
+{"ticker":"NVDA","exchange":"NASDAQ","action":"buy","position":"long","price":135,"volume":1234.5,"time":"2026-03-08T14:30:00Z","interval":"15"}
+```
+
+The `secret` field is automatically removed. The `[Webhook: tradingview]` prefix
+tells the agent the message origin.
 
 ---
 

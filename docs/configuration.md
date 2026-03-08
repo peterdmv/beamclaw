@@ -30,6 +30,7 @@ resolved at runtime by `bc_config:get/2` via `os:getenv/1`.
 | `BEAMCLAW_EMBEDDING_MODEL` | No | Embedding model name (default: `text-embedding-3-small`). |
 | `FINNHUB_TOKEN` | No | Finnhub API token for news headlines in the user environment context. Get one at [finnhub.io](https://finnhub.io/). When unset, the news section is silently omitted. |
 | `A2A_BEARER_TOKEN` | No | Bearer token for A2A protocol endpoint authentication. When set, `POST /a2a` requires `Authorization: Bearer <token>` header; the Agent Card advertises `bearer` auth scheme. When unset, A2A endpoint is open access (suitable for single-user deployments). |
+| `WEBHOOK_SECRET_<SOURCE>` | No | Per-source webhook authentication secret. Replace `<SOURCE>` with the uppercased source name (e.g., `WEBHOOK_SECRET_TRADINGVIEW`). When set, `POST /webhook/<source>` requires the secret via one of: `X-Webhook-Secret` header, `?secret=` query param, or `"secret"` field in JSON body (first match wins). When unset, the endpoint is open (no auth). Body-based auth supports services like TradingView that cannot send custom headers. |
 
 At least one of `OPENROUTER_API_KEY` or `OPENAI_API_KEY` must be set, depending on
 `default_provider`.
@@ -211,9 +212,25 @@ to the agentic loop.
         {tui, #{
             enabled => true      %% set false in Docker (sys.docker.config)
         }}
-    ]}
+    ]},
+
+    %% Generic webhook ingestion — POST /webhook/:source
+    {webhooks, #{
+        enabled => true   %% enable generic webhook endpoint
+    }}
 ]}
 ```
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `webhooks.enabled` | boolean | `true` | Enable the `POST /webhook/:source` endpoint |
+
+Per-source authentication is configured via `WEBHOOK_SECRET_<SOURCE>` env vars
+(see Environment Variables above), not in `sys.config`. The secret can be
+provided via `X-Webhook-Secret` header, `?secret=` query parameter, or
+`"secret"` field in a JSON body (first match wins). The `"secret"` field is
+stripped from JSON bodies before forwarding to the agent. See `docs/running.md`
+for TradingView-specific setup instructions.
 
 ### beamclaw_memory
 

@@ -377,6 +377,8 @@ Non-blocking cast; backends receive events asynchronously via `pg` process group
 | `a2a_task_updated` | `task_id`, `state` |
 | `a2a_request` | `method`, `path`, `rpc_method` |
 | `a2a_auth_failed` | `client_ip`, `reason` |
+| `webhook_received` | `source`, `session_id` |
+| `webhook_auth_failed` | `source`, `reason`, `client_ip` |
 
 Usage: `bc_obs:emit(tool_call_start, #{tool_name => Name, args => Args, session_id => SId})`.
 

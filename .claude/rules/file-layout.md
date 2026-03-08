@@ -171,6 +171,7 @@ beamclaw/
       bc_http_completions_h.erl
       bc_ws_h.erl
       bc_webhook_telegram_h.erl
+      bc_webhook_h.erl          %% generic webhook ingestion: POST /webhook/:source
     beamclaw_cli/src/
       beamclaw_cli.app.src
       beamclaw_cli.erl        %% escript main; 30 commands (tui/start/stop/restart/remote_console/agent create/list/show/delete/rehatch/skills list/status/show/install/scheduler list/cancel/pause/resume/pair/pair list/pair approve/pair revoke/sandbox status/list/kill/build/doctor/status/version/help)
