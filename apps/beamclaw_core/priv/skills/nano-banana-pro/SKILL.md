@@ -46,3 +46,4 @@ Notes
   with ls, cat, or any other command. The script confirms success by printing
   the saved path — just report the result to the user immediately.
 - When editing a user-provided image, use the file path from the `[Attached image saved to ...]` line in the chat message (e.g., `-i /tmp/bc_attach_12345.jpg`).
+- IMPORTANT: Always use the `bash` tool to run this script. Do NOT use the `exec` tool — the sandbox has no network access and no `uv`, so the API call will always fail silently.
