@@ -17,9 +17,10 @@ UTF-8 Hungarian USER.md field regex fix, A2A protocol,
 A2A Bearer token authentication,
 development process retrospective test suites,
 generic webhook ingestion endpoint,
-and webhook body-based auth for TradingView
+webhook body-based auth for TradingView,
+and a fix for empty native tool_call ids corrupting session history
 (Post-M37) are all complete.
-830 EUnit tests + 74 CT tests pass (904 total).
+831 EUnit tests + 74 CT tests pass (905 total).
 
 ---
 
@@ -104,23 +105,21 @@ and webhook body-based auth for TradingView
 | Post-M37 | Development Process Retrospective — Test Suites |
 | Post-M37 | Generic Webhook Ingestion Endpoint |
 | Post-M37 | Webhook Body-Based Auth (TradingView Support) |
+| Post-M37 | Fix Empty Native Tool-Call ID Corrupting Session History |
 
 ---
 
 ## Recent Milestones
 
-### Post-M37 — Webhook Body-Based Auth (TradingView Support) ✅
+### Post-M37 — Fix Empty Native Tool-Call ID Corrupting Session History ✅
 
 | Task | Status | Notes |
 |------|--------|-------|
-| `bc_webhook_h.erl` — 3-location secret extraction (header/query/body) | ✅ | Fallback chain: X-Webhook-Secret → ?secret= → JSON "secret" field |
-| `bc_webhook_h.erl` — strip "secret" field from forwarded JSON | ✅ | Secret never enters conversation history |
-| `bc_webhook_tests.erl` — 5 new EUnit tests | ✅ | body secret, missing, plain text, strips secret, no-secret unchanged |
-| `bc_webhook_integration_SUITE.erl` — 1 new CT test | ✅ | webhook_body_secret: JSON body auth without header |
-| Documentation: TradingView setup guide in `docs/running.md` | ✅ | Reverse proxy, alert template, placeholders, agent view |
-| Documentation: `docs/configuration.md` + `.claude/rules/configuration.md` | ✅ | Body/query param auth alternatives noted |
-| `.env.example` — webhook secret example | ✅ | `WEBHOOK_SECRET_TRADINGVIEW` entry |
-| All tests pass | ✅ | 830 EUnit + 74 CT = 904 total |
+| Root cause: `bc_tool_parser:native_to_record/1` trusted provider `id` verbatim | ✅ | A provider-emitted empty `"id": ""` got baked into a tool message's `tool_call_id`, permanently wedging the session — every subsequent turn re-sent the corrupted history and OpenRouter rejected the whole request (400) |
+| `bc_tool_parser.erl:53-59` — fall back to `generate_id()` when native `id` is empty | ✅ | Mirrors the existing fallback already present in the generic native clause |
+| `bc_tool_parser_tests.erl` — regression test for empty-id native tool call | ✅ | `native_empty_id_falls_back_test` |
+| All tests pass | ✅ | 831 EUnit + 74 CT = 905 total |
+| Docker image rebuilt and redeployed | ✅ | `docker compose build && docker compose up -d`; container healthy post-restart |
 
 ---
 
@@ -138,4 +137,4 @@ _None at this time._
 
 ## Last Updated
 
-2026-03-08
+2026-10-03

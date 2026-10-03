@@ -64,6 +64,21 @@ native_multiple_calls_test() ->
     ?assert(lists:member(<<"bash">>, Names)),
     ?assert(lists:member(<<"jq">>, Names)).
 
+%% ---- Native: empty id falls back to a generated id ----
+%% Regression: some providers emit "id": "" for a tool call. Trusting it
+%% verbatim bakes an empty tool_call_id into session history, which the
+%% provider then permanently rejects on every subsequent request.
+
+native_empty_id_falls_back_test() ->
+    Call = #{<<"id">>       => <<>>,
+             <<"function">> => #{<<"name">>      => <<"bash">>,
+                                 <<"arguments">> => <<"{}">>}},
+    Msg  = #bc_message{id = <<"4">>, role = assistant,
+                       content = <<>>, tool_calls = [Call]},
+    [TC] = bc_tool_parser:parse(Msg),
+    ?assertEqual(<<"bash">>, TC#bc_tool_call.name),
+    ?assertNotEqual(<<>>, TC#bc_tool_call.id).
+
 %% ---- XML <tool_call> tag ----
 
 xml_tool_call_tag_test() ->

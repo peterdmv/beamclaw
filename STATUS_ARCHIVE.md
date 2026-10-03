@@ -920,3 +920,16 @@ All six OTP apps created, supervision trees defined, behaviours declared,
 | Container: default agent USER.md | ✅ | `CET (Central European Time)` → `Europe/Stockholm` |
 | Container: mom agent USER.md | ✅ | `CET` → `Europe/Budapest` |
 | All tests pass | ✅ | 745 EUnit tests pass, 0 warnings |
+
+## Post-M37 — Webhook Body-Based Auth (TradingView Support) ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| `bc_webhook_h.erl` — 3-location secret extraction (header/query/body) | ✅ | Fallback chain: X-Webhook-Secret → ?secret= → JSON "secret" field |
+| `bc_webhook_h.erl` — strip "secret" field from forwarded JSON | ✅ | Secret never enters conversation history |
+| `bc_webhook_tests.erl` — 5 new EUnit tests | ✅ | body secret, missing, plain text, strips secret, no-secret unchanged |
+| `bc_webhook_integration_SUITE.erl` — 1 new CT test | ✅ | webhook_body_secret: JSON body auth without header |
+| Documentation: TradingView setup guide in `docs/running.md` | ✅ | Reverse proxy, alert template, placeholders, agent view |
+| Documentation: `docs/configuration.md` + `.claude/rules/configuration.md` | ✅ | Body/query param auth alternatives noted |
+| `.env.example` — webhook secret example | ✅ | `WEBHOOK_SECRET_TRADINGVIEW` entry |
+| All tests pass | ✅ | 830 EUnit + 74 CT = 904 total |

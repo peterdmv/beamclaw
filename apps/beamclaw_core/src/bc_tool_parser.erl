@@ -53,7 +53,12 @@ parse(_) ->
 native_to_record(#{<<"id">> := Id, <<"function">> := #{<<"name">> := Name,
                                                         <<"arguments">> := ArgsJson}}) ->
     Args = decode_args(ArgsJson),
-    #bc_tool_call{id = Id, name = Name, args = Args, source = native};
+    %% Some providers emit an empty-string id for a tool call; falling through
+    %% with id = <<>> would get baked into history as an invalid tool_call_id
+    %% and permanently break the session on the next request (the provider
+    %% rejects tool messages with a non-empty-string tool_call_id requirement).
+    SafeId = case Id of <<>> -> generate_id(); _ -> Id end,
+    #bc_tool_call{id = SafeId, name = Name, args = Args, source = native};
 native_to_record(Map) when is_map(Map) ->
     #bc_tool_call{
         id     = maps:get(<<"id">>,   Map, generate_id()),
