@@ -31,6 +31,7 @@ handles {send_response, ...} casts and sends the reply via Telegram API.
 -export([listen/1, send/3, send_typing/2, update_draft/4, finalize_draft/3]).
 %% Exported for testing
 -export([is_image_mime/1, truncate_caption/1, multipart_field/3, multipart_file/5]).
+-export([command_name/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
@@ -226,18 +227,38 @@ dispatch_telegram_message(Update) ->
             ok
     end.
 
-do_dispatch(UserId, TgUserId, ChatId, <<"/context", _/binary>>, _Msg, _Attachments) ->
-    AgentId   = resolve_agent_id(TgUserId),
-    SessionId = bc_session_registry:derive_session_id(UserId, AgentId, telegram),
-    handle_context_command(SessionId, AgentId, ChatId),
-    ok;
-do_dispatch(UserId, TgUserId, ChatId, <<"/new", _/binary>>, _Msg, _Attachments) ->
-    AgentId   = resolve_agent_id(TgUserId),
-    SessionId = bc_session_registry:derive_session_id(UserId, AgentId, telegram),
-    ets:insert(bc_telegram_chat_map, {SessionId, ChatId}),
-    handle_new_command(SessionId, ChatId),
-    ok;
 do_dispatch(UserId, TgUserId, ChatId, Content, Msg, Attachments) ->
+    case command_name(Content) of
+        <<"context">> ->
+            AgentId   = resolve_agent_id(TgUserId),
+            SessionId = bc_session_registry:derive_session_id(UserId, AgentId, telegram),
+            handle_context_command(SessionId, AgentId, ChatId),
+            ok;
+        <<"new">> ->
+            AgentId   = resolve_agent_id(TgUserId),
+            SessionId = bc_session_registry:derive_session_id(UserId, AgentId, telegram),
+            ets:insert(bc_telegram_chat_map, {SessionId, ChatId}),
+            handle_new_command(SessionId, ChatId),
+            ok;
+        none ->
+            dispatch_chat_message(UserId, TgUserId, ChatId, Content, Msg, Attachments)
+    end.
+
+%% Recognize a Telegram bot command regardless of mobile-keyboard
+%% autocapitalization ("/New") or a "@BotUsername" suffix. Returns the
+%% lowercased command name, or `none` for ordinary chat text.
+command_name(Content) when is_binary(Content) ->
+    case string:trim(Content, leading) of
+        <<"/", Rest/binary>> ->
+            [Token | _] = binary:split(Rest, [<<" ">>, <<"@">>, <<"\n">>]),
+            string:lowercase(Token);
+        _ ->
+            none
+    end;
+command_name(_) ->
+    none.
+
+dispatch_chat_message(UserId, TgUserId, ChatId, Content, Msg, Attachments) ->
     AgentId   = resolve_agent_id(TgUserId),
     SessionId = bc_session_registry:derive_session_id(UserId, AgentId, telegram),
     %% Map the derived SessionId to the Telegram ChatId for response routing.

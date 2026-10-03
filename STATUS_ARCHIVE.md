@@ -933,3 +933,13 @@ All six OTP apps created, supervision trees defined, behaviours declared,
 | Documentation: `docs/configuration.md` + `.claude/rules/configuration.md` | ✅ | Body/query param auth alternatives noted |
 | `.env.example` — webhook secret example | ✅ | `WEBHOOK_SECRET_TRADINGVIEW` entry |
 | All tests pass | ✅ | 830 EUnit + 74 CT = 904 total |
+
+## Post-M37 — Fix Empty Native Tool-Call ID Corrupting Session History ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Root cause: `bc_tool_parser:native_to_record/1` trusted provider `id` verbatim | ✅ | A provider-emitted empty `"id": ""` got baked into a tool message's `tool_call_id`, permanently wedging the session — every subsequent turn re-sent the corrupted history and OpenRouter rejected the whole request (400) |
+| `bc_tool_parser.erl:53-59` — fall back to `generate_id()` when native `id` is empty | ✅ | Mirrors the existing fallback already present in the generic native clause |
+| `bc_tool_parser_tests.erl` — regression test for empty-id native tool call | ✅ | `native_empty_id_falls_back_test` |
+| All tests pass | ✅ | 831 EUnit + 74 CT = 905 total |
+| Docker image rebuilt and redeployed | ✅ | `docker compose build \&\& docker compose up -d`; container healthy post-restart |

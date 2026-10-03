@@ -18,9 +18,10 @@ A2A Bearer token authentication,
 development process retrospective test suites,
 generic webhook ingestion endpoint,
 webhook body-based auth for TradingView,
-and a fix for empty native tool_call ids corrupting session history
+a fix for empty native tool_call ids corrupting session history,
+and case-insensitive Telegram command matching
 (Post-M37) are all complete.
-831 EUnit tests + 74 CT tests pass (905 total).
+838 EUnit tests + 74 CT tests pass (912 total).
 
 ---
 
@@ -106,19 +107,22 @@ and a fix for empty native tool_call ids corrupting session history
 | Post-M37 | Generic Webhook Ingestion Endpoint |
 | Post-M37 | Webhook Body-Based Auth (TradingView Support) |
 | Post-M37 | Fix Empty Native Tool-Call ID Corrupting Session History |
+| Post-M37 | Case-Insensitive Telegram Command Matching |
 
 ---
 
 ## Recent Milestones
 
-### Post-M37 — Fix Empty Native Tool-Call ID Corrupting Session History ✅
+### Post-M37 — Case-Insensitive Telegram Command Matching ✅
 
 | Task | Status | Notes |
 |------|--------|-------|
-| Root cause: `bc_tool_parser:native_to_record/1` trusted provider `id` verbatim | ✅ | A provider-emitted empty `"id": ""` got baked into a tool message's `tool_call_id`, permanently wedging the session — every subsequent turn re-sent the corrupted history and OpenRouter rejected the whole request (400) |
-| `bc_tool_parser.erl:53-59` — fall back to `generate_id()` when native `id` is empty | ✅ | Mirrors the existing fallback already present in the generic native clause |
-| `bc_tool_parser_tests.erl` — regression test for empty-id native tool call | ✅ | `native_empty_id_falls_back_test` |
-| All tests pass | ✅ | 831 EUnit + 74 CT = 905 total |
+| Root cause: `/new` sent as `/New` (mobile autocapitalize) fell through to the generic chat path | ✅ | Case-sensitive `<<"/new", _/binary>>` match silently missed it, re-running the LLM against a still-corrupted (tool_call_id) history instead of clearing it |
+| `bc_channel_telegram.erl` — new `command_name/1` helper | ✅ | Trims leading whitespace, strips `@BotUsername` suffix, lowercases; returns `none` for ordinary text |
+| `do_dispatch/6` refactored to switch on `command_name/1` instead of literal binary prefixes | ✅ | `/new`, `/context` now match regardless of case or bot-mention suffix |
+| `bc_channel_telegram_tests.erl` — 7 new EUnit tests | ✅ | lowercase, autocapitalized, `@Bot` suffix, trailing space, leading whitespace, plain text, unknown command |
+| Manually repaired the live wedged session via `beamclaw eval` (memory flush attempt + `bc_session:clear_history/1` + `session_reset` obs event) | ✅ | Same effect as `/new`; unblocked immediately since the command bug prevented the normal path from firing |
+| All tests pass | ✅ | 838 EUnit + 74 CT = 912 total |
 | Docker image rebuilt and redeployed | ✅ | `docker compose build && docker compose up -d`; container healthy post-restart |
 
 ---
