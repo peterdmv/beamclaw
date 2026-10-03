@@ -943,3 +943,14 @@ All six OTP apps created, supervision trees defined, behaviours declared,
 | `bc_tool_parser_tests.erl` — regression test for empty-id native tool call | ✅ | `native_empty_id_falls_back_test` |
 | All tests pass | ✅ | 831 EUnit + 74 CT = 905 total |
 | Docker image rebuilt and redeployed | ✅ | `docker compose build \&\& docker compose up -d`; container healthy post-restart |
+
+## Post-M37 — Case-Insensitive Telegram Command Matching ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Root cause: `/new` sent as `/New` (mobile autocapitalize) fell through to the generic chat path | ✅ | Case-sensitive `<<"/new", _/binary>>` match silently missed it, re-running the LLM against the session instead of clearing it |
+| `bc_channel_telegram.erl` — new `command_name/1` helper | ✅ | Trims leading whitespace, strips `@BotUsername` suffix, lowercases; returns `none` for ordinary text |
+| `do_dispatch/6` refactored to switch on `command_name/1` instead of literal binary prefixes | ✅ | `/new`, `/context` now match regardless of case or bot-mention suffix |
+| `bc_channel_telegram_tests.erl` — 7 new EUnit tests | ✅ | lowercase, autocapitalized, `@Bot` suffix, trailing space, leading whitespace, plain text, unknown command |
+| All tests pass | ✅ | 838 EUnit + 74 CT = 912 total |
+| Docker image rebuilt and redeployed | ✅ | `docker compose build \&\& docker compose up -d`; container healthy post-restart |

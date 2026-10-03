@@ -94,6 +94,41 @@ multiple_images_test() ->
     ?assertNotEqual(nomatch, binary:match(Url1, <<"image/jpeg">>)),
     ?assertNotEqual(nomatch, binary:match(Url2, <<"image/png">>)).
 
+%% ---- tool-result message echoes tool_call_id/name ----
+%% Regression: message_to_map/1 dropped tool_call_id and name entirely for
+%% role=tool messages, so OpenRouter rejected the whole request on the next
+%% turn ("tool messages must include a non-empty string tool_call_id").
+
+tool_result_message_includes_tool_call_id_test() ->
+    Msg = #bc_message{role = tool, content = <<"ok">>,
+                      tool_call_id = <<"tc_1">>, name = <<"bash">>,
+                      tool_calls = [{is_error, false}]},
+    Map = bc_provider_openrouter:message_to_map(Msg),
+    ?assertEqual(<<"tool">>, maps:get(role, Map)),
+    ?assertEqual(<<"ok">>,   maps:get(content, Map)),
+    ?assertEqual(<<"tc_1">>, maps:get(tool_call_id, Map)),
+    ?assertEqual(<<"bash">>, maps:get(name, Map)).
+
+%% ---- assistant message with native tool_calls is forwarded verbatim ----
+%% Regression: message_to_map/1 dropped the tool_calls field for assistant
+%% messages, so the provider had nothing to match a following tool-result
+%% message's tool_call_id against.
+
+assistant_tool_calls_forwarded_test() ->
+    ToolCalls = [#{<<"id">> => <<"tc_1">>,
+                   <<"type">> => <<"function">>,
+                   <<"function">> => #{<<"name">> => <<"bash">>,
+                                       <<"arguments">> => <<"{}">>}}],
+    Msg = #bc_message{role = assistant, content = <<>>, tool_calls = ToolCalls},
+    Map = bc_provider_openrouter:message_to_map(Msg),
+    ?assertEqual(<<"assistant">>, maps:get(role, Map)),
+    ?assertEqual(ToolCalls, maps:get(tool_calls, Map)).
+
+assistant_without_tool_calls_omits_field_test() ->
+    Msg = #bc_message{role = assistant, content = <<"hi">>, tool_calls = []},
+    Map = bc_provider_openrouter:message_to_map(Msg),
+    ?assertNot(maps:is_key(tool_calls, Map)).
+
 %% ---- undefined content with attachment ----
 
 undefined_content_with_attachment_test() ->

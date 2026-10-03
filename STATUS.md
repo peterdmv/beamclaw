@@ -19,9 +19,10 @@ development process retrospective test suites,
 generic webhook ingestion endpoint,
 webhook body-based auth for TradingView,
 a fix for empty native tool_call ids corrupting session history,
-and case-insensitive Telegram command matching
+case-insensitive Telegram command matching,
+and a fix for dropped tool_call_id/tool_calls fields in provider requests
 (Post-M37) are all complete.
-838 EUnit tests + 74 CT tests pass (912 total).
+841 EUnit tests + 74 CT tests pass (915 total).
 
 ---
 
@@ -108,21 +109,21 @@ and case-insensitive Telegram command matching
 | Post-M37 | Webhook Body-Based Auth (TradingView Support) |
 | Post-M37 | Fix Empty Native Tool-Call ID Corrupting Session History |
 | Post-M37 | Case-Insensitive Telegram Command Matching |
+| Post-M37 | Fix Dropped tool_call_id/tool_calls Fields in Provider Requests |
 
 ---
 
 ## Recent Milestones
 
-### Post-M37 — Case-Insensitive Telegram Command Matching ✅
+### Post-M37 — Fix Dropped tool_call_id/tool_calls Fields in Provider Requests ✅
 
 | Task | Status | Notes |
 |------|--------|-------|
-| Root cause: `/new` sent as `/New` (mobile autocapitalize) fell through to the generic chat path | ✅ | Case-sensitive `<<"/new", _/binary>>` match silently missed it, re-running the LLM against a still-corrupted (tool_call_id) history instead of clearing it |
-| `bc_channel_telegram.erl` — new `command_name/1` helper | ✅ | Trims leading whitespace, strips `@BotUsername` suffix, lowercases; returns `none` for ordinary text |
-| `do_dispatch/6` refactored to switch on `command_name/1` instead of literal binary prefixes | ✅ | `/new`, `/context` now match regardless of case or bot-mention suffix |
-| `bc_channel_telegram_tests.erl` — 7 new EUnit tests | ✅ | lowercase, autocapitalized, `@Bot` suffix, trailing space, leading whitespace, plain text, unknown command |
-| Manually repaired the live wedged session via `beamclaw eval` (memory flush attempt + `bc_session:clear_history/1` + `session_reset` obs event) | ✅ | Same effect as `/new`; unblocked immediately since the command bug prevented the normal path from firing |
-| All tests pass | ✅ | 838 EUnit + 74 CT = 912 total |
+| Actual root cause of the recurring "tool messages must include a non-empty string tool_call_id" 400 | ✅ | `bc_provider_openrouter:message_to_map/1` dropped `tool_call_id`/`name` for `role=tool` messages and `tool_calls` for `role=assistant` messages on *every* multi-turn tool-call round-trip — not a corrupted/empty id as first suspected (two prior fixes in this area addressed a symptom, not this) |
+| `bc_provider_openrouter.erl` — `message_to_map/1` now forwards `tool_call_id`/`name` for tool messages and the native `tool_calls` array for assistant messages | ✅ | `tool_calls` on a `role=tool` message is a repurposed internal `is_error` marker, not wire data — explicitly not forwarded for that role |
+| `bc_provider_vision_tests.erl` — 3 new regression tests | ✅ | tool message includes tool_call_id/name; assistant tool_calls forwarded verbatim; plain assistant message omits the field |
+| Verified by replaying the exact previously-failing history through the live OpenRouter API with the fix applied | ✅ | `replay_ok` — confirms the fix, not just a session reset, resolves the failure |
+| All tests pass | ✅ | 841 EUnit + 74 CT = 915 total |
 | Docker image rebuilt and redeployed | ✅ | `docker compose build && docker compose up -d`; container healthy post-restart |
 
 ---

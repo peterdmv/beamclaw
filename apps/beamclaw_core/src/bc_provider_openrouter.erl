@@ -81,6 +81,25 @@ build_request_body(Messages, Options, #{model := Model} = _State, Stream) ->
             jsx:encode(Base#{tools => [tool_def_to_map(T) || T <- ToolDefs]})
     end.
 
+%% Tool-result messages must echo tool_call_id (and name) back to the
+%% provider, or it rejects the whole request on the next turn with
+%% "tool messages must include a non-empty string tool_call_id".
+%% Note: tool_calls on a #bc_message{role = tool} is repurposed by
+%% bc_loop:result_to_message/1 to carry an internal is_error marker —
+%% it is never the wire-format tool_calls list, so it is not forwarded here.
+message_to_map(#bc_message{role = tool, content = Content,
+                            tool_call_id = Id, name = Name}) ->
+    TextContent = case Content of undefined -> <<"">>; _ -> Content end,
+    #{role => <<"tool">>, content => TextContent,
+      tool_call_id => Id, name => Name};
+%% An assistant turn that made tool calls must resend the same native
+%% tool_calls array (id/type/function), or the provider has nothing to
+%% match the following tool-result messages' tool_call_id against.
+message_to_map(#bc_message{role = assistant, content = Content,
+                            tool_calls = [_ | _] = ToolCalls})
+  when is_map(hd(ToolCalls)) ->
+    TextContent = case Content of undefined -> <<"">>; _ -> Content end,
+    #{role => <<"assistant">>, content => TextContent, tool_calls => ToolCalls};
 message_to_map(#bc_message{role = Role, content = Content, attachments = Att}) ->
     RoleBin = atom_to_binary(Role, utf8),
     TextContent = case Content of undefined -> <<"">>; _ -> Content end,
